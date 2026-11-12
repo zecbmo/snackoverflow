@@ -1,0 +1,38 @@
+{
+  "name": "@snackoverflow/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "node build.mjs",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=../../.env src/migrate.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.0",
+    "@fastify/static": "^10.1.0",
+    "@fastify/websocket": "^11.3.0",
+    "@snackoverflow/shared": "workspace:*",
+    "drizzle-orm": "^0.45.0",
+    "fastify": "^5.12.0",
+    "nodemailer": "^10.5.0",
+    "openid-client": "^6.8.0",
+    "pg": "^8.23.0",
+    "web-push": "^3.6.7",
+    "zod": "^4.6.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.0",
+    "@types/nodemailer": "^8.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/web-push": "^3.6.4",
+    "drizzle-kit": "^0.31.0",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.23.0",
+    "vitest": "^5.1.0"
+  }
+}

@@ -1,0 +1,172 @@
+/** API input schemas, shared by the server (validation) and the web app (forms and types). */
+import { z } from 'zod';
+import { isCalendarDate } from './dates';
+import { LOCATION_TYPES, STOCK_STATES } from './shelfLife';
+
+export const calendarDate = z.string().refine(isCalendarDate, { message: 'Must be a date (YYYY-MM-DD)' });
+export const id = z.uuid();
+const name = z.string().trim().min(1, 'Required').max(120);
+const optionalText = z.string().trim().max(500).nullish();
+const password = z.string().min(8, 'At least 8 characters').max(200);
+const email = z.email().trim().toLowerCase();
+const days = z.number().int().min(0).max(3650).nullable();
+
+export const ROLES = ['admin', 'member'] as const;
+export type Role = (typeof ROLES)[number];
+
+export const locationType = z.enum(LOCATION_TYPES);
+export const stockState = z.enum(STOCK_STATES);
+export const displayUnit = z.enum(['g', 'ml', 'count']);
+
+// --- Auth and users -----------------------------------------------------------
+
+export const loginInput = z.object({ email, password: z.string().min(1) });
+export const setupInput = z.object({ householdName: name, name, email, password });
+export const acceptInviteInput = z.object({ name, email, password });
+export const createInviteInput = z.object({ email: email.nullish(), role: z.enum(ROLES).default('member') });
+export const updateUserInput = z.object({ name: name.optional(), role: z.enum(ROLES).optional() });
+export const updateMeInput = z.object({
+  name: name.optional(),
+  email: email.optional(),
+  currentPassword: z.string().optional(),
+  newPassword: password.optional(),
+});
+
+export const updateHouseholdInput = z.object({
+  name: name.optional(),
+  timeZone: z
+    .string()
+    .refine((tz) => {
+      try {
+        new Intl.DateTimeFormat('en-GB', { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'Unknown time zone')
+    .optional(),
+});
+
+// --- Locations, ingredients, products -----------------------------------------
+
+export const locationInput = z.object({
+  name,
+  type: locationType,
+  icon: z.string().trim().max(40).nullish(),
+});
+
+export const shelfLifeInput = z.object({
+  closedDays: days.optional(),
+  openedDays: days.optional(),
+  frozenDays: days.optional(),
+  defrostedDays: days.optional(),
+});
+
+export const ingredientInput = z.object({
+  name,
+  aisle: z.string().trim().max(60).nullish(),
+  shelfLifeCategoryId: id.nullish(),
+  densityGPerMl: z.number().positive().max(5).nullish(),
+  gramsPerCount: z.number().positive().max(100_000).nullish(),
+  countUnit: z.string().trim().max(30).nullish(),
+  trackRunningLow: z.boolean().optional(),
+  shelfLife: shelfLifeInput.optional(),
+});
+
+export const nutritionInput = z
+  .object({
+    kcal: z.number().min(0).nullish(),
+    protein: z.number().min(0).nullish(),
+    carbs: z.number().min(0).nullish(),
+    sugars: z.number().min(0).nullish(),
+    fat: z.number().min(0).nullish(),
+    saturates: z.number().min(0).nullish(),
+    fibre: z.number().min(0).nullish(),
+    salt: z.number().min(0).nullish(),
+  })
+  .partial();
+export type Nutrition = z.infer<typeof nutritionInput>;
+
+export const productInput = z.object({
+  name,
+  brand: optionalText,
+  imageUrl: z.url().nullish(),
+  ingredientId: id.nullish(),
+  shelfLifeCategoryId: id.nullish(),
+  /** Pack size as sold, e.g. 2.27 + "l"; stored in grams. */
+  packAmount: z.number().positive().max(1_000_000).nullish(),
+  packUnit: z.string().trim().max(20).nullish(),
+  nutritionPer100g: nutritionInput.nullish(),
+  barcodes: z.array(z.string().trim().regex(/^[0-9A-Za-z-]{4,64}$/, 'Not a valid barcode')).optional(),
+});
+export const updateProductInput = productInput.partial();
+
+// --- Stock ----------------------------------------------------------------------
+
+export const useAmountInput = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('all') }),
+  z.object({ kind: z.literal('fraction'), fraction: z.number().gt(0).max(1) }),
+  z.object({ kind: z.literal('grams'), grams: z.number().gt(0).max(1_000_000) }),
+]);
+
+export const useStockInput = z.object({ amount: useAmountInput });
+export const discardStockInput = z.object({ amount: useAmountInput.default({ kind: 'all' }) });
+export const moveStockInput = z.object({ locationId: id });
+export const freezeStockInput = z.object({ locationId: id.optional() });
+export const defrostStockInput = z.object({ locationId: id.optional() });
+export const stillSomeInput = z.object({ answer: z.enum(['yes', 'nearly-gone', 'none']) });
+
+export const adjustStockInput = z
+  .object({
+    bestBefore: calendarDate.nullable().optional(),
+    locationId: id.optional(),
+    /** Set the amount left as a fraction of the pack (0-1). */
+    fractionLeft: z.number().min(0).max(1).optional(),
+    remainingGrams: z.number().min(0).max(1_000_000).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), 'Nothing to change');
+
+export const addStockInput = z.object({
+  productId: id,
+  locationId: id,
+  count: z.number().int().min(1).max(50).default(1),
+  bestBefore: calendarDate.nullish(),
+});
+
+export const scanInput = z.object({
+  barcode: z.string().trim().regex(/^[0-9A-Za-z-]{4,64}$/, 'Not a valid barcode'),
+  locationId: id.optional(),
+});
+
+// --- Notifications ----------------------------------------------------------------
+
+export const NOTIFICATION_TYPES = ['weeklySummary', 'expiresTomorrow'] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+export const CHANNELS = ['push', 'email'] as const;
+export type Channel = (typeof CHANNELS)[number];
+
+const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM');
+
+export const notificationPrefsInput = z.object({
+  channels: z.record(z.enum(NOTIFICATION_TYPES), z.array(z.enum(CHANNELS))),
+  quietStart: timeOfDay.nullable(),
+  quietEnd: timeOfDay.nullable(),
+});
+export type NotificationPrefs = z.infer<typeof notificationPrefsInput>;
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  channels: { weeklySummary: ['push', 'email'], expiresTomorrow: ['push'] },
+  quietStart: '22:00',
+  quietEnd: '07:00',
+};
+
+export const pushSubscriptionInput = z.object({
+  endpoint: z.url(),
+  keys: z.object({ p256dh: z.string().min(1), auth: z.string().min(1) }),
+});
+
+export type LocationInput = z.infer<typeof locationInput>;
+export type IngredientInput = z.infer<typeof ingredientInput>;
+export type ProductInput = z.infer<typeof productInput>;
+export type UseAmountInput = z.infer<typeof useAmountInput>;
+export type AdjustStockInput = z.infer<typeof adjustStockInput>;

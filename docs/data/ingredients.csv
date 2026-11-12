@@ -1,0 +1,67 @@
+key,name,aisle,shelf_life_category,density_key,count_key,count_unit,pack_sizes_key,track_running_low,aliases
+potatoes,Potatoes,Veg,potatoes,,potato,potato,potatoes,no,"potato;maris piper;king edward;baking potatoes"
+sweet_potatoes,Sweet potatoes,Veg,potatoes,,,,,no,sweet potato
+onions,Onions,Veg,onions_garlic,,onion,onion,onions,no,"onion;brown onions;red onions;shallots"
+garlic,Garlic,Veg,onions_garlic,,garlic_clove,clove,,no,garlic bulb
+carrots,Carrots,Veg,root_veg,,carrot,carrot,carrots,no,carrot
+parsnips,Parsnips,Veg,root_veg,,,,,no,parsnip
+red_pepper,Red peppers,Veg,,,red_pepper,pepper,red_pepper,no,"pepper;peppers;bell pepper"
+courgettes,Courgettes,Veg,,,courgette,courgette,,no,"courgette;zucchini"
+mushrooms,Mushrooms,Veg,mushrooms,,,,mushrooms,no,"mushroom;chestnut mushrooms;button mushrooms"
+spinach,Spinach,Veg,leafy_greens,,,,spinach,no,"baby spinach;kale"
+bagged_salad,Bagged salad,Veg,bagged_salad,,,,bagged_salad,no,"salad;lettuce;rocket;mixed leaves"
+tomatoes,Tomatoes,Veg,tomatoes,,tomato,tomato,tomatoes,no,"tomato;cherry tomatoes;vine tomatoes"
+fresh_herbs,Fresh herbs,Veg,fresh_herbs,,,,,no,"coriander;parsley;basil"
+bananas,Bananas,Fruit,bananas,,banana,banana,bananas,no,banana
+apples,Apples,Fruit,hard_fruit,,apple,apple,apples,no,"apple;pears"
+lemons,Lemons,Fruit,citrus,,lemon,lemon,,no,"lemon;limes;oranges"
+avocados,Avocados,Fruit,avocado,,avocado,avocado,,no,avocado
+berries,Berries,Fruit,soft_fruit,,,,,no,"strawberries;raspberries;blueberries"
+milk,Milk,Dairy,milk,milk,,,milk,yes,"semi-skimmed milk;whole milk;skimmed milk"
+double_cream,Double cream,Dairy,cream,cream,,,double_cream,no,"cream;single cream;creme fraiche"
+butter,Butter,Dairy,butter,butter,,,butter,yes,"spread;unsalted butter;salted butter"
+cheddar,Cheddar,Dairy,hard_cheese,,,,cheddar,no,"cheese;mature cheddar;red leicester"
+parmesan,Parmesan,Dairy,hard_cheese,,,,,no,"grana padano;parmigiano"
+mozzarella,Mozzarella,Dairy,soft_cheese,,,,,no,"cream cheese;cottage cheese;brie"
+greek_yogurt,Greek yogurt,Dairy,yogurt,,,,greek_yogurt,no,"yogurt;yoghurt;natural yogurt"
+eggs,Eggs,Dairy,eggs,,egg,egg,eggs,yes,"egg;free range eggs"
+bread,Bread,Bakery,bread,,bread_slice,slice,bread,yes,"loaf;sliced bread;wraps;rolls"
+chicken_breast,Chicken breasts,Meat and fish,raw_poultry,,chicken_breast,breast,chicken_breast,no,"chicken breast;chicken breast fillets"
+chicken_thighs,Chicken thighs,Meat and fish,raw_poultry,,chicken_thigh,thigh,chicken_thighs,no,"chicken thigh;thigh fillets"
+beef_mince,Beef mince,Meat and fish,raw_mince_sausages,,,,beef_mince,no,"mince;minced beef;lean mince"
+sausages,Sausages,Meat and fish,raw_mince_sausages,,sausage,sausage,sausages,no,"sausage;pork sausages"
+bacon,Bacon,Meat and fish,bacon,,,,bacon,no,"back bacon;streaky bacon;lardons"
+ham,Ham,Meat and fish,cooked_sliced_meat,,,,,no,"sliced ham;cooked ham"
+white_fish,White fish,Meat and fish,raw_fish,,,,,no,"cod;haddock;fish fillets"
+salmon,Salmon,Meat and fish,raw_fish,,,,,no,salmon fillets
+prawns,Prawns,Meat and fish,raw_fish,,,,,no,king prawns
+smoked_salmon,Smoked salmon,Meat and fish,smoked_fish,,,,,no,
+pasta,Pasta,Cupboard,dry_goods,,,,pasta,yes,"spaghetti;penne;fusilli"
+rice,Rice,Cupboard,dry_goods,rice_uncooked,,,rice,yes,"basmati rice;long grain rice"
+plain_flour,Plain flour,Baking,dry_goods,plain_flour,,,plain_flour,yes,flour
+self_raising_flour,Self-raising flour,Baking,dry_goods,self_raising_flour,,,,no,
+sugar,Granulated sugar,Baking,dry_goods,granulated_sugar,,,sugar,yes,sugar
+caster_sugar,Caster sugar,Baking,dry_goods,caster_sugar,,,,no,
+icing_sugar,Icing sugar,Baking,dry_goods,icing_sugar,,,,no,
+brown_sugar,Brown sugar,Baking,dry_goods,brown_sugar,,,,no,"light brown sugar;dark brown sugar"
+honey,Honey,Cupboard,condiments,honey,,,,no,
+oats,Oats,Cupboard,cereal,rolled_oats,,,,yes,"porridge oats;rolled oats"
+cereal,Breakfast cereal,Cupboard,cereal,,,,,no,"granola;cornflakes"
+lentils,Lentils,Cupboard,dry_goods,,,,,no,"red lentils;green lentils"
+salt,Salt,Cupboard,dry_goods,salt,,,,yes,sea salt
+olive_oil,Olive oil,Cupboard,,oil,,,olive_oil,yes,extra virgin olive oil
+vegetable_oil,Vegetable oil,Cupboard,,oil,,,,yes,"sunflower oil;rapeseed oil"
+stock_cubes,Stock cubes,Cupboard,dry_goods,,stock_cube,cube,stock_cubes,yes,"stock cube;stock pot;bouillon"
+chopped_tomatoes,Chopped tomatoes,Tins and jars,tinned_food,,tin_400,tin,chopped_tomatoes,no,"tinned tomatoes;plum tomatoes"
+baked_beans,Baked beans,Tins and jars,tinned_food,,,,baked_beans,no,beans
+tinned_tuna,Tinned tuna,Tins and jars,tinned_food,,,,,no,tuna
+chickpeas,Chickpeas,Tins and jars,tinned_food,,,,,no,"kidney beans;butter beans"
+pasta_sauce,Pasta sauce,Tins and jars,jarred_sauce,,,,,no,"curry sauce;cooking sauce"
+pesto,Pesto,Tins and jars,pesto,,,,,no,green pesto
+ketchup,Ketchup,Tins and jars,condiments,,,,,no,"mayonnaise;mustard;brown sauce"
+frozen_peas,Frozen peas,Frozen,frozen_bought,,,,,no,"peas;sweetcorn"
+oven_chips,Oven chips,Frozen,frozen_bought,,,,,no,chips
+ice_cream,Ice cream,Frozen,frozen_bought,,,,,no,
+crisps,Crisps,Snacks,snacks,,,,,no,
+biscuits,Biscuits,Snacks,snacks,,,,,no,cookies
+chocolate,Chocolate,Snacks,snacks,,,,,no,chocolate bar
