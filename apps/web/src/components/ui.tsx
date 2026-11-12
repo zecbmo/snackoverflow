@@ -17,7 +17,7 @@ export function Button({
   className = '',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg' }) {
-  const sizes = { sm: 'min-h-11 px-3 text-sm', md: 'min-h-11 px-4 text-[0.9375rem]', lg: 'min-h-14 px-5 text-base' };
+  const sizes = { sm: 'min-h-11 px-3 text-sm', md: 'min-h-11 px-4 text-[0.9375rem]', lg: 'min-h-12 px-5 text-base' };
   return (
     <button
       type="button"
@@ -129,11 +129,11 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
 
 export function PageHeader({ title, subtitle, left, right }: { title: string; subtitle?: ReactNode; left?: ReactNode; right?: ReactNode }) {
   return (
-    <header className="flex items-center gap-4 pb-5 pt-6">
+    <header className="flex items-center gap-3 pb-4 pt-5">
       {left}
       <div className="min-w-0 flex-1">
         {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
-        <h1 className="truncate text-3xl font-bold lg:text-3xl">{title}</h1>
+        <h1 className="truncate text-2xl font-bold sm:text-3xl">{title}</h1>
       </div>
       {right}
     </header>

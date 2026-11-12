@@ -253,7 +253,7 @@ export function ScanPage() {
         {current && <ResultCard entry={current} onUndo={() => void undo(current)} onDate={() => setSheet('date')} onName={() => setSheet('name')} onSome={() => void onlySome(current)} />}
         <div className="flex items-stretch gap-3">
           <div className="flex flex-1 items-center gap-3 rounded-2xl bg-white/10 px-4 py-2 backdrop-blur">
-            <span className="font-display text-4xl font-bold" aria-label={`${live.length} scanned`}>
+            <span className="font-display text-3xl font-bold sm:text-4xl" aria-label={`${live.length} scanned`}>
               {live.length}
             </span>
             <span className="text-[0.9375rem] leading-tight text-white/80">

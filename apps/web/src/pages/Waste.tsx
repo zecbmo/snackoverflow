@@ -33,7 +33,7 @@ export function WastePage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="p-5">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-2xl font-bold">Binned {thisLabel}</h2>
+              <h2 className="text-xl font-bold sm:text-2xl">Binned {thisLabel}</h2>
               {change && <span className={`font-semibold ${r.changePercent! <= 0 ? 'text-fresh-green-text' : 'text-muted'}`}>{change}</span>}
             </div>
             <dl className="mb-5 grid grid-cols-3 gap-3">

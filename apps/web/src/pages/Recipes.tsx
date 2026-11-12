@@ -17,7 +17,7 @@ export function RecipeImage({ recipe, className = '' }: { recipe: Pick<RecipeSum
   if (!recipe.imageUrl || broken) {
     return (
       <div aria-hidden className={`flex items-center justify-center ${tint} ${className}`}>
-        <span className="font-display text-4xl font-bold text-muted/40">{recipe.title.charAt(0)}</span>
+        <span className="font-display text-3xl font-bold sm:text-4xl text-muted/40">{recipe.title.charAt(0)}</span>
       </div>
     );
   }

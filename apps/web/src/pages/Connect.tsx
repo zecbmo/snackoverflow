@@ -45,7 +45,7 @@ export function ConnectPage() {
         <span aria-hidden className="inline-flex size-12 items-center justify-center rounded-2xl bg-accent font-bold text-accent-ink">
           S/O
         </span>
-        <span className="font-display text-2xl font-bold">Snack Overflow</span>
+        <span className="font-display text-xl font-bold sm:text-2xl">Snack Overflow</span>
       </div>
       <h1 className="mb-2 text-3xl font-bold">Connect to your server</h1>
       <p className="mb-6 text-muted">Enter the address you use to open Snack Overflow in a browser.</p>

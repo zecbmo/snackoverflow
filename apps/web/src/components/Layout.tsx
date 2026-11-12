@@ -82,7 +82,7 @@ export function BellButton() {
     <Link
       to="/inbox"
       aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
-      className="relative inline-flex size-14 shrink-0 items-center justify-center rounded-full border border-line bg-card"
+      className="relative inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-card"
     >
       <Icon name="bell" />
       {unread > 0 && <span aria-hidden className="absolute right-3.5 top-3.5 size-2.5 rounded-full bg-accent ring-2 ring-card" />}
@@ -267,7 +267,7 @@ export function MenuButton() {
       type="button"
       aria-label="Open menu"
       onClick={open}
-      className="inline-flex size-14 shrink-0 items-center justify-center rounded-full border border-line bg-card lg:hidden"
+      className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-card lg:hidden"
     >
       <Icon name="menu" />
     </button>

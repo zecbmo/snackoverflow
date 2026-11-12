@@ -237,7 +237,7 @@ function PriceCard({ productId }: { productId: string }) {
       <h2 className="mb-2 text-lg font-bold">Price</h2>
       {latest ? (
         <p className="mb-3">
-          <span className="font-display text-2xl font-bold">{formatPence(latest.pricePence)}</span>{' '}
+          <span className="font-display text-xl font-bold sm:text-2xl">{formatPence(latest.pricePence)}</span>{' '}
           <span className="text-muted">
             {[latest.store, formatShortDate(latest.date), SOURCE_LABEL[latest.source] ?? latest.source].filter(Boolean).join(' · ')}
           </span>

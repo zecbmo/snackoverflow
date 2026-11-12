@@ -80,7 +80,7 @@ function CaloriesCard({ person }: { person: string }) {
   return (
     <Card className="p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-        <h2 className="text-2xl font-bold">Calories, last {range} days</h2>
+        <h2 className="text-xl font-bold sm:text-2xl">Calories, last {range} days</h2>
         {s?.target ? (
           <span className="pt-1 text-muted">Target {n(s.target)}</span>
         ) : (
@@ -104,11 +104,11 @@ function CaloriesCard({ person }: { person: string }) {
           <dl className="mb-5 grid grid-cols-2 gap-3">
             <div>
               <dt className="text-muted">7-day average</dt>
-              <dd className="font-display text-4xl font-bold">{s.avg7 !== null ? n(s.avg7) : '–'}</dd>
+              <dd className="font-display text-3xl font-bold sm:text-4xl">{s.avg7 !== null ? n(s.avg7) : '–'}</dd>
             </div>
             <div>
               <dt className="text-muted">30-day average</dt>
-              <dd className="font-display text-4xl font-bold">{s.avg30 !== null ? n(s.avg30) : '–'}</dd>
+              <dd className="font-display text-3xl font-bold sm:text-4xl">{s.avg30 !== null ? n(s.avg30) : '–'}</dd>
             </div>
           </dl>
           <div className="mb-4 flex justify-end">
@@ -164,7 +164,7 @@ function WasteCard() {
   return (
     <Card className="p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-2xl font-bold">Binned this month</h2>
+        <h2 className="text-xl font-bold sm:text-2xl">Binned this month</h2>
         {change && <span className={`font-semibold ${r!.changePercent! <= 0 ? 'text-fresh-green-text' : 'text-muted'}`}>{change}</span>}
       </div>
       <ErrorNote error={q.error} />
@@ -175,12 +175,12 @@ function WasteCard() {
           <dl className="grid grid-cols-2 gap-3">
             <div>
               <dt className="text-muted">Weight</dt>
-              <dd className="font-display text-4xl font-bold">{weightLabel(now.grams)}</dd>
+              <dd className="font-display text-3xl font-bold sm:text-4xl">{weightLabel(now.grams)}</dd>
             </div>
             {r.pricing && (
               <div>
                 <dt className="text-muted">Value</dt>
-                <dd className="font-display text-4xl font-bold">{now.pence !== null ? formatPence(now.pence) : '–'}</dd>
+                <dd className="font-display text-3xl font-bold sm:text-4xl">{now.pence !== null ? formatPence(now.pence) : '–'}</dd>
               </div>
             )}
           </dl>
@@ -224,10 +224,10 @@ function SpendingCard() {
   return (
     <Card className="p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-2xl font-bold">Spent this month</h2>
+        <h2 className="text-xl font-bold sm:text-2xl">Spent this month</h2>
         {change && <span className="font-semibold text-muted">{change}</span>}
       </div>
-      <p className="font-display text-4xl font-bold">{formatPence(now.pence)}</p>
+      <p className="font-display text-3xl font-bold sm:text-4xl">{formatPence(now.pence)}</p>
       <p className="mb-4 text-muted">
         From {now.receipts === 1 ? '1 receipt' : `${now.receipts} receipts`}. Shops without a receipt aren't counted.
       </p>
