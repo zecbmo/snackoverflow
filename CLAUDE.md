@@ -10,7 +10,7 @@ Snack Overflow: a self-hosted household food app (pantry stock with barcode scan
 
 - **`docs/SPEC.md`** is the design spec. Read the relevant section before building a feature. If the code needs to differ from the spec, update the spec in the same change and say why in the commit message.
 - **`docs/data/`** holds seed data (shelf-life defaults, unit conversions, pack sizes) and the food-safety rules the app must follow. Load the CSVs as seed data; don't invent numbers in code.
-- **`docs/design/`** (when present) holds screenshots of the mock-ups. Match their layout and visual direction.
+- **`docs/design/README.md`** is the design guide: palettes, density, the sidebar, toolbar, `DataTable`, `SidePanel` and menus. Build screens from it and its shared components. The old mock-ups in `docs/design/legacy/` are history, not a target.
 - Build in the order of the **Build phases** in the spec. Each phase must end deployable. GitHub issues track the work for the current phase.
 
 ## Public repository rules
@@ -43,7 +43,7 @@ apps/server     Fastify API, scheduler, MCP endpoint
 apps/web        React PWA
 apps/android    Capacitor project (phase 2)
 packages/shared Types, zod schemas, unit conversion and date logic shared by server and web
-docs/           Spec, seed data, design screenshots
+docs/           Spec, seed data, design guide (legacy mock-ups in docs/design/legacy)
 ```
 
 ## Conventions
@@ -53,7 +53,7 @@ docs/           Spec, seed data, design screenshots
 - **Food-safety rules** in `docs/data/README.md` are hard rules, not user settings (e.g. defrosted food = 24 hours, leftovers = 2 days, opened never extends a date).
 - **Stock events:** every change to stock writes a stock event (add, use, open, move, freeze, defrost, discard, adjust). Waste stats, undo and usage estimates depend on this.
 - **Validation:** validate every API input with zod schemas shared with the web app.
-- **UI:** phone-first. Touch targets ≥ 44px. Colours: violet accent `#6B4EFF` for primary actions; green, amber and red only for freshness; blue for frozen. Headings in Bricolage Grotesque, body in Inter. Dark mode supported.
+- **UI:** desktop data-tool layout (Airtable-like) that also works on phones; see `docs/design/README.md`. Touch targets ≥ 44px on phones; compact controls with a mouse on wide screens. Colours come from the palettes in `apps/web/src/palettes.css` (Blue is the default, picked per device) through tokens, never hex in components; the accent is for primary actions and selection. Green, amber and red only for freshness; the palette's frozen colour (with a snowflake) for frozen. Inter for text. Light, dark and match-device themes.
 - **Copy:** UK English ("best-before", "colour", "tin", "favourite"), short and friendly.
 - **Accessibility:** real buttons and links, labels on inputs, `aria-label` on icon-only buttons, 4.5:1 text contrast.
 - **External services** (Open Food Facts, push, email, AI) must fail gracefully: the app keeps working offline from them, and optional features hide when not configured.

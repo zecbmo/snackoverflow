@@ -7,6 +7,8 @@ test('scans offline and syncs when back online', async ({ page, context }, info)
   const name = info.project.name === 'phone' ? 'Baked Beans' : 'Semi Skimmed Milk';
   await signIn(page);
   await page.goto('/scan');
+  // Let the page load before the connection drops.
+  await expect(page.getByRole('button', { name: 'Type a barcode' })).toBeVisible();
 
   await context.setOffline(true);
   await typeBarcode(page, code);

@@ -29,7 +29,7 @@ function ReceiptImage({ id }: { id: string }) {
     };
   }, [id]);
   if (!url) return null;
-  return <img src={url} alt="The receipt" className="max-h-96 w-full rounded-[18px] border border-line object-contain" />;
+  return <img src={url} alt="The receipt" className="max-h-96 w-full rounded-lg border border-line object-contain" />;
 }
 
 export function ReceiptReviewPage() {

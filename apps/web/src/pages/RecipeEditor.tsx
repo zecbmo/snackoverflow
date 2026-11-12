@@ -168,7 +168,7 @@ export function RecipeForm({ initial, recipeId, extraActions }: { initial: Draft
         {draft.ingredients.map((l, i) => {
           const check = l.matchConfidence !== 'high' && l.amount !== null;
           return (
-            <div key={i} className={`flex flex-col gap-2 rounded-2xl border p-3 ${check ? 'border-accent bg-accent-soft/50' : 'border-line'}`}>
+            <div key={i} className={`flex flex-col gap-2 rounded-lg border p-3 ${check ? 'border-accent bg-accent-soft/50' : 'border-line'}`}>
               <div className="flex gap-2">
                 <TextInput aria-label={`Ingredient line ${i + 1}`} value={l.text} onChange={(e) => setLine(i, { text: e.target.value })} onBlur={(e) => void reparse(i, e.target.value)} />
                 <button

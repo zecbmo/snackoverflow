@@ -78,3 +78,6 @@ Thumbs.db
 # Playwright
 test-results/
 playwright-report/
+
+# Local screenshot specs
+apps/web/e2e/*.tmp.spec.ts

@@ -31,15 +31,23 @@ test('scan in, use and undo', async ({ page }, info) => {
 
   // Both are in stock.
   await expect(page).toHaveURL(/\/stock$/);
-  await expect(page.getByRole('button', { name: new RegExp(milk) })).toBeVisible();
-  await expect(page.getByRole('button', { name: new RegExp(unknownName) })).toBeVisible();
+  // Each row is a button that opens it ("Chicken Thighs, Fridge"), with its actions beside it.
+  const row = (name: string) => page.getByRole('button', { name: new RegExp(`^${name}, `) });
+  await expect(row(milk)).toBeVisible();
+  await expect(row(unknownName)).toBeVisible();
 
-  // Use it all, then undo.
-  await page.getByRole('button', { name: new RegExp(milk) }).click();
-  await page.getByRole('button', { name: 'Use', exact: true }).click();
+  // Use it all straight from the row, then undo.
+  await page.getByRole('button', { name: `Use ${milk}`, exact: true }).click();
   await page.getByRole('button', { name: 'Used it all' }).click();
   await expect(page.getByText(`Used up the ${milk}.`)).toBeVisible();
-  await expect(page.getByRole('button', { name: new RegExp(milk) })).toHaveCount(0);
+  await expect(row(milk)).toHaveCount(0);
   await page.getByRole('button', { name: 'Undo' }).click();
-  await expect(page.getByRole('button', { name: new RegExp(milk) })).toBeVisible();
+  await expect(row(milk)).toBeVisible();
+
+  // The row opens its details in a side panel, linked from the address bar; Escape closes it.
+  await row(milk).click();
+  await expect(page).toHaveURL(/\?open=/);
+  await expect(page.getByRole('dialog', { name: milk })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: milk })).toHaveCount(0);
 });

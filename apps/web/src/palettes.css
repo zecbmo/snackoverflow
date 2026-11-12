@@ -1,0 +1,490 @@
+/*
+ * Colour palettes: neutrals, accent and the frozen colour, per palette, light and dark.
+ * Picked per device in Settings > Appearance (data-palette on <html>; blue is the default).
+ * Freshness colours (red, amber, green) are the same in every palette: see index.css.
+ * --blue/--blue-soft/--blue-text mean "frozen" (slate where the accent is already blue).
+ * Every pair used for text passes 4.5:1.
+ */
+
+/* Blue: Calm blue; frozen food is slate. */
+:root,
+:root[data-palette='blue'] {
+  --bg: #f8f9fb;
+  --card: #ffffff;
+  --card-muted: #f0f2f5;
+  --ink: #1b1f27;
+  --muted: #5f6878;
+  --line: #e3e6eb;
+  --accent: #1b6fd8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4eefc;
+  --accent-text: #1556ab;
+  --strong: #252a33;
+  --strong-ink: #ffffff;
+  --hero: #1e2533;
+  --blue: #64748b;
+  --blue-soft: #eceff3;
+  --blue-text: #475569;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-palette]):not([data-theme='light']),
+  :root[data-palette='blue']:not([data-theme='light']) {
+    --bg: #13161b;
+    --card: #1b1f26;
+    --card-muted: #232833;
+    --ink: #eceff4;
+    --muted: #98a1b0;
+    --line: #2c323c;
+    --accent: #4c93f0;
+    --accent-ink: #0b1220;
+    --accent-soft: #1b2d47;
+    --accent-text: #a9cbff;
+    --strong: #353c48;
+    --strong-ink: #ffffff;
+    --hero: #232833;
+    --blue: #94a3b8;
+    --blue-soft: #252b34;
+    --blue-text: #cbd5e1;
+    color-scheme: dark;
+  }
+}
+:root:not([data-palette])[data-theme='dark'],
+:root[data-palette='blue'][data-theme='dark'] {
+  --bg: #13161b;
+  --card: #1b1f26;
+  --card-muted: #232833;
+  --ink: #eceff4;
+  --muted: #98a1b0;
+  --line: #2c323c;
+  --accent: #4c93f0;
+  --accent-ink: #0b1220;
+  --accent-soft: #1b2d47;
+  --accent-text: #a9cbff;
+  --strong: #353c48;
+  --strong-ink: #ffffff;
+  --hero: #232833;
+  --blue: #94a3b8;
+  --blue-soft: #252b34;
+  --blue-text: #cbd5e1;
+  color-scheme: dark;
+}
+
+/* Violet: The original accent, used sparingly. */
+:root[data-palette='violet'] {
+  --bg: #fafafb;
+  --card: #ffffff;
+  --card-muted: #f1f1f5;
+  --ink: #1d1d24;
+  --muted: #636370;
+  --line: #e6e6ec;
+  --accent: #6b4eff;
+  --accent-ink: #ffffff;
+  --accent-soft: #ecebff;
+  --accent-text: #4b2fe0;
+  --strong: #24242c;
+  --strong-ink: #ffffff;
+  --hero: #22202e;
+  --blue: #3b7fe0;
+  --blue-soft: #e3edfc;
+  --blue-text: #2457a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='violet']:not([data-theme='light']) {
+    --bg: #141418;
+    --card: #1c1c22;
+    --card-muted: #25252d;
+    --ink: #ededf2;
+    --muted: #9c9ca8;
+    --line: #2e2e37;
+    --accent: #6f56f7;
+    --accent-ink: #ffffff;
+    --accent-soft: #2a2450;
+    --accent-text: #c3b8ff;
+    --strong: #383843;
+    --strong-ink: #ffffff;
+    --hero: #25252d;
+    --blue: #6a9ff0;
+    --blue-soft: #18284a;
+    --blue-text: #a8c4ff;
+    color-scheme: dark;
+  }
+}
+:root[data-palette='violet'][data-theme='dark'] {
+  --bg: #141418;
+  --card: #1c1c22;
+  --card-muted: #25252d;
+  --ink: #ededf2;
+  --muted: #9c9ca8;
+  --line: #2e2e37;
+  --accent: #6f56f7;
+  --accent-ink: #ffffff;
+  --accent-soft: #2a2450;
+  --accent-text: #c3b8ff;
+  --strong: #383843;
+  --strong-ink: #ffffff;
+  --hero: #25252d;
+  --blue: #6a9ff0;
+  --blue-soft: #18284a;
+  --blue-text: #a8c4ff;
+  color-scheme: dark;
+}
+
+/* Teal: Fresh, food-app feel. */
+:root[data-palette='teal'] {
+  --bg: #f8faf9;
+  --card: #ffffff;
+  --card-muted: #eef3f1;
+  --ink: #18211e;
+  --muted: #5f6b66;
+  --line: #e1e7e5;
+  --accent: #0d7f73;
+  --accent-ink: #ffffff;
+  --accent-soft: #def1ee;
+  --accent-text: #0a655c;
+  --strong: #1f2a27;
+  --strong-ink: #ffffff;
+  --hero: #1c2826;
+  --blue: #3b7fe0;
+  --blue-soft: #e3edfc;
+  --blue-text: #2457a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='teal']:not([data-theme='light']) {
+    --bg: #121715;
+    --card: #1a211f;
+    --card-muted: #222b28;
+    --ink: #eaf0ee;
+    --muted: #95a39e;
+    --line: #2b3532;
+    --accent: #2bb39f;
+    --accent-ink: #06201c;
+    --accent-soft: #173a35;
+    --accent-text: #8fe0d2;
+    --strong: #33403c;
+    --strong-ink: #ffffff;
+    --hero: #222b28;
+    --blue: #6a9ff0;
+    --blue-soft: #18284a;
+    --blue-text: #a8c4ff;
+    color-scheme: dark;
+  }
+}
+:root[data-palette='teal'][data-theme='dark'] {
+  --bg: #121715;
+  --card: #1a211f;
+  --card-muted: #222b28;
+  --ink: #eaf0ee;
+  --muted: #95a39e;
+  --line: #2b3532;
+  --accent: #2bb39f;
+  --accent-ink: #06201c;
+  --accent-soft: #173a35;
+  --accent-text: #8fe0d2;
+  --strong: #33403c;
+  --strong-ink: #ffffff;
+  --hero: #222b28;
+  --blue: #6a9ff0;
+  --blue-soft: #18284a;
+  --blue-text: #a8c4ff;
+  color-scheme: dark;
+}
+
+/* Graphite: Black and white, no colour accent. */
+:root[data-palette='graphite'] {
+  --bg: #f7f7f7;
+  --card: #ffffff;
+  --card-muted: #efefef;
+  --ink: #18181b;
+  --muted: #61616a;
+  --line: #e4e4e7;
+  --accent: #18181b;
+  --accent-ink: #ffffff;
+  --accent-soft: #ececee;
+  --accent-text: #18181b;
+  --strong: #18181b;
+  --strong-ink: #ffffff;
+  --hero: #18181b;
+  --blue: #3b7fe0;
+  --blue-soft: #e3edfc;
+  --blue-text: #2457a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='graphite']:not([data-theme='light']) {
+    --bg: #111113;
+    --card: #19191c;
+    --card-muted: #232327;
+    --ink: #f0f0f2;
+    --muted: #a1a1aa;
+    --line: #2c2c31;
+    --accent: #f0f0f2;
+    --accent-ink: #111113;
+    --accent-soft: #2c2c31;
+    --accent-text: #f0f0f2;
+    --strong: #3a3a40;
+    --strong-ink: #ffffff;
+    --hero: #232327;
+    --blue: #6a9ff0;
+    --blue-soft: #18284a;
+    --blue-text: #a8c4ff;
+    color-scheme: dark;
+  }
+}
+:root[data-palette='graphite'][data-theme='dark'] {
+  --bg: #111113;
+  --card: #19191c;
+  --card-muted: #232327;
+  --ink: #f0f0f2;
+  --muted: #a1a1aa;
+  --line: #2c2c31;
+  --accent: #f0f0f2;
+  --accent-ink: #111113;
+  --accent-soft: #2c2c31;
+  --accent-text: #f0f0f2;
+  --strong: #3a3a40;
+  --strong-ink: #ffffff;
+  --hero: #232327;
+  --blue: #6a9ff0;
+  --blue-soft: #18284a;
+  --blue-text: #a8c4ff;
+  color-scheme: dark;
+}
+
+/* Indigo: Deep blue-violet; frozen food is slate. */
+:root[data-palette='indigo'] {
+  --bg: #f8f8fc;
+  --card: #ffffff;
+  --card-muted: #f0f0f8;
+  --ink: #1c1c2b;
+  --muted: #63637a;
+  --line: #e4e4ef;
+  --accent: #4f46e5;
+  --accent-ink: #ffffff;
+  --accent-soft: #e9e8fc;
+  --accent-text: #3f37c9;
+  --strong: #23233a;
+  --strong-ink: #ffffff;
+  --hero: #1f1f38;
+  --blue: #64748b;
+  --blue-soft: #eceff3;
+  --blue-text: #475569;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='indigo']:not([data-theme='light']) {
+    --bg: #131320;
+    --card: #1b1b2b;
+    --card-muted: #242438;
+    --ink: #ececf6;
+    --muted: #9e9eb8;
+    --line: #2d2d45;
+    --accent: #8b85ff;
+    --accent-ink: #0f0d2e;
+    --accent-soft: #26245a;
+    --accent-text: #c4c0ff;
+    --strong: #36364f;
+    --strong-ink: #ffffff;
+    --hero: #242438;
+    --blue: #94a3b8;
+    --blue-soft: #252b34;
+    --blue-text: #cbd5e1;
+    color-scheme: dark;
+  }
+}
+:root[data-palette='indigo'][data-theme='dark'] {
+  --bg: #131320;
+  --card: #1b1b2b;
+  --card-muted: #242438;
+  --ink: #ececf6;
+  --muted: #9e9eb8;
+  --line: #2d2d45;
+  --accent: #8b85ff;
+  --accent-ink: #0f0d2e;
+  --accent-soft: #26245a;
+  --accent-text: #c4c0ff;
+  --strong: #36364f;
+  --strong-ink: #ffffff;
+  --hero: #242438;
+  --blue: #94a3b8;
+  --blue-soft: #252b34;
+  --blue-text: #cbd5e1;
+  color-scheme: dark;
+}
+
+/* Ocean: Sea blue-green; frozen food is slate. */
+:root[data-palette='ocean'] {
+  --bg: #f7fafb;
+  --card: #ffffff;
+  --card-muted: #edf3f5;
+  --ink: #172227;
+  --muted: #5b6b72;
+  --line: #dfe8eb;
+  --accent: #0e7490;
+  --accent-ink: #ffffff;
+  --accent-soft: #dff1f6;
+  --accent-text: #0b5b71;
+  --strong: #1e2b31;
+  --strong-ink: #ffffff;
+  --hero: #17272e;
+  --blue: #64748b;
+  --blue-soft: #eceff3;
+  --blue-text: #475569;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='ocean']:not([data-theme='light']) {
+    --bg: #11171a;
+    --card: #182024;
+    --card-muted: #212b30;
+    --ink: #e9f1f4;
+    --muted: #93a6ae;
+    --line: #2a363c;
+    --accent: #38bdd8;
+    --accent-ink: #04212a;
+    --accent-soft: #123540;
+    --accent-text: #95e0f0;
+    --strong: #314147;
+    --strong-ink: #ffffff;
+    --hero: #212b30;
+    --blue: #94a3b8;
+    --blue-soft: #252b34;
+    --blue-text: #cbd5e1;
+    color-scheme: dark;
+  }
+}
+:root[data-palette='ocean'][data-theme='dark'] {
+  --bg: #11171a;
+  --card: #182024;
+  --card-muted: #212b30;
+  --ink: #e9f1f4;
+  --muted: #93a6ae;
+  --line: #2a363c;
+  --accent: #38bdd8;
+  --accent-ink: #04212a;
+  --accent-soft: #123540;
+  --accent-text: #95e0f0;
+  --strong: #314147;
+  --strong-ink: #ffffff;
+  --hero: #212b30;
+  --blue: #94a3b8;
+  --blue-soft: #252b34;
+  --blue-text: #cbd5e1;
+  color-scheme: dark;
+}
+
+/* Plum: Rich berry tone. */
+:root[data-palette='plum'] {
+  --bg: #faf8fa;
+  --card: #ffffff;
+  --card-muted: #f3eff3;
+  --ink: #221b22;
+  --muted: #6a5f69;
+  --line: #e9e2e8;
+  --accent: #8e3a86;
+  --accent-ink: #ffffff;
+  --accent-soft: #f6e8f4;
+  --accent-text: #7a2f73;
+  --strong: #2a2229;
+  --strong-ink: #ffffff;
+  --hero: #2a1f29;
+  --blue: #3b7fe0;
+  --blue-soft: #e3edfc;
+  --blue-text: #2457a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='plum']:not([data-theme='light']) {
+    --bg: #161215;
+    --card: #1f191e;
+    --card-muted: #2a2229;
+    --ink: #f2ecf1;
+    --muted: #a99ea8;
+    --line: #352c34;
+    --accent: #d07bc6;
+    --accent-ink: #1f0a1c;
+    --accent-soft: #3a2237;
+    --accent-text: #f0b8e8;
+    --strong: #40353f;
+    --strong-ink: #ffffff;
+    --hero: #2a2229;
+    --blue: #6a9ff0;
+    --blue-soft: #18284a;
+    --blue-text: #a8c4ff;
+    color-scheme: dark;
+  }
+}
+:root[data-palette='plum'][data-theme='dark'] {
+  --bg: #161215;
+  --card: #1f191e;
+  --card-muted: #2a2229;
+  --ink: #f2ecf1;
+  --muted: #a99ea8;
+  --line: #352c34;
+  --accent: #d07bc6;
+  --accent-ink: #1f0a1c;
+  --accent-soft: #3a2237;
+  --accent-text: #f0b8e8;
+  --strong: #40353f;
+  --strong-ink: #ffffff;
+  --hero: #2a2229;
+  --blue: #6a9ff0;
+  --blue-soft: #18284a;
+  --blue-text: #a8c4ff;
+  color-scheme: dark;
+}
+
+/* Espresso: Warm greys with a cocoa accent. */
+:root[data-palette='espresso'] {
+  --bg: #faf8f5;
+  --card: #ffffff;
+  --card-muted: #f2eee8;
+  --ink: #231d18;
+  --muted: #6b6158;
+  --line: #e8e1d8;
+  --accent: #8a5a3c;
+  --accent-ink: #ffffff;
+  --accent-soft: #f3e8df;
+  --accent-text: #74482d;
+  --strong: #2b231d;
+  --strong-ink: #ffffff;
+  --hero: #2b221c;
+  --blue: #3b7fe0;
+  --blue-soft: #e3edfc;
+  --blue-text: #2457a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='espresso']:not([data-theme='light']) {
+    --bg: #161310;
+    --card: #1f1a16;
+    --card-muted: #2a231d;
+    --ink: #f2ece6;
+    --muted: #aa9d91;
+    --line: #362d26;
+    --accent: #d39a6e;
+    --accent-ink: #241407;
+    --accent-soft: #3b2b20;
+    --accent-text: #f0c7a6;
+    --strong: #41372f;
+    --strong-ink: #ffffff;
+    --hero: #2a231d;
+    --blue: #6a9ff0;
+    --blue-soft: #18284a;
+    --blue-text: #a8c4ff;
+    color-scheme: dark;
+  }
+}
+:root[data-palette='espresso'][data-theme='dark'] {
+  --bg: #161310;
+  --card: #1f1a16;
+  --card-muted: #2a231d;
+  --ink: #f2ece6;
+  --muted: #aa9d91;
+  --line: #362d26;
+  --accent: #d39a6e;
+  --accent-ink: #241407;
+  --accent-soft: #3b2b20;
+  --accent-text: #f0c7a6;
+  --strong: #41372f;
+  --strong-ink: #ffffff;
+  --hero: #2a231d;
+  --blue: #6a9ff0;
+  --blue-soft: #18284a;
+  --blue-text: #a8c4ff;
+  color-scheme: dark;
+}

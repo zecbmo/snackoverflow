@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { addDays, type CalendarDate, type CalorieStatsDto, formatPence, type WasteReportDto } from '@snackoverflow/shared';
 import { type Bar, BarChart } from '../components/BarChart';
-import { BackButton, useMe } from '../components/Layout';
-import { Card, ErrorNote, PageHeader, Spinner } from '../components/ui';
+import { MenuButton, useMe } from '../components/Layout';
+import { PageTop, Segmented, Toolbar } from '../components/Toolbar';
+import { Card, ErrorNote, Spinner } from '../components/ui';
 import { useCalories, useSpending, useUsers, useWasteReport } from '../lib/queries';
 
 /** 800 → "0.8 kg", 60 → "60 g". */
@@ -45,21 +46,11 @@ export function DashboardPage() {
   ];
   return (
     <>
-      <PageHeader title="Dashboard" left={<BackButton to="/" />} />
+      <PageTop title="Dashboard" left={<MenuButton />} />
       {people.length > 1 && (
-        <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4" role="group" aria-label="Whose calories">
-          {people.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              aria-pressed={person === p.id}
-              onClick={() => setPerson(p.id)}
-              className={`min-h-12 shrink-0 rounded-full border px-5 text-[1.0625rem] font-semibold ${person === p.id ? 'border-strong bg-strong text-strong-ink' : 'border-line bg-card'}`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <Toolbar>
+          <Segmented label="Whose calories" value={person} onChange={setPerson} options={people.map((p) => ({ value: p.id, label: p.label }))} />
+        </Toolbar>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
         <CaloriesCard person={person} />
@@ -78,9 +69,9 @@ function CaloriesCard({ person }: { person: string }) {
   const [range, setRange] = useState<7 | 30>(7);
   const s = q.data;
   return (
-    <Card className="p-5">
+    <Card className="p-4">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-        <h2 className="text-xl font-bold sm:text-2xl">Calories, last {range} days</h2>
+        <h2 className="text-lg font-bold lg:text-base">Calories, last {range} days</h2>
         {s?.target ? (
           <span className="pt-1 text-muted">Target {n(s.target)}</span>
         ) : (
@@ -104,21 +95,23 @@ function CaloriesCard({ person }: { person: string }) {
           <dl className="mb-5 grid grid-cols-2 gap-3">
             <div>
               <dt className="text-muted">7-day average</dt>
-              <dd className="font-display text-3xl font-bold sm:text-4xl">{s.avg7 !== null ? n(s.avg7) : '–'}</dd>
+              <dd className="text-3xl font-bold tabular-nums lg:text-2xl">{s.avg7 !== null ? n(s.avg7) : '–'}</dd>
             </div>
             <div>
               <dt className="text-muted">30-day average</dt>
-              <dd className="font-display text-3xl font-bold sm:text-4xl">{s.avg30 !== null ? n(s.avg30) : '–'}</dd>
+              <dd className="text-3xl font-bold tabular-nums lg:text-2xl">{s.avg30 !== null ? n(s.avg30) : '–'}</dd>
             </div>
           </dl>
           <div className="mb-4 flex justify-end">
-            <div className="flex shrink-0 rounded-xl bg-card-muted p-1" role="group" aria-label="How many days">
-              {([7, 30] as const).map((r) => (
-                <button key={r} type="button" aria-pressed={range === r} onClick={() => setRange(r)} className={`min-h-11 rounded-lg px-3 font-semibold ${range === r ? 'bg-card shadow-sm' : ''}`}>
-                  {r} days
-                </button>
-              ))}
-            </div>
+            <Segmented
+              label="How many days"
+              value={String(range)}
+              onChange={(v) => setRange(v === '30' ? 30 : 7)}
+              options={[
+                { value: '7', label: '7 days' },
+                { value: '30', label: '30 days' },
+              ]}
+            />
           </div>
           <BarChart
             label={`Calories per day for ${s.personId === me.user.id ? 'you' : s.name}, last ${range} days`}
@@ -128,7 +121,7 @@ function CaloriesCard({ person }: { person: string }) {
             tableHeadings={['Day', 'Calories']}
             note={
               <p className="mt-3 text-[0.9375rem] text-muted">
-                {s.target ? 'Purple days went over target. ' : ''}Today is still being logged. Only meals marked eaten count.
+                {s.target ? 'Coloured days went over target. ' : ''}Today is still being logged. Only meals marked eaten count.
               </p>
             }
           />
@@ -162,9 +155,9 @@ function WasteCard() {
   const now = r?.periods.at(-1);
   const change = r ? changeLine(r.changePercent, r.periods, 'month') : null;
   return (
-    <Card className="p-5">
+    <Card className="p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-bold sm:text-2xl">Binned this month</h2>
+        <h2 className="text-lg font-bold lg:text-base">Binned this month</h2>
         {change && <span className={`font-semibold ${r!.changePercent! <= 0 ? 'text-fresh-green-text' : 'text-muted'}`}>{change}</span>}
       </div>
       <ErrorNote error={q.error} />
@@ -175,12 +168,12 @@ function WasteCard() {
           <dl className="grid grid-cols-2 gap-3">
             <div>
               <dt className="text-muted">Weight</dt>
-              <dd className="font-display text-3xl font-bold sm:text-4xl">{weightLabel(now.grams)}</dd>
+              <dd className="text-3xl font-bold tabular-nums lg:text-2xl">{weightLabel(now.grams)}</dd>
             </div>
             {r.pricing && (
               <div>
                 <dt className="text-muted">Value</dt>
-                <dd className="font-display text-3xl font-bold sm:text-4xl">{now.pence !== null ? formatPence(now.pence) : '–'}</dd>
+                <dd className="text-3xl font-bold tabular-nums lg:text-2xl">{now.pence !== null ? formatPence(now.pence) : '–'}</dd>
               </div>
             )}
           </dl>
@@ -222,12 +215,12 @@ function SpendingCard() {
   const now = s.periods.at(-1)!;
   const change = changeLine(s.changePercent, s.periods, 'month');
   return (
-    <Card className="p-5">
+    <Card className="p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-bold sm:text-2xl">Spent this month</h2>
+        <h2 className="text-lg font-bold lg:text-base">Spent this month</h2>
         {change && <span className="font-semibold text-muted">{change}</span>}
       </div>
-      <p className="font-display text-3xl font-bold sm:text-4xl">{formatPence(now.pence)}</p>
+      <p className="text-3xl font-bold tabular-nums lg:text-2xl">{formatPence(now.pence)}</p>
       <p className="mb-4 text-muted">
         From {now.receipts === 1 ? '1 receipt' : `${now.receipts} receipts`}. Shops without a receipt aren't counted.
       </p>

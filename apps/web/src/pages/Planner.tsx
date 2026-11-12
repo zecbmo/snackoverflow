@@ -9,7 +9,10 @@ import { addDays, type CalendarDate, MEAL_SLOTS, type MealSlot, type PlanEntryDt
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
-import { Button, Card, ErrorNote, Field, IconButton, PageHeader, Select, Sheet, Spinner, TextInput } from '../components/ui';
+import { PickerMenu } from '../components/Menu';
+import { PageTop, Toolbar } from '../components/Toolbar';
+import { Button, Card, ErrorNote, Field, IconButton, Select, Sheet, Spinner, TextInput } from '../components/ui';
+import { useIsDesktop } from '../lib/useMedia';
 import { api, errorMessage } from '../lib/api';
 import { amountLabel } from '../lib/format';
 import { usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
@@ -76,6 +79,7 @@ export function PlannerPage() {
   } | null>(null);
   const [planningWeek, setPlanningWeek] = useState(false);
   const surplus = useSurplus().data ?? [];
+  const desktop = useIsDesktop();
   const hint = surplus.find((h) => h.ideas > 0) ?? surplus[0];
 
   // Opened from a "Move" notification: show that meal.
@@ -105,121 +109,160 @@ export function PlannerPage() {
     }
   };
 
-  const chips = [{ id: 'me', label: 'You' }, ...(isAdmin ? members.filter((m) => m.id !== me.user.id).map((m) => ({ id: m.id, label: m.name })) : []), { id: 'everyone', label: 'Everyone' }];
+  const people = [{ value: 'me', label: 'You' }, ...(isAdmin ? members.filter((m) => m.id !== me.user.id).map((m) => ({ value: m.id, label: m.name })) : []), { value: 'everyone', label: 'Everyone' }];
+  const thisWeek = weekStart(me.today);
+  const addLabel = (date: CalendarDate, slot: MealSlot) => `Add to ${slot} on ${dayLabel(date, me.today, true)}`;
+  const entryButton = (e: PlanEntryDto, compact: boolean) => (
+    <button
+      type="button"
+      onClick={() => setOpen(e)}
+      className={
+        compact
+          ? `flex w-full items-start gap-1.5 rounded-md border border-line bg-card px-1.5 py-1 text-left text-[0.8125rem] leading-snug hover:border-accent/50 hover:bg-accent-soft/40 ${e.status === 'skipped' ? 'opacity-60' : ''}`
+          : 'flex min-h-11 w-full items-center gap-3 text-left'
+      }
+    >
+      <span aria-hidden className={`mt-1 size-2 shrink-0 rounded-full ${e.status === 'cooked' ? 'bg-fresh-green' : e.status === 'skipped' ? 'bg-transparent' : 'border border-muted'} ${compact ? '' : 'mt-0'}`} />
+      <span className={`min-w-0 flex-1 ${compact ? 'line-clamp-2' : 'text-[1.0625rem]'} ${e.status === 'skipped' ? 'text-muted line-through' : ''}`}>{e.title}</span>
+      {compact ? (
+        e.kcal !== null && <span className="shrink-0 text-[0.6875rem] text-muted tabular-nums">{e.kcal}</span>
+      ) : (
+        <span className="whitespace-nowrap text-[0.9375rem] text-muted">{[e.detail, e.kcal !== null ? e.kcal : null].filter((x) => x !== null && x !== '').join(' · ')}</span>
+      )}
+      <span className="sr-only">{e.status === 'cooked' ? '(done)' : e.status === 'skipped' ? '(skipped)' : '(planned)'}</span>
+    </button>
+  );
+  const scanLink = (date: CalendarDate, slot: MealSlot, cls: string) =>
+    date === me.today ? (
+      <Link to={`/scan?mode=eat&slot=${slot}`} aria-label={`Scan something you ate for ${slot}`} className={cls}>
+        <Icon name="scan" className="size-4" />
+      </Link>
+    ) : null;
 
   return (
     <>
-      <PageHeader
+      <PageTop
         title="Planner"
         subtitle={rangeLabel(from, to)}
         left={<MenuButton />}
-        right={
-          <div className="flex gap-2">
-            <IconButton icon="chevronLeft" label="Previous week" className="size-12" onClick={() => setFrom(addDays(from, -7))} />
-            <IconButton icon="chevronRight" label="Next week" className="size-12" onClick={() => setFrom(addDays(from, 7))} />
+        actions={
+          <div className="flex items-center gap-1">
+            <IconButton icon="chevronLeft" label="Previous week" onClick={() => setFrom(addDays(from, -7))} />
+            {from !== thisWeek && (
+              <Button size="sm" onClick={() => setFrom(thisWeek)}>
+                This week
+              </Button>
+            )}
+            <IconButton icon="chevronRight" label="Next week" onClick={() => setFrom(addDays(from, 7))} />
           </div>
         }
       />
-      <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4" role="group" aria-label="Whose calendar">
-        {chips.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            aria-pressed={person === c.id}
-            onClick={() => setPerson(c.id)}
-            className={`min-h-11 shrink-0 rounded-full border px-5 text-[0.9375rem] font-semibold ${person === c.id ? 'border-strong bg-strong text-strong-ink' : 'border-line bg-card'}`}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-      {/* Phone: two big buttons, then the rest. Desktop: one compact row. */}
-      <div className="lg:flex lg:flex-wrap lg:gap-3">
-        <div className="mb-3 grid grid-cols-2 gap-3 lg:mb-4 lg:flex">
-          <Button variant="dark" size="lg" className="lg:min-h-11 lg:px-4" onClick={() => setSuggesting({ ingredient: null })}>
-            Suggest meals
-          </Button>
-          <Button size="lg" className="lg:min-h-11 lg:px-4" onClick={() => setPlanningWeek(true)}>
-            Plan my week
-          </Button>
-        </div>
-        <div className="mb-4 flex flex-wrap gap-3">
-          <Button onClick={() => void build()}>
-            <Icon name="cart" className="size-5" /> Build shopping list
-          </Button>
-          {from !== weekStart(me.today) && <Button onClick={() => setFrom(weekStart(me.today))}>This week</Button>}
-        </div>
-      </div>
+      <Toolbar>
+        {people.length > 1 && <PickerMenu label="Calendar" icon="users" value={person} defaultValue="me" onChange={setPerson} options={people} />}
+        <Button size="sm" variant="dark" onClick={() => setSuggesting({ ingredient: null })}>
+          Suggest meals
+        </Button>
+        <Button size="sm" onClick={() => setPlanningWeek(true)}>
+          Plan my week
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void build()}>
+          <Icon name="cart" className="size-4" /> Build shopping list
+        </Button>
+      </Toolbar>
       {hint && (
         <button
           type="button"
-          onClick={() =>
-            setSuggesting({
-              ingredient: { id: hint.ingredientId, name: hint.name },
-            })
-          }
-          className="mb-4 flex w-full items-center gap-3 rounded-[18px] border border-accent/40 bg-accent-soft p-5 text-left"
+          onClick={() => setSuggesting({ ingredient: { id: hint.ingredientId, name: hint.name } })}
+          className="mb-3 flex w-full items-center gap-3 rounded-lg border border-accent/30 bg-accent-soft px-3 py-2 text-left text-sm hover:border-accent/60"
         >
-          <span className="flex-1">
-            <span className="block text-lg font-semibold">
-              {formatQuantity(hint.grams)} {hint.name.toLowerCase()} spare after this plan
-            </span>
-            <span className="block text-muted">
+          <span className="min-w-0 flex-1">
+            <strong className="font-semibold">
+              {formatQuantity(hint.grams)} {hint.name.toLowerCase()} spare after this plan.
+            </strong>{' '}
+            <span className="text-muted">
               {hint.topIdea ? `${hint.topIdea.title} would use it${hint.topIdea.missing.length ? ` (needs ${hint.topIdea.missing.join(', ').toLowerCase()})` : ''}. ` : ''}
               {hint.ideas ? `${hint.ideas} idea${hint.ideas === 1 ? '' : 's'}` : 'No recipes use it yet'}
             </span>
           </span>
-          <Icon name="chevronRight" className="size-5 text-accent-text" />
+          <Icon name="chevronRight" className="size-4 shrink-0 text-accent-text" />
         </button>
       )}
       <ErrorNote error={plan.error} />
       {plan.isPending ? (
         <Spinner />
+      ) : desktop ? (
+        <div className="overflow-x-auto rounded-lg border border-line bg-card">
+          <div className="grid min-w-[56rem] grid-cols-[6.5rem_repeat(7,minmax(0,1fr))]" role="table" aria-label={`Meals, ${rangeLabel(from, to)}`}>
+            <div role="row" className="contents">
+              <div role="columnheader" className="border-b border-r border-line bg-card-muted/60" />
+              {plan.data?.days.map((day) => (
+                <div
+                  key={day.date}
+                  role="columnheader"
+                  className={`border-b border-r border-line px-2 py-1.5 last:border-r-0 ${day.date === me.today ? 'bg-accent-soft' : 'bg-card-muted/60'}`}
+                >
+                  <p className={`text-sm font-semibold ${day.date === me.today ? 'text-accent-text' : ''}`}>{dayLabel(day.date, me.today)}</p>
+                  <p className="text-xs text-muted tabular-nums">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : '–'}</p>
+                </div>
+              ))}
+            </div>
+            {MEAL_SLOTS.map((slot) => (
+              <div key={slot} role="row" className="contents">
+                <div role="rowheader" className="border-b border-r border-line px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                  {SLOT_LABEL[slot]}
+                </div>
+                {plan.data?.days.map((day) => {
+                  const entries = day.entries.filter((e) => e.slot === slot);
+                  return (
+                    <div
+                      key={day.date}
+                      role="cell"
+                      className={`group flex min-h-20 flex-col gap-1 border-b border-r border-line p-1.5 last:border-r-0 ${day.date === me.today ? 'bg-accent-soft/30' : ''} ${day.date < me.today ? 'bg-card-muted/30' : ''}`}
+                    >
+                      {entries.map((e) => (
+                        <div key={e.id}>{entryButton(e, true)}</div>
+                      ))}
+                      <div className={`mt-auto flex items-center gap-0.5 ${entries.length ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : ''}`}>
+                        <button
+                          type="button"
+                          aria-label={addLabel(day.date, slot)}
+                          onClick={() => setAdding({ date: day.date, slot })}
+                          className="inline-flex h-6 flex-1 items-center gap-1 rounded px-1 text-xs text-muted hover:bg-card-muted hover:text-ink"
+                        >
+                          <Icon name="plus" className="size-3.5" /> Add
+                        </button>
+                        {scanLink(day.date, slot, 'inline-flex size-6 items-center justify-center rounded text-muted hover:bg-card-muted hover:text-ink')}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-7 lg:gap-2">
-          {plan.data && !showEarlier && plan.data.days.some((d) => d.date < me.today && d.entries.length === 0) && (
-            <Button className="lg:hidden" onClick={() => setShowEarlier(true)}>
-              Show earlier days
-            </Button>
-          )}
+        <div className="flex flex-col gap-3">
+          {plan.data && !showEarlier && plan.data.days.some((d) => d.date < me.today && d.entries.length === 0) && <Button onClick={() => setShowEarlier(true)}>Show earlier days</Button>}
           {plan.data?.days.map((day) => (
-            <Card key={day.date} className={`p-4 lg:p-2 ${day.date === me.today ? 'border-accent' : ''} ${!showEarlier && day.date < me.today && day.entries.length === 0 ? 'hidden lg:block' : ''}`}>
-              <div className="mb-2 flex items-baseline justify-between gap-2 border-b border-line pb-2 lg:flex-col lg:items-start">
-                <h2 className="text-xl font-bold lg:text-base">{dayLabel(day.date, me.today)}</h2>
-                <span className="font-semibold text-muted lg:text-sm">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : ''}</span>
+            <Card key={day.date} className={`p-3 ${day.date === me.today ? 'border-accent' : ''} ${!showEarlier && day.date < me.today && day.entries.length === 0 ? 'hidden' : ''}`}>
+              <div className="mb-1 flex items-baseline justify-between gap-2 border-b border-line pb-2">
+                <h2 className="text-lg font-bold">{dayLabel(day.date, me.today)}</h2>
+                <span className="text-sm font-semibold text-muted">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : ''}</span>
               </div>
               {MEAL_SLOTS.map((slot) => {
                 const entries = day.entries.filter((e) => e.slot === slot);
-                const kcal = entries.filter((e) => e.status !== 'skipped').reduce((s, e) => s + (e.kcal ?? 0), 0);
                 return (
-                  <section key={slot} className="border-b border-line py-2 last:border-b-0">
+                  <section key={slot} className="border-b border-line py-1 last:border-b-0">
                     <div className="flex items-center gap-1">
-                      <h3 className="flex-1 text-sm font-semibold uppercase tracking-wider text-muted lg:text-xs">{SLOT_LABEL[slot]}</h3>
-                      {kcal > 0 && <span className="text-sm font-semibold lg:hidden">{kcal} kcal</span>}
-                      {day.date === me.today && (
-                        <Link to={`/scan?mode=eat&slot=${slot}`} aria-label={`Scan something you ate for ${slot}`} className="inline-flex size-11 items-center justify-center text-accent-text lg:size-8">
-                          <Icon name="scan" className="size-5" />
-                        </Link>
-                      )}
-                      <button
-                        type="button"
-                        aria-label={`Add to ${slot} on ${dayLabel(day.date, me.today, true)}`}
-                        onClick={() => setAdding({ date: day.date, slot })}
-                        className="inline-flex size-11 items-center justify-center text-accent-text lg:size-8"
-                      >
+                      <h3 className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted">{SLOT_LABEL[slot]}</h3>
+                      {scanLink(day.date, slot, 'inline-flex size-11 items-center justify-center text-accent-text')}
+                      <button type="button" aria-label={addLabel(day.date, slot)} onClick={() => setAdding({ date: day.date, slot })} className="inline-flex size-11 items-center justify-center text-accent-text">
                         <Icon name="plus" className="size-5" />
                       </button>
                     </div>
                     <ul>
                       {entries.map((e) => (
-                        <li key={e.id}>
-                          <button type="button" onClick={() => setOpen(e)} className="flex min-h-11 w-full items-center gap-3 text-left">
-                            <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${e.status === 'cooked' ? 'bg-strong' : e.status === 'skipped' ? 'bg-transparent' : 'border border-strong'}`} />
-                            <span className={`min-w-0 flex-1 text-[1.0625rem] lg:text-sm ${e.status === 'skipped' ? 'text-muted line-through' : ''}`}>{e.title}</span>
-                            <span className="whitespace-nowrap text-[0.9375rem] text-muted lg:hidden">{[e.detail, e.kcal !== null ? e.kcal : null].filter((x) => x !== null && x !== '').join(' · ')}</span>
-                            <span className="sr-only">{e.status === 'cooked' ? '(done)' : e.status === 'skipped' ? '(skipped)' : '(planned)'}</span>
-                          </button>
-                        </li>
+                        <li key={e.id}>{entryButton(e, false)}</li>
                       ))}
                     </ul>
                   </section>

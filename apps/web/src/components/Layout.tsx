@@ -31,6 +31,7 @@ const tabs: { to: string; label: string; icon: IconName }[] = [
 interface MenuLink {
   to: string;
   label: string;
+  icon: IconName;
   badge?: string;
 }
 
@@ -42,27 +43,27 @@ function useMenuSections(): { title: string; links: MenuLink[] }[] {
     {
       title: 'Food',
       links: [
-        { to: '/recipes', label: 'Recipes', badge: recipes ? String(recipes) : undefined },
-        { to: '/meals', label: 'Batch cooks & leftovers', badge: portions ? String(portions) : undefined },
-        { to: '/receipts', label: 'Receipts' },
-        { to: '/products', label: 'Products & barcodes', badge: unnamed ? `${unnamed} unnamed` : undefined },
-        { to: '/ingredients', label: 'Ingredients & units' },
+        { to: '/recipes', label: 'Recipes', icon: 'recipe', badge: recipes ? String(recipes) : undefined },
+        { to: '/meals', label: 'Batch cooks & leftovers', icon: 'pot', badge: portions ? String(portions) : undefined },
+        { to: '/receipts', label: 'Receipts', icon: 'receipt' },
+        { to: '/products', label: 'Products & barcodes', icon: 'tag', badge: unnamed ? `${unnamed} unnamed` : undefined },
+        { to: '/ingredients', label: 'Ingredients & units', icon: 'leaf' },
       ],
     },
     {
       title: 'Insights',
       links: [
-        { to: '/dashboard', label: 'Dashboard' },
-        { to: '/waste', label: 'Waste report' },
+        { to: '/dashboard', label: 'Dashboard', icon: 'chart' },
+        { to: '/waste', label: 'Waste report', icon: 'trash' },
       ],
     },
     {
       title: 'Household',
       links: [
-        { to: '/locations', label: 'Locations' },
-        { to: '/people', label: 'People & roles' },
-        { to: '/notifications', label: 'Notifications' },
-        { to: '/settings', label: 'Settings' },
+        { to: '/locations', label: 'Locations', icon: 'pin' },
+        { to: '/people', label: 'People & roles', icon: 'users' },
+        { to: '/notifications', label: 'Notifications', icon: 'bell' },
+        { to: '/settings', label: 'Settings', icon: 'sliders' },
       ],
     },
   ];
@@ -82,10 +83,10 @@ export function BellButton() {
     <Link
       to="/inbox"
       aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
-      className="relative inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-card"
+      className="relative inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-card lg:size-8 lg:rounded-md"
     >
-      <Icon name="bell" />
-      {unread > 0 && <span aria-hidden className="absolute right-3.5 top-3.5 size-2.5 rounded-full bg-accent ring-2 ring-card" />}
+      <Icon name="bell" className="size-6 lg:size-[18px]" />
+      {unread > 0 && <span aria-hidden className="absolute right-3.5 top-3.5 size-2.5 rounded-full bg-accent ring-2 ring-card lg:right-1.5 lg:top-1.5 lg:size-2" />}
     </Link>
   );
 }
@@ -96,7 +97,7 @@ function OfflineBanner() {
   const toast = useToast();
   if (count === 0) return null;
   return (
-    <div role="status" className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-card-muted px-4 py-2">
+    <div role="status" className="mt-4 flex items-center gap-3 rounded-lg border border-line bg-card-muted px-4 py-2">
       <p className="flex-1 text-[0.9375rem]">
         {count === 1 ? '1 scan is' : `${count} scans are`} waiting to sync. They'll go as soon as you're back online.
       </p>
@@ -113,9 +114,12 @@ function OfflineBanner() {
   );
 }
 
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, small = false }: { name: string; small?: boolean }) {
   return (
-    <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-strong font-semibold text-strong-ink">
+    <span
+      aria-hidden
+      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-strong font-semibold text-strong-ink ${small ? 'size-7 text-xs' : 'size-10'}`}
+    >
       {name.charAt(0).toUpperCase()}
     </span>
   );
@@ -123,7 +127,7 @@ function Avatar({ name }: { name: string }) {
 
 function Logo() {
   return (
-    <span aria-hidden className="inline-flex size-10 items-center justify-center rounded-xl bg-accent text-sm font-bold text-accent-ink">
+    <span aria-hidden className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-[0.6875rem] font-bold text-accent-ink">
       S/O
     </span>
   );
@@ -148,7 +152,7 @@ function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
             <Icon name="close" className="size-5" />
           </button>
         </div>
-        <Link to="/profile" className="mb-4 flex items-center gap-3 rounded-2xl bg-card-muted p-3">
+        <Link to="/profile" className="mb-4 flex items-center gap-3 rounded-lg bg-card-muted p-3">
           <Avatar name={me.user.name} />
           <span className="min-w-0">
             <span className="block truncate font-semibold">{me.user.name}</span>
@@ -161,8 +165,9 @@ function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div key={s.title} className="mb-3">
             <p className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</p>
             {s.links.map((l) => (
-              <Link key={l.to} to={l.to} className="flex min-h-12 items-center justify-between rounded-xl px-2 text-[1.0625rem] hover:bg-card-muted">
-                <span>{l.label}</span>
+              <Link key={l.to} to={l.to} className="flex min-h-12 items-center gap-3 rounded-lg px-2 text-[1.0625rem] hover:bg-card-muted">
+                <Icon name={l.icon} className="size-5 text-muted" />
+                <span className="flex-1">{l.label}</span>
                 {l.badge && <span className="text-sm font-semibold text-muted">{l.badge}</span>}
               </Link>
             ))}
@@ -180,47 +185,150 @@ function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+const SIDEBAR_KEY = 'so-sidebar';
+
+/** Collapsed or expanded: remembered per device; collapsed by default on narrower desktops. */
+function useSidebarCollapsed(): [boolean, () => void] {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_KEY);
+      if (saved) return saved === 'collapsed';
+    } catch {
+      // No storage: use the default.
+    }
+    return window.innerWidth < 1280;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, collapsed ? 'collapsed' : 'expanded');
+    } catch {
+      // Not remembered, still toggles.
+    }
+  }, [collapsed]);
+  // "[" toggles it, unless someone is typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '[' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+      setCollapsed((c) => !c);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return [collapsed, () => setCollapsed((c) => !c)];
+}
+
+/** A sidebar link: icon and label. Collapsed, just the icon, with the label as a tooltip. */
+function SideLink({ to, label, icon, badge, collapsed, end }: MenuLink & { collapsed: boolean; end?: boolean }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `group relative flex h-8 shrink-0 items-center gap-2.5 rounded-md text-sm ${collapsed ? 'justify-center' : 'px-2.5'} ${
+          isActive ? 'bg-accent-soft font-semibold text-accent-text' : 'text-ink hover:bg-card-muted'
+        }`
+      }
+    >
+      <Icon name={icon} className="size-[18px] shrink-0" />
+      <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{label}</span>
+      {!collapsed && badge && <span className="text-xs font-normal text-muted">{badge}</span>}
+      {collapsed && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-strong px-2 py-1 text-xs font-medium text-strong-ink shadow-lg group-hover:block group-focus-visible:block"
+        >
+          {label}
+          {badge ? ` · ${badge}` : ''}
+        </span>
+      )}
+    </NavLink>
+  );
+}
+
 function Sidebar() {
   const me = useMe();
   const sections = useMenuSections();
   const stockCount = useStock().data?.length;
-  const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex min-h-11 items-center justify-between rounded-xl px-3 text-[0.9375rem] ${isActive ? 'bg-card-muted font-semibold' : 'hover:bg-card-muted'}`;
+  const [collapsed, toggle] = useSidebarCollapsed();
+  const main: MenuLink[] = [
+    { to: '/', label: 'Today', icon: 'home' },
+    { to: '/stock', label: 'Stock', icon: 'box', badge: stockCount !== undefined ? String(stockCount) : undefined },
+    { to: '/plan', label: 'Planner', icon: 'calendar' },
+    { to: '/shop', label: 'Shopping list', icon: 'cart' },
+  ];
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line bg-card p-4 lg:flex">
-      <div className="mb-4 flex items-center gap-3 px-1">
-        <Logo />
-        <span className="font-display text-lg font-bold leading-tight">
-          Snack
-          <br />
-          Overflow
-        </span>
+    <aside
+      aria-label="Main"
+      className={`sticky top-0 z-20 hidden h-screen shrink-0 flex-col border-r border-line bg-card transition-[width] duration-150 lg:flex ${collapsed ? 'w-14' : 'w-64'}`}
+    >
+      <div className={`flex h-14 shrink-0 items-center gap-2.5 ${collapsed ? 'justify-center' : 'pl-3 pr-2'}`}>
+        {collapsed ? (
+          <button type="button" onClick={toggle} aria-label="Expand sidebar" title="Expand sidebar ( [ )" className="group rounded-lg">
+            <span className="group-hover:hidden group-focus-visible:hidden">
+              <Logo />
+            </span>
+            <span className="hidden size-8 items-center justify-center rounded-md bg-card-muted group-hover:inline-flex group-focus-visible:inline-flex">
+              <Icon name="sidebar" className="size-[18px]" />
+            </span>
+          </button>
+        ) : (
+          <>
+            <Logo />
+            <span className="min-w-0 flex-1 truncate font-display text-[0.9375rem] font-bold">Snack Overflow</span>
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar ( [ )"
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-card-muted hover:text-ink"
+            >
+              <Icon name="sidebar" className="size-[18px]" />
+            </button>
+          </>
+        )}
       </div>
-      <Link to="/scan" className="mb-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-accent-ink hover:brightness-110">
-        <Icon name="scan" className="size-5" /> Scan items
-      </Link>
-      {tabs.map((t) => (
-        <NavLink key={t.to} to={t.to} end={t.to === '/'} className={linkClass}>
-          <span>{t.label === 'Shop' ? 'Shopping list' : t.label === 'Plan' ? 'Planner' : t.label}</span>
-          {t.to === '/stock' && stockCount !== undefined && <span className="text-sm text-muted">{stockCount}</span>}
-        </NavLink>
-      ))}
-      {sections.map((s) => (
-        <div key={s.title} className="mt-3">
-          <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</p>
-          {s.links.map((l) => (
-            <NavLink key={l.to} to={l.to} className={linkClass}>
-              <span>{l.label}</span>
-              {l.badge && <span className="text-xs text-muted">{l.badge.replace(' unnamed', ' new')}</span>}
-            </NavLink>
-          ))}
-        </div>
-      ))}
-      <Link to="/profile" className="mt-auto flex items-center gap-3 rounded-2xl bg-card-muted p-3">
-        <Avatar name={me.user.name} />
-        <span className="truncate text-sm font-medium">
-          {me.user.name} · {me.user.role === 'admin' ? 'Admin' : 'Member'}
-        </span>
+      <nav aria-label="Pages" className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-3 ${collapsed ? 'items-stretch px-2' : 'px-3'}`}>
+        <Link
+          to="/scan"
+          aria-label="Scan items"
+          title={collapsed ? 'Scan items' : undefined}
+          className="mb-3 inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-accent text-sm font-semibold text-accent-ink hover:brightness-110"
+        >
+          <Icon name="scan" className="size-[18px]" />
+          {!collapsed && 'Scan items'}
+        </Link>
+        {main.map((l) => (
+          <SideLink key={l.to} {...l} collapsed={collapsed} end={l.to === '/'} />
+        ))}
+        {sections.map((s) => (
+          <div key={s.title} className="mt-3 flex flex-col gap-0.5">
+            {collapsed ? (
+              <hr className="mx-1 mb-2 border-line" />
+            ) : (
+              <p className="px-2.5 pb-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">{s.title}</p>
+            )}
+            {s.links.map((l) => (
+              <SideLink key={l.to} {...l} badge={l.badge?.replace(' unnamed', ' new')} collapsed={collapsed} />
+            ))}
+          </div>
+        ))}
+      </nav>
+      <Link
+        to="/profile"
+        aria-label={collapsed ? `Your profile: ${me.user.name}` : undefined}
+        className={`flex shrink-0 items-center gap-2.5 border-t border-line hover:bg-card-muted ${collapsed ? 'justify-center py-3' : 'px-3 py-2.5'}`}
+      >
+        <Avatar name={me.user.name} small />
+        {!collapsed && (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{me.user.name}</span>
+            <span className="block truncate text-xs text-muted">
+              {me.user.role === 'admin' ? 'Admin' : 'Member'} · {me.household.name}
+            </span>
+          </span>
+        )}
       </Link>
     </aside>
   );
@@ -281,9 +389,9 @@ export function BackButton({ to }: { to?: string }) {
       type="button"
       aria-label="Back"
       onClick={() => (to ? navigate(to) : navigate(-1))}
-      className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-card"
+      className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-card lg:size-8 lg:rounded-md"
     >
-      <Icon name="chevronLeft" />
+      <Icon name="chevronLeft" className="size-6 lg:size-[18px]" />
     </button>
   );
 }
@@ -343,7 +451,7 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
         ) : (
           <div className="flex min-h-screen">
             <Sidebar />
-            <main className="mx-auto w-full max-w-5xl flex-1 lg:max-w-7xl px-4 pb-32 pt-[env(safe-area-inset-top)] sm:px-6 lg:px-10 lg:pb-12">
+            <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 pb-32 pt-[env(safe-area-inset-top)] sm:px-6 lg:max-w-none lg:px-6 lg:pb-10">
               <OfflineBanner />
               <Outlet />
             </main>

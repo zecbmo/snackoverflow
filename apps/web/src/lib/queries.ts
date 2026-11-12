@@ -60,16 +60,16 @@ export const keys = {
 export const useSession = () => useQuery({ queryKey: keys.session, queryFn: () => api.get<SessionDto>('/api/session'), retry: false });
 export const useStock = () => useQuery({ queryKey: keys.stock, queryFn: () => api.get<StockItemDto[]>('/api/stock') });
 export const useStockItem = (id: string) =>
-  useQuery({ queryKey: keys.stockItem(id), queryFn: () => api.get<{ item: StockItemDto; events: StockEventDto[] }>(`/api/stock/${id}`) });
+  useQuery({ queryKey: keys.stockItem(id), queryFn: () => api.get<{ item: StockItemDto; events: StockEventDto[] }>(`/api/stock/${id}`), enabled: Boolean(id) });
 export const useLocations = () => useQuery({ queryKey: keys.locations, queryFn: () => api.get<LocationDto[]>('/api/locations') });
 export const useProducts = (q = '', unnamed = false) =>
   useQuery({
     queryKey: keys.products(q, unnamed),
     queryFn: () => api.get<ProductDto[]>(`/api/products?q=${encodeURIComponent(q)}${unnamed ? '&unnamed=1' : ''}`),
   });
-export const useProduct = (id: string) => useQuery({ queryKey: keys.product(id), queryFn: () => api.get<ProductDto>(`/api/products/${id}`) });
+export const useProduct = (id: string) => useQuery({ queryKey: keys.product(id), queryFn: () => api.get<ProductDto>(`/api/products/${id}`), enabled: Boolean(id) });
 export const useProductStock = (id: string) =>
-  useQuery({ queryKey: keys.productStock(id), queryFn: () => api.get<StockItemDto[]>(`/api/products/${id}/stock`) });
+  useQuery({ queryKey: keys.productStock(id), queryFn: () => api.get<StockItemDto[]>(`/api/products/${id}/stock`), enabled: Boolean(id) });
 export const useIngredients = () => useQuery({ queryKey: keys.ingredients, queryFn: () => api.get<IngredientDto[]>('/api/ingredients') });
 export const useShelfLife = () => useQuery({ queryKey: keys.shelfLife, queryFn: () => api.get<ShelfLifeCategoryDto[]>('/api/shelf-life') });
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: () => api.get<UserDto[]>('/api/users') });
@@ -78,7 +78,7 @@ export const useNotificationSettings = () =>
 export const useInbox = () => useQuery({ queryKey: keys.inbox, queryFn: () => api.get<NotificationListDto>('/api/notifications') });
 export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api.get<DeviceDto[]>('/api/devices') });
 export const useRecipes = () => useQuery({ queryKey: keys.recipes, queryFn: () => api.get<RecipeSummaryDto[]>('/api/recipes') });
-export const useRecipe = (id: string) => useQuery({ queryKey: keys.recipe(id), queryFn: () => api.get<RecipeDto>(`/api/recipes/${id}`) });
+export const useRecipe = (id: string) => useQuery({ queryKey: keys.recipe(id), queryFn: () => api.get<RecipeDto>(`/api/recipes/${id}`), enabled: Boolean(id) });
 export const useCookPlan = (id: string, servings: number) =>
   useQuery({ queryKey: keys.cookPlan(id, servings), queryFn: () => api.get<CookPlanDto>(`/api/recipes/${id}/cook-plan?servings=${servings}`) });
 export interface CookRow {

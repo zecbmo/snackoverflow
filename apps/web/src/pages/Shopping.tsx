@@ -1,19 +1,21 @@
 /**
- * The one shared shopping list, grouped by aisle, rounded to real packs, with
- * what each thing is for. Tick things off in the shop, then put them away.
+ * The one shared shopping list, grouped by aisle, rounded to real packs, with what each thing is
+ * for. Type to add, tick things off in the shop, then put them away.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { addDays, formatPence, type ShoppingItemDto } from '@snackoverflow/shared';
+import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
+import { type Column, DataTable } from '../components/DataTable';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
+import { SuggestSheet } from '../components/OptimiserSheets';
 import { useToast } from '../components/Toast';
-import { Button, Card, EmptyState, ErrorNote, Field, PageHeader, Select, Sheet, Spinner, TextInput } from '../components/ui';
+import { PageTop, Toolbar } from '../components/Toolbar';
+import { Button, EmptyState, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useIngredients, useRunningLow, useShopping, useSurplus, useUsers } from '../lib/queries';
-import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
-import { SuggestSheet } from '../components/OptimiserSheets';
 
 /** "Potatoes, 2.5kg bag", "Red peppers × 3", "Milk × 2". */
 export function itemTitle(i: ShoppingItemDto): string {
@@ -38,7 +40,6 @@ export function ShoppingPage() {
   const low = (useRunningLow().data ?? []).filter((l) => !l.onList);
   const qc = useQueryClient();
   const toast = useToast();
-  const [adding, setAdding] = useState(false);
   const [putting, setPutting] = useState<{ added: number; needsScan: ShoppingItemDto[] } | null>(null);
   // Ticks not saved yet win over whatever the server last said, so a refresh can't flip them back.
   const [pending, setPending] = useState<Record<string, boolean>>({});
@@ -54,6 +55,8 @@ export function ShoppingPage() {
   const [planning, setPlanning] = useState<PlanTarget | null>(null);
   const [ideasFor, setIdeasFor] = useState<{ id: string; name: string } | null>(null);
   const biggestSpare = items.filter((i) => !i.checked && (i.surplusGrams ?? 0) >= 200).sort((a, b) => (b.surplusGrams ?? 0) - (a.surplusGrams ?? 0))[0];
+  const spareHint = biggestSpare ? surplus.find((h) => h.ingredientId === biggestSpare.ingredientId) : undefined;
+  const spareIdea = spareHint?.topIdea;
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['shopping'] });
   const tick = async (i: ShoppingItemDto) => {
@@ -96,122 +99,125 @@ export function ShoppingPage() {
     }
   };
 
+  const columns: Column<ShoppingItemDto>[] = [
+    { key: 'got', header: <span className="sr-only">Got it</span>, className: 'w-8 pr-0', cell: (i) => <GotBox item={i} onTick={tick} /> },
+    { key: 'item', header: 'Item', cell: (i) => <span className={`font-semibold ${i.checked ? 'text-muted line-through' : 'text-ink'}`}>{itemTitle(i)}</span> },
+    { key: 'for', header: 'For', cell: (i) => itemDetail(i) },
+  ];
+  if (pricing) {
+    columns.push({ key: 'price', header: 'Price', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (i) => (i.pricePence !== null ? formatPence(i.pricePence) : '') });
+  }
+  const groups = aisles.map((a) => ({ key: a, label: a, rows: items.filter((i) => i.aisle === a) }));
+  const putAwayButton =
+    ticked.length > 0 ? (
+      <Button variant="primary" onClick={() => void putAway()}>
+        Put away {ticked.length} ticked item{ticked.length === 1 ? '' : 's'}
+      </Button>
+    ) : null;
+  const removeButton = (i: ShoppingItemDto) => (
+    <button
+      type="button"
+      aria-label={`Remove ${i.text}`}
+      onClick={() => void remove(i)}
+      className="inline-flex size-10 items-center justify-center rounded-lg text-muted hover:bg-card-muted hover:text-ink lg:size-7 lg:rounded-md"
+    >
+      <Icon name="close" className="size-4" />
+    </button>
+  );
+
   return (
     <>
-      <PageHeader
-        title="Shopping"
+      <PageTop
+        title="Shopping list"
         subtitle={`${toGet.length} to get${pricing && estimate !== null ? ` · about ${formatPence(estimate)}` : ''}`}
         left={<MenuButton />}
-        right={
-          <button type="button" aria-label="Add to the list" onClick={() => setAdding(true)} className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink">
-            <Icon name="plus" />
-          </button>
-        }
+        actions={putAwayButton && <div className="hidden lg:block">{putAwayButton}</div>}
       />
+      <Toolbar>
+        <Button size="sm" variant="ghost" onClick={() => void build()}>
+          <Icon name="calendar" className="size-4" /> Update from plan
+        </Button>
+        <Link to="/receipts" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold hover:bg-card-muted lg:min-h-8 lg:rounded-md lg:px-2.5">
+          <Icon name="receipt" className="size-4" /> Add from receipt
+        </Link>
+      </Toolbar>
+
       {biggestSpare && (
-        <Card className="mb-4 border-accent/40 bg-accent-soft p-5">
-          <p className="text-lg font-semibold">
-            The {biggestSpare.packLabel ? `${biggestSpare.packLabel} ` : ''}
-            {biggestSpare.text.toLowerCase()} leave {biggestSpare.surplusLabel} spare
-          </p>
-          {(() => {
-            const hint = surplus.find((h) => h.ingredientId === biggestSpare.ingredientId);
-            const idea = hint?.topIdea;
-            return (
-              <>
-                <p className="text-muted">
-                  {idea
-                    ? `${idea.title} would use it${idea.missing.length ? ` (you'd also need ${idea.missing.join(', ').toLowerCase()})` : ''}.`
-                    : `Shops sell whole packs. Plan something else with ${biggestSpare.text.toLowerCase()} this week so it gets used.`}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {idea && (
-                    <Button variant="dark" onClick={() => setPlanning({ kind: 'recipe', id: idea.recipeId, title: idea.title, servings: people })}>
-                      Add to plan
-                    </Button>
-                  )}
-                  {hint && hint.ideas > (idea ? 1 : 0) ? (
-                    <Button onClick={() => setIdeasFor({ id: hint.ingredientId, name: hint.name })}>More ideas</Button>
-                  ) : (
-                    !idea && (
-                      <Link to="/recipes" className="inline-flex min-h-11 items-center rounded-xl bg-strong px-4 font-semibold text-strong-ink">
-                        Find a recipe
-                      </Link>
-                    )
-                  )}
-                </div>
-              </>
-            );
-          })()}
-        </Card>
+        <Notice>
+          <span className="min-w-0 flex-1">
+            <strong className="font-semibold">
+              The {biggestSpare.packLabel ? `${biggestSpare.packLabel} ` : ''}
+              {biggestSpare.text.toLowerCase()} leave {biggestSpare.surplusLabel} spare.
+            </strong>{' '}
+            {spareIdea
+              ? `${spareIdea.title} would use it${spareIdea.missing.length ? ` (you'd also need ${spareIdea.missing.join(', ').toLowerCase()})` : ''}.`
+              : `Plan something else with ${biggestSpare.text.toLowerCase()} this week so it gets used.`}
+          </span>
+          <span className="flex shrink-0 gap-2">
+            {spareIdea && (
+              <Button size="xs" variant="dark" onClick={() => setPlanning({ kind: 'recipe', id: spareIdea.recipeId, title: spareIdea.title, servings: people })}>
+                Add to plan
+              </Button>
+            )}
+            {spareHint && spareHint.ideas > (spareIdea ? 1 : 0) ? (
+              <Button size="xs" onClick={() => setIdeasFor({ id: spareHint.ingredientId, name: spareHint.name })}>
+                More ideas
+              </Button>
+            ) : (
+              !spareIdea && (
+                <Link to="/recipes" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-card px-2.5 text-sm font-semibold lg:min-h-7 lg:rounded-md">
+                  Find a recipe
+                </Link>
+              )
+            )}
+          </span>
+        </Notice>
+      )}
+      {low.length > 0 && (
+        <Notice>
+          <span className="min-w-0 flex-1">
+            <strong className="font-semibold">Running low:</strong> {low.map((l) => l.name).join(', ')}
+          </span>
+          <Button size="xs" variant="dark" onClick={() => void addLow()}>
+            Add to list
+          </Button>
+        </Notice>
       )}
       <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
       {ideasFor && <SuggestSheet open onClose={() => setIdeasFor(null)} defaultDate={me.today} ingredient={ideasFor} servings={people} />}
-      {low.length > 0 && (
-        <Card className="mb-4 flex items-center gap-3 p-4">
-          <p className="flex-1">
-            <span className="font-semibold">Running low:</span> {low.map((l) => l.name).join(', ')}
-          </p>
-          <Button variant="dark" onClick={() => void addLow()}>
-            Add
-          </Button>
-        </Card>
-      )}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:flex">
-        <Button className="whitespace-nowrap px-2 sm:px-4" onClick={() => void build()}>
-          Update from plan
-        </Button>
-        <Link to="/receipts" className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-xl border border-line bg-card px-2 text-[0.9375rem] font-semibold sm:px-4">
-          Add from receipt
-        </Link>
-      </div>
+
+      <QuickAdd />
       <ErrorNote error={list.error} />
       {list.isPending ? (
         <Spinner />
-      ) : items.length === 0 ? (
-        <EmptyState title="The list is empty">
-          <p>Plan some meals and tap “Update from plan”, or add things with +.</p>
-        </EmptyState>
       ) : (
-        <div className="flex flex-col gap-5 pb-24">
-          {aisles.map((aisle) => (
-            <section key={aisle}>
-              <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wider text-muted">{aisle}</h2>
-              <ul className="overflow-hidden rounded-[18px] border border-line bg-card">
-                {items
-                  .filter((i) => i.aisle === aisle)
-                  .map((i) => (
-                    <li key={i.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
-                      <input
-                        type="checkbox"
-                        aria-label={`Got ${itemTitle(i)}`}
-                        checked={i.checked}
-                        onChange={() => void tick(i)}
-                        className="size-7 shrink-0 rounded-lg accent-[var(--accent)]"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className={`block text-[1.0625rem] font-semibold ${i.checked ? 'text-muted line-through' : ''}`}>{itemTitle(i)}</span>
-                        {itemDetail(i) && <span className="block text-[0.9375rem] text-muted">{itemDetail(i)}</span>}
-                      </span>
-                      {pricing && i.pricePence !== null && <span className="whitespace-nowrap text-[1.0625rem] font-semibold text-muted">{formatPence(i.pricePence)}</span>}
-                      <button type="button" aria-label={`Remove ${i.text}`} onClick={() => void remove(i)} className="inline-flex size-11 items-center justify-center rounded-full text-muted hover:bg-card-muted">
-                        <Icon name="close" className="size-5" />
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-            </section>
-          ))}
+        <div className="pb-24 lg:pb-0">
+          <DataTable
+            label="Shopping list"
+            columns={columns}
+            groups={groups}
+            rowKey={(i) => i.id}
+            actions={removeButton}
+            phone={(i) => ({
+              lead: <GotBox item={i} onTick={tick} />,
+              title: <span className={i.checked ? 'text-muted line-through' : ''}>{itemTitle(i)}</span>,
+              meta: itemDetail(i) || undefined,
+              badge: (
+                <span className="flex shrink-0 items-center gap-1">
+                  {pricing && i.pricePence !== null && <span className="text-sm font-semibold tabular-nums text-muted">{formatPence(i.pricePence)}</span>}
+                  {removeButton(i)}
+                </span>
+              ),
+            })}
+            empty={
+              <EmptyState title="The list is empty">
+                <p>Plan some meals and use “Update from plan”, or type something above.</p>
+              </EmptyState>
+            }
+          />
         </div>
       )}
-      {ticked.length > 0 && (
-        <div className="fixed inset-x-4 bottom-24 z-20 mx-auto max-w-xl lg:bottom-6">
-          <Button variant="primary" size="lg" className="w-full shadow-lg" onClick={() => void putAway()}>
-            Put away {ticked.length} ticked item{ticked.length === 1 ? '' : 's'}
-          </Button>
-        </div>
-      )}
-      {adding && <AddItemSheet onClose={() => setAdding(false)} />}
+      {putAwayButton && <div className="fixed inset-x-4 bottom-24 z-20 mx-auto max-w-xl lg:hidden [&>button]:w-full [&>button]:shadow-lg">{putAwayButton}</div>}
       <Sheet open={putting !== null} onClose={() => setPutting(null)} title="Put away">
         {putting && (
           <div className="flex flex-col gap-3">
@@ -219,7 +225,7 @@ export function ShoppingPage() {
             {putting.needsScan.length > 0 && (
               <>
                 <p className="text-muted">These need scanning so we know exactly what they are: {putting.needsScan.map((i) => i.text).join(', ')}.</p>
-                <Link to="/scan" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-accent font-semibold text-accent-ink">
+                <Link to="/scan" className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent font-semibold text-accent-ink lg:min-h-8 lg:rounded-md">
                   Scan them
                 </Link>
               </>
@@ -232,60 +238,76 @@ export function ShoppingPage() {
   );
 }
 
-function AddItemSheet({ onClose }: { onClose: () => void }) {
+/** A slim highlighted line above the list: spare packs, things running low. */
+function Notice({ children }: { children: ReactNode }) {
+  return <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-accent/30 bg-accent-soft px-3 py-2 text-sm">{children}</div>;
+}
+
+function GotBox({ item, onTick }: { item: ShoppingItemDto; onTick: (i: ShoppingItemDto) => Promise<void> }) {
+  return (
+    <input
+      type="checkbox"
+      aria-label={`Got ${itemTitle(item)}`}
+      checked={item.checked}
+      onChange={() => void onTick(item)}
+      className="size-6 shrink-0 cursor-pointer accent-[var(--accent)] lg:size-4"
+    />
+  );
+}
+
+/** Type a thing and press Enter. An exact ingredient name links it; anything else is free text. */
+function QuickAdd() {
   const ingredients = useIngredients().data ?? [];
   const qc = useQueryClient();
   const toast = useToast();
   const [text, setText] = useState('');
-  const [packs, setPacks] = useState(1);
-  const match = text.trim().length >= 3 ? ingredients.find((i) => i.name.toLowerCase() === text.trim().toLowerCase()) : undefined;
-  const suggestions = text.trim().length >= 2 ? ingredients.filter((i) => i.name.toLowerCase().includes(text.trim().toLowerCase())).slice(0, 5) : [];
+  const t = text.trim().toLowerCase();
+  const match = t.length >= 3 ? ingredients.find((i) => i.name.toLowerCase() === t) : undefined;
+  const suggestions = t.length >= 2 && !match ? ingredients.filter((i) => i.name.toLowerCase().includes(t)).slice(0, 6) : [];
   const add = async (body: Record<string, unknown>) => {
     try {
-      await api.post('/api/shopping', { packs, ...body });
+      await api.post('/api/shopping', { packs: 1, ...body });
       await qc.invalidateQueries({ queryKey: ['shopping'] });
+      setText('');
       toast.show('Added to the list.');
-      onClose();
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     }
   };
   return (
-    <Sheet open onClose={onClose} title="Add to the list">
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (text.trim()) void add(match ? { ingredientId: match.id } : { text: text.trim() });
-        }}
-      >
-        <Field label="What" hint="Anything: an ingredient, or free text like “birthday candles”.">
-          {(id) => <TextInput id={id} autoFocus value={text} onChange={(e) => setText(e.target.value)} />}
-        </Field>
-        {suggestions.length > 0 && !match && (
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((s) => (
-              <button key={s.id} type="button" onClick={() => void add({ ingredientId: s.id })} className="min-h-11 rounded-full border border-line px-4 text-[0.9375rem]">
-                {s.name}
-              </button>
-            ))}
-          </div>
+    <form
+      className="mb-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) void add(match ? { ingredientId: match.id } : { text: text.trim() });
+      }}
+    >
+      <div className="flex gap-2">
+        <label className="flex min-h-11 flex-1 items-center gap-2 rounded-lg border border-dashed border-line bg-card px-3 focus-within:border-solid focus-within:border-accent lg:min-h-9 lg:rounded-md lg:px-2.5">
+          <Icon name="plus" className="size-4 shrink-0 text-muted" />
+          <span className="sr-only">Add to the list</span>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Add an item and press Enter"
+            className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted lg:text-sm"
+          />
+        </label>
+        {text.trim() && (
+          <Button type="submit" variant="primary">
+            Add
+          </Button>
         )}
-        <Field label="How many">
-          {(id) => (
-            <Select id={id} value={packs} onChange={(e) => setPacks(Number(e.target.value))}>
-              {[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-        <Button type="submit" variant="primary" size="lg" disabled={!text.trim()}>
-          Add
-        </Button>
-      </form>
-    </Sheet>
+      </div>
+      {suggestions.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Suggestions">
+          {suggestions.map((s) => (
+            <button key={s.id} type="button" onClick={() => void add({ ingredientId: s.id })} className="min-h-10 rounded-full border border-line bg-card px-3 text-sm hover:bg-card-muted lg:min-h-7">
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
   );
 }

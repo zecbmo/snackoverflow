@@ -4,7 +4,9 @@ import type { InviteDto, Role, UserDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
-import { Button, Card, ErrorNote, Field, PageHeader, Select, Sheet, Spinner, TextInput } from '../components/ui';
+import { type Column, DataTable } from '../components/DataTable';
+import { PageTop } from '../components/Toolbar';
+import { Button, ErrorNote, Field, Select, Sheet, Spinner, TextInput } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useUsers } from '../lib/queries';
 
@@ -56,85 +58,131 @@ export function PeoplePage() {
     }
   };
 
+  const avatar = (u: UserDto) => (
+    <span aria-hidden className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-strong text-xs font-semibold text-strong-ink lg:size-6">
+      {u.name.charAt(0).toUpperCase()}
+    </span>
+  );
+  const nameCell = (u: UserDto) => (
+    <span className="inline-flex items-center gap-2 font-semibold text-ink">
+      {avatar(u)}
+      {u.name}
+      {u.id === me.user.id && <span className="font-normal text-muted">(you)</span>}
+    </span>
+  );
+  const canEdit = (u: UserDto) => isAdmin && u.id !== me.user.id;
+  const roleCell = (u: UserDto) =>
+    canEdit(u) ? (
+      <Select aria-label={`Role for ${u.name}`} value={u.role} onChange={(e) => void setRole(u, e.target.value as Role)} className="w-28 lg:w-28">
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+      </Select>
+    ) : (
+      <span>{u.role === 'admin' ? 'Admin' : 'Member'}</span>
+    );
+  const targetCell = (u: UserDto) =>
+    isAdmin ? (
+      <button type="button" onClick={() => setTargeting(u)} className="font-medium text-accent-text hover:underline" aria-label={`Daily calorie target for ${u.name}`}>
+        {u.kcalTarget ? `${u.kcalTarget.toLocaleString('en-GB')} kcal` : 'Set'}
+      </button>
+    ) : u.kcalTarget ? (
+      `${u.kcalTarget.toLocaleString('en-GB')} kcal`
+    ) : (
+      ''
+    );
+  const removeButton = (u: UserDto) =>
+    canEdit(u) ? (
+      <button
+        type="button"
+        aria-label={`Remove ${u.name}`}
+        onClick={() => setRemoving(u)}
+        className="inline-flex size-10 items-center justify-center rounded-lg text-danger hover:bg-card-muted lg:size-7 lg:rounded-md"
+      >
+        <Icon name="trash" className="size-4" />
+      </button>
+    ) : null;
+  const columns: Column<UserDto>[] = [
+    { key: 'name', header: 'Name', cell: nameCell },
+    { key: 'email', header: 'Email', cell: (u) => u.email },
+    { key: 'role', header: 'Role', cell: roleCell },
+    { key: 'target', header: 'Daily target', cell: targetCell },
+  ];
+  const inviteColumns: Column<PendingInvite>[] = [
+    { key: 'who', header: 'Invite', cell: (i) => <span className="font-medium text-ink">{i.email ?? 'Invite link'}</span> },
+    { key: 'role', header: 'Role', cell: (i) => (i.role === 'admin' ? 'Admin' : 'Member') },
+    { key: 'until', header: 'Expires', cell: (i) => new Date(i.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) },
+  ];
+
   return (
-    <>
-      <PageHeader
+    <div className="max-w-5xl">
+      <PageTop
         title="People"
         subtitle={me.household.name}
         left={<MenuButton />}
-        right={
+        actions={
           isAdmin && (
             <Button variant="primary" onClick={() => setInviting(true)}>
-              <Icon name="plus" className="size-5" /> Invite
+              <Icon name="plus" className="size-4" /> Invite someone
             </Button>
           )
         }
       />
+      <ErrorNote error={users.error} />
       {users.isPending ? (
         <Spinner />
-      ) : users.error ? (
-        <ErrorNote error={users.error} />
       ) : (
-        <Card className="divide-y divide-line overflow-hidden">
-          {users.data.map((u) => (
-            <div key={u.id} className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3">
-              <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-strong font-semibold text-strong-ink">
-                {u.name.charAt(0).toUpperCase()}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">
-                  {u.name}
-                  {u.id === me.user.id && <span className="font-normal text-muted"> (you)</span>}
-                </span>
-                <span className="block truncate text-sm text-muted">
-                  {u.email}
-                  {u.kcalTarget ? ` · ${u.kcalTarget.toLocaleString('en-GB')} kcal a day` : ''}
-                </span>
-              </span>
-              {isAdmin && u.id !== me.user.id ? (
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setTargeting(u)}>
-                    Target
-                  </Button>
-                  <Select aria-label={`Role for ${u.name}`} value={u.role} onChange={(e) => void setRole(u, e.target.value as Role)} className="w-32">
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </Select>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${u.name}`}
-                    onClick={() => setRemoving(u)}
-                    className="inline-flex size-11 items-center justify-center rounded-full text-danger hover:bg-card-muted"
-                  >
-                    <Icon name="trash" className="size-5" />
-                  </button>
-                </div>
-              ) : (
-                <span className="text-sm font-semibold text-muted">{u.role === 'admin' ? 'Admin' : 'Member'}</span>
-              )}
-            </div>
-          ))}
-        </Card>
+        <DataTable
+          label="People"
+          columns={columns}
+          rows={users.data ?? []}
+          rowKey={(u) => u.id}
+          actions={isAdmin ? removeButton : undefined}
+          phone={(u) => ({
+            lead: avatar(u),
+            title: (
+              <>
+                {u.name}
+                {u.id === me.user.id && <span className="font-normal text-muted"> (you)</span>}
+              </>
+            ),
+            meta: `${u.email}${u.kcalTarget ? ` · ${u.kcalTarget.toLocaleString('en-GB')} kcal a day` : ''}`,
+            badge: canEdit(u) ? null : <span className="text-sm text-muted">{u.role === 'admin' ? 'Admin' : 'Member'}</span>,
+            actions: canEdit(u) ? (
+              <>
+                {roleCell(u)}
+                <Button size="xs" variant="ghost" onClick={() => setTargeting(u)}>
+                  Calorie target
+                </Button>
+                {removeButton(u)}
+              </>
+            ) : undefined,
+          })}
+        />
       )}
       {isAdmin && (invites.data?.length ?? 0) > 0 && (
-        <>
-          <h2 className="mb-3 mt-6 text-lg font-bold">Waiting to join</h2>
-          <Card className="divide-y divide-line overflow-hidden">
-            {invites.data?.map((i) => (
-              <div key={i.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{i.email ?? 'Invite link'}</span>
-                  <span className="block text-sm text-muted">
-                    {i.role === 'admin' ? 'Admin' : 'Member'} · until {new Date(i.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                  </span>
-                </span>
-                <Button size="sm" variant="ghost" onClick={() => void revoke(i.id)}>
+        <section className="mt-6">
+          <h2 className="mb-2 font-bold">Waiting to join</h2>
+          <DataTable
+            label="Waiting to join"
+            columns={inviteColumns}
+            rows={invites.data ?? []}
+            rowKey={(i) => i.id}
+            actions={(i) => (
+              <Button size="xs" variant="ghost" onClick={() => void revoke(i.id)}>
+                Cancel invite
+              </Button>
+            )}
+            phone={(i) => ({
+              title: i.email ?? 'Invite link',
+              meta: `${i.role === 'admin' ? 'Admin' : 'Member'} · until ${new Date(i.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+              badge: (
+                <Button size="xs" variant="ghost" onClick={() => void revoke(i.id)}>
                   Cancel
                 </Button>
-              </div>
-            ))}
-          </Card>
-        </>
+              ),
+            })}
+          />
+        </section>
       )}
       <Sheet open={inviting} onClose={() => setInviting(false)} title="Invite someone">
         {inviting && <InviteForm onCreated={() => void refresh()} />}
@@ -145,17 +193,15 @@ export function PeoplePage() {
           <div className="flex flex-col gap-3">
             <p className="text-muted">They'll be signed out and won't be able to see the household any more. Their stock history stays.</p>
             <div className="grid grid-cols-2 gap-3">
-              <Button size="lg" onClick={() => setRemoving(null)}>
-                Keep
-              </Button>
-              <Button size="lg" variant="danger" onClick={() => void remove(removing)}>
+              <Button onClick={() => setRemoving(null)}>Keep</Button>
+              <Button variant="danger" onClick={() => void remove(removing)}>
                 Remove
               </Button>
             </div>
           </div>
         )}
       </Sheet>
-    </>
+    </div>
   );
 }
 

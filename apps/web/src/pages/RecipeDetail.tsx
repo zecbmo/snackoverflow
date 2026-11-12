@@ -1,14 +1,71 @@
+/** A recipe: ingredients (with what's in stock) next to the method, and Cook / Batch cook / Edit at the top. */
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import type { RecipeDto } from '@snackoverflow/shared';
 import { BackButton } from '../components/Layout';
+import { Menu } from '../components/Menu';
 import { useToast } from '../components/Toast';
-import { Button, Card, ErrorNote, PageHeader, Sheet, Spinner } from '../components/ui';
+import { PageTop } from '../components/Toolbar';
+import { Button, Card, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { minutesLabel } from '../lib/format';
-import { scaledLine } from '../lib/recipeText';
 import { useRecipe } from '../lib/queries';
+import { scaledLine } from '../lib/recipeText';
 import { RecipeImage } from './Recipes';
+
+export function recipeMeta(r: RecipeDto): string {
+  return [minutesLabel(r.prepMinutes) && `Prep ${minutesLabel(r.prepMinutes)}`, minutesLabel(r.cookMinutes) && `Cook ${minutesLabel(r.cookMinutes)}`, r.kcalPerServing && `${r.kcalPerServing} kcal a serving`]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** The ingredient list with a servings stepper; a filled dot means there's enough in stock. */
+export function RecipeIngredients({ recipe: r, servings: n, onServings }: { recipe: RecipeDto; servings: number; onServings: (n: number) => void }) {
+  const factor = n / r.serves;
+  const step = 'inline-flex size-10 items-center justify-center rounded-lg border border-line text-lg disabled:opacity-40 lg:size-7 lg:rounded-md lg:text-base';
+  return (
+    <section aria-labelledby="ingredients-heading">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 id="ingredients-heading" className="font-bold">
+          Ingredients
+        </h2>
+        <div className="flex items-center gap-1.5" role="group" aria-label="Servings">
+          <button type="button" aria-label="Fewer servings" disabled={n <= 1} onClick={() => onServings(n - 1)} className={step}>
+            −
+          </button>
+          <span className="min-w-16 text-center text-sm font-semibold" aria-live="polite">
+            Serves {n}
+          </span>
+          <button type="button" aria-label="More servings" onClick={() => onServings(n + 1)} className={step}>
+            +
+          </button>
+        </div>
+      </div>
+      <ul className="divide-y divide-line text-[0.9375rem] lg:text-sm">
+        {r.ingredients.map((l) => {
+          const needed = l.grams === null ? null : l.grams * factor;
+          const enough = needed !== null && l.inStockGrams !== null && l.inStockGrams >= needed;
+          return (
+            <li key={l.id} className="flex items-start gap-2.5 py-2">
+              <span
+                aria-hidden
+                title={enough ? 'In stock' : 'Not enough in stock'}
+                className={`mt-1.5 size-2 shrink-0 rounded-full ${l.ingredientId === null ? 'bg-transparent' : enough ? 'bg-fresh-green' : 'border border-muted bg-transparent'}`}
+              />
+              <span className="flex-1">
+                {scaledLine(l.text, l.amount, l.unit, r.serves, n)}
+                {l.optional && <span className="text-muted"> (optional)</span>}
+                {l.ingredientId && <span className="sr-only">{enough ? ' (in stock)' : ' (not enough in stock)'}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-xs text-muted">Green dot: you have enough in stock.</p>
+    </section>
+  );
+}
 
 export function RecipeDetailPage() {
   const { id = '' } = useParams();
@@ -24,7 +81,6 @@ export function RecipeDetailPage() {
   if (recipe.error || !recipe.data) return <ErrorNote error={recipe.error ?? 'Not found'} />;
   const r = recipe.data;
   const n = servings ?? r.serves;
-  const factor = n / r.serves;
   const nutrition = r.nutritionPerServing;
 
   const remove = async () => {
@@ -39,134 +95,98 @@ export function RecipeDetailPage() {
 
   return (
     <>
-      <PageHeader title={r.title} left={<BackButton to="/recipes" />} />
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="flex min-w-0 flex-col gap-5">
-          <RecipeImage recipe={r} className="h-40 w-full rounded-[18px] sm:h-64" />
-          <p className="text-muted">
-            {[minutesLabel(r.prepMinutes) && `Prep ${minutesLabel(r.prepMinutes)}`, minutesLabel(r.cookMinutes) && `Cook ${minutesLabel(r.cookMinutes)}`, r.kcalPerServing && `${r.kcalPerServing} kcal a serving`]
-              .filter(Boolean)
-              .join(' · ')}
-            {r.sourceUrl && (
-              <>
-                {' · '}
-                <a href={r.sourceUrl} target="_blank" rel="noreferrer" className="font-semibold text-accent-text">
-                  Original recipe
-                </a>
-              </>
-            )}
-          </p>
-          <div className="grid grid-cols-2 gap-3 lg:flex">
-            <Link to={`/recipes/${r.id}/cook?servings=${n}`} className="inline-flex min-h-12 items-center justify-center rounded-xl bg-accent px-8 font-semibold text-accent-ink">
+      <PageTop
+        title={r.title}
+        subtitle={recipeMeta(r) || undefined}
+        left={<BackButton to="/recipes" />}
+        actions={
+          <>
+            <Link
+              to={`/recipes/${r.id}/cook?servings=${n}`}
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-ink hover:brightness-110 lg:min-h-8 lg:rounded-md lg:px-3"
+            >
               Cook
             </Link>
-            <Button size="lg" variant="outline" onClick={() => setBatchOpen(true)}>
-              Batch cook
-            </Button>
-          </div>
-
-          <Card className="p-5">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-bold">Ingredients</h2>
-              <div className="flex items-center gap-2" role="group" aria-label="Servings">
-                <button type="button" aria-label="Fewer servings" disabled={n <= 1} onClick={() => setServings(n - 1)} className="inline-flex size-11 items-center justify-center rounded-full border border-line text-xl disabled:opacity-40">
-                  −
-                </button>
-                <span className="min-w-20 text-center font-semibold" aria-live="polite">
-                  Serves {n}
-                </span>
-                <button type="button" aria-label="More servings" onClick={() => setServings(n + 1)} className="inline-flex size-11 items-center justify-center rounded-full border border-line text-xl">
-                  +
-                </button>
-              </div>
-            </div>
-            <ul className="flex flex-col divide-y divide-line">
-              {r.ingredients.map((l) => {
-                const needed = l.grams === null ? null : l.grams * factor;
-                const have = l.inStockGrams;
-                const enough = needed !== null && have !== null && have >= needed;
-                return (
-                  <li key={l.id} className="flex items-start gap-3 py-2.5">
-                    <span
-                      aria-hidden
-                      title={enough ? 'In stock' : 'Not enough in stock'}
-                      className={`mt-2 size-2.5 shrink-0 rounded-full ${l.ingredientId === null ? 'bg-transparent' : enough ? 'bg-strong' : 'border border-muted bg-transparent'}`}
-                    />
-                    <span className="flex-1">
-                      {scaledLine(l.text, l.amount, l.unit, r.serves, n)}
-                      {l.optional && <span className="text-muted"> (optional)</span>}
-                      {l.ingredientId && <span className="sr-only">{enough ? ' (in stock)' : ' (not enough in stock)'}</span>}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="mt-3 text-sm text-muted">Filled dot: you have enough in stock.</p>
+            <span className="hidden sm:contents">
+              <Button onClick={() => setBatchOpen(true)}>Batch cook</Button>
+            </span>
+            <Menu
+              label="More for this recipe"
+              items={[
+                { label: 'Batch cook…', onSelect: () => setBatchOpen(true) },
+                { label: 'Edit', icon: 'edit', onSelect: () => navigate(`/recipes/${r.id}/edit`) },
+                ...(r.sourceUrl ? [{ label: 'Original recipe', icon: 'external' as const, onSelect: () => window.open(r.sourceUrl!, '_blank', 'noreferrer') }] : []),
+                'divider',
+                { label: 'Delete recipe', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) },
+              ]}
+            />
+          </>
+        }
+      />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <RecipeImage recipe={r} className="h-40 w-full rounded-xl lg:h-44 lg:rounded-lg" />
+          <Card className="p-4">
+            <RecipeIngredients recipe={r} servings={n} onServings={setServings} />
           </Card>
-
-          <Card className="p-5">
-            <h2 className="mb-3 text-xl font-bold">Method</h2>
-            {r.steps.length ? (
-              <ol className="flex list-decimal flex-col gap-3 pl-5">
-                {r.steps.map((s, i) => (
-                  <li key={i} className="pl-1 leading-relaxed">
-                    {s}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="text-muted">No method yet.</p>
-            )}
-          </Card>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <Card className="p-5">
-            <h2 className="mb-3 text-lg font-bold">Per serving</h2>
+          <Card className="p-4">
+            <h2 className="mb-2 font-bold">Per serving</h2>
             {nutrition.kcal != null ? (
-              <dl className="grid grid-cols-2 gap-y-2 text-[0.9375rem]">
+              <dl className="grid grid-cols-4 gap-2 text-center">
                 {(
                   [
-                    ['kcal', 'Calories', ''],
+                    ['kcal', 'kcal', ''],
                     ['protein', 'Protein', 'g'],
                     ['carbs', 'Carbs', 'g'],
                     ['fat', 'Fat', 'g'],
                   ] as const
-                ).map(([k, label, unit]) =>
-                  nutrition[k] != null ? (
-                    <div key={k} className="contents">
-                      <dt className="text-muted">{label}</dt>
-                      <dd className="text-right font-semibold">
-                        {Math.round(nutrition[k]!)}
-                        {unit}
-                      </dd>
-                    </div>
-                  ) : null,
-                )}
+                ).map(([k, label, unit]) => (
+                  <div key={k} className="rounded-lg bg-card-muted px-1 py-2">
+                    <dd className="font-bold tabular-nums">{nutrition[k] != null ? `${Math.round(nutrition[k]!)}${unit}` : '–'}</dd>
+                    <dt className="text-xs text-muted">{label}</dt>
+                  </div>
+                ))}
               </dl>
             ) : (
-              <p className="text-muted">Not enough is known about these ingredients yet.</p>
+              <p className="text-sm text-muted">Not enough is known about these ingredients yet.</p>
             )}
-            {r.nutritionCoverage < 1 && nutrition.kcal != null && <p className="mt-3 text-sm text-muted">Based on {Math.round(r.nutritionCoverage * 100)}% of the ingredients.</p>}
+            {r.nutritionCoverage < 1 && nutrition.kcal != null && <p className="mt-2 text-xs text-muted">Based on {Math.round(r.nutritionCoverage * 100)}% of the ingredients.</p>}
           </Card>
           {r.tags.length > 0 && (
-            <p className="flex flex-wrap gap-2">
+            <p className="flex flex-wrap gap-1.5">
               {r.tags.map((t) => (
-                <span key={t} className="rounded-full bg-card-muted px-3 py-1 text-sm">
+                <span key={t} className="rounded-full bg-card-muted px-2.5 py-0.5 text-xs font-medium">
                   {t}
                 </span>
               ))}
             </p>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <Link to={`/recipes/${r.id}/edit`} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line bg-card font-semibold">
-              Edit
-            </Link>
-            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-              Delete
-            </Button>
-          </div>
         </div>
+        <Card className="self-start p-4 lg:p-6">
+          <h2 className="mb-3 font-bold">Method</h2>
+          {r.steps.length ? (
+            <ol className="flex max-w-prose flex-col gap-4">
+              {r.steps.map((s, i) => (
+                <li key={i} className="flex gap-3 leading-relaxed">
+                  <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-card-muted text-xs font-semibold">
+                    {i + 1}
+                  </span>
+                  <span>
+                    <span className="sr-only">Step {i + 1}: </span>
+                    {s}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-muted">
+              No method yet.{' '}
+              <Link to={`/recipes/${r.id}/edit`} className="font-semibold text-accent-text">
+                Add one
+              </Link>
+            </p>
+          )}
+        </Card>
       </div>
 
       <BatchSheet open={batchOpen} serves={r.serves} onClose={() => setBatchOpen(false)} onGo={(x) => navigate(`/recipes/${r.id}/cook?servings=${r.serves * x}&batch=1`)} />
@@ -174,7 +194,7 @@ export function RecipeDetailPage() {
         <p className="mb-4 text-muted">{r.title} will be gone for everyone. Leftovers already in stock stay.</p>
         <div className="grid grid-cols-2 gap-3">
           <Button onClick={() => setConfirmDelete(false)}>Keep it</Button>
-          <Button variant="dark" onClick={() => void remove()}>
+          <Button variant="danger" onClick={() => void remove()}>
             Delete
           </Button>
         </div>
@@ -190,13 +210,13 @@ function BatchSheet({ open, serves, onClose, onGo }: { open: boolean; serves: nu
       <p className="mb-4 text-muted">Make several times the recipe in one go and keep the portions in the fridge and freezer.</p>
       <div className="mb-4 grid grid-cols-4 gap-2" role="group" aria-label="How many times the recipe">
         {[2, 3, 4, 6].map((m) => (
-          <Button key={m} size="lg" variant={x === m ? 'dark' : 'outline'} aria-pressed={x === m} onClick={() => setX(m)}>
+          <Button key={m} variant={x === m ? 'dark' : 'outline'} aria-pressed={x === m} onClick={() => setX(m)}>
             ×{m}
           </Button>
         ))}
       </div>
       <p className="mb-4 font-semibold">{serves * x} portions</p>
-      <Button variant="primary" size="lg" className="w-full" onClick={() => onGo(x)}>
+      <Button variant="primary" className="w-full" onClick={() => onGo(x)}>
         Continue
       </Button>
     </Sheet>

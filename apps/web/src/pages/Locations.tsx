@@ -4,55 +4,68 @@ import { LOCATION_TYPES, type LocationDto, type LocationType } from '@snackoverf
 import { Icon, locationIcon } from '../components/Icon';
 import { MenuButton } from '../components/Layout';
 import { useToast } from '../components/Toast';
-import { Button, Card, EmptyState, ErrorNote, Field, PageHeader, Select, Sheet, Spinner, TextInput } from '../components/ui';
+import { type Column, DataTable } from '../components/DataTable';
+import { SidePanel, usePanelParam } from '../components/SidePanel';
+import { PageTop } from '../components/Toolbar';
+import { Button, EmptyState, ErrorNote, Field, Select, Sheet, Spinner, TextInput } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
-import { useLocations } from '../lib/queries';
+import { useLocations, useStock } from '../lib/queries';
 
 const typeLabel: Record<LocationType, string> = { cupboard: 'Cupboard', fridge: 'Fridge', freezer: 'Freezer' };
 
 export function LocationsPage() {
   const locations = useLocations();
-  const [editing, setEditing] = useState<LocationDto | 'new' | null>(null);
+  const stock = useStock().data ?? [];
+  const [adding, setAdding] = useState(false);
+  const [openId, openPanel, closePanel] = usePanelParam();
+  const editing = (locations.data ?? []).find((l) => l.id === openId) ?? null;
+  const packs = (id: string) => stock.filter((s) => s.locationId === id).length;
+  const columns: Column<LocationDto>[] = [
+    { key: 'icon', header: <span className="sr-only">Type</span>, className: 'w-8 pr-0', cell: (l) => <Icon name={locationIcon(l.type)} className="size-4 text-muted" /> },
+    { key: 'name', header: 'Name', primary: true, cell: (l) => l.name },
+    { key: 'type', header: 'Type', cell: (l) => typeLabel[l.type] },
+    { key: 'packs', header: 'Packs', align: 'right', className: 'tabular-nums', cell: (l) => packs(l.id) },
+  ];
   return (
-    <>
-      <PageHeader
+    <div className="max-w-3xl">
+      <PageTop
         title="Locations"
         left={<MenuButton />}
-        right={
-          <Button variant="primary" onClick={() => setEditing('new')}>
-            <Icon name="plus" className="size-5" /> Add
+        actions={
+          <Button variant="primary" onClick={() => setAdding(true)}>
+            <Icon name="plus" className="size-4" /> Add location
           </Button>
         }
       />
-      <p className="mb-4 text-muted">The type sets the rules: things put in a freezer are frozen, with freezer dates.</p>
+      <p className="mb-3 text-sm text-muted">The type sets the rules: things put in a freezer are frozen, with freezer dates.</p>
+      <ErrorNote error={locations.error} />
       {locations.isPending ? (
         <Spinner />
-      ) : locations.error ? (
-        <ErrorNote error={locations.error} />
-      ) : locations.data.length === 0 ? (
-        <EmptyState title="No locations yet" />
       ) : (
-        <Card className="divide-y divide-line overflow-hidden">
-          {locations.data.map((l) => (
-            <button key={l.id} type="button" onClick={() => setEditing(l)} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-card-muted">
-              <span className="inline-flex size-10 items-center justify-center rounded-xl bg-card-muted">
-                <Icon name={locationIcon(l.type)} className="size-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">{l.name}</span>
-                <span className="block text-sm text-muted">{typeLabel[l.type]}</span>
-              </span>
-              <Icon name="chevronRight" className="size-5 text-muted" />
-            </button>
-          ))}
-        </Card>
+        <DataTable
+          label="Locations"
+          columns={columns}
+          rows={locations.data ?? []}
+          rowKey={(l) => l.id}
+          onOpen={(l) => openPanel(l.id)}
+          openLabel={(l) => `Edit ${l.name}`}
+          activeKey={openId}
+          phone={(l) => ({
+            lead: <Icon name={locationIcon(l.type)} className="size-5 text-muted" />,
+            title: l.name,
+            meta: `${typeLabel[l.type]} · ${packs(l.id)} ${packs(l.id) === 1 ? 'pack' : 'packs'}`,
+            badge: <Icon name="chevronRight" className="size-4 text-muted" />,
+          })}
+          empty={<EmptyState title="No locations yet" />}
+        />
       )}
-      <Sheet open={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add location' : 'Edit location'}>
-        {editing !== null && (
-          <LocationEditor key={editing === 'new' ? 'new' : editing.id} location={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />
-        )}
+      <SidePanel open={Boolean(openId)} onClose={closePanel} title={editing?.name ?? 'Location'}>
+        {editing && <LocationEditor key={editing.id} location={editing} onDone={closePanel} />}
+      </SidePanel>
+      <Sheet open={adding} onClose={() => setAdding(false)} title="Add location">
+        {adding && <LocationEditor key="new" location={null} onDone={() => setAdding(false)} />}
       </Sheet>
-    </>
+    </div>
   );
 }
 
@@ -105,12 +118,12 @@ function LocationEditor({ location, onDone }: { location: LocationDto | null; on
         )}
       </Field>
       <ErrorNote error={error} />
-      <Button type="submit" variant="primary" size="lg">
+      <Button type="submit" variant="primary">
         {location ? 'Save' : 'Add location'}
       </Button>
       {location && (
         <Button variant="danger" onClick={() => void remove()}>
-          <Icon name="trash" className="size-5" /> Remove location
+          <Icon name="trash" className="size-4" /> Remove location
         </Button>
       )}
     </form>

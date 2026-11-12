@@ -1,161 +1,309 @@
+/**
+ * Everything in the house, one row per product and location, with the actions on every row.
+ * Filter, sort and group from the toolbar; tick rows to bin, freeze or move several at once;
+ * click a row for its details in a side panel.
+ */
+import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
-import type { StockItemDto } from '@snackoverflow/shared';
-import { MenuButton, useMe } from '../components/Layout';
-import { useStockActions } from '../components/StockActions';
-import { Button, EmptyState, ErrorNote, PageHeader, Pill, Spinner } from '../components/ui';
+import { Link, useNavigate } from 'react-router';
+import { addDays, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
+import { type Column, DataTable } from '../components/DataTable';
 import { Icon } from '../components/Icon';
-import { dateLabel, toneClasses, toneFor } from '../lib/format';
-import { useEarmarks, useLocations, useStock } from '../lib/queries';
-import { gramsLabel } from '../lib/format';
+import { MenuButton, useMe } from '../components/Layout';
+import { Menu, PickerMenu } from '../components/Menu';
+import { SidePanel, usePanelParam } from '../components/SidePanel';
+import { StockItemDetail } from '../components/StockItemDetail';
+import { StockRowActions } from '../components/StockRowActions';
+import { useToast } from '../components/Toast';
+import { PageTop, SearchBox, Toolbar } from '../components/Toolbar';
+import { Button, EmptyState, ErrorNote, Pill, Spinner } from '../components/ui';
+import { api, errorMessage } from '../lib/api';
+import { dateLabel, gramsLabel, stateLabel, type Tone, toneClasses, toneFor } from '../lib/format';
+import { useEarmarks, useLocations, useStock, useStockItem } from '../lib/queries';
 import { groupStock, groupSummary, type StockGroup } from '../lib/stockGroups';
+import { groupRows, matchesSearch, sortRows } from '../lib/table';
 
-type Filter = { kind: 'all' } | { kind: 'location'; id: string } | { kind: 'opened' } | { kind: 'frozen' };
-
-export function StockActionsRow({ item, onDone }: { item: StockItemDto; onDone?: () => void }) {
-  const actions = useStockActions();
-  const frozen = item.state === 'frozen';
-  const after = (fn: () => void) => () => {
-    fn();
-    onDone?.();
-  };
+/** Kept for pages not yet on the table (Batch cooks & leftovers). */
+export function StockActionsRow({ item }: { item: StockItemDto }) {
   return (
-    <div className="grid grid-cols-4 gap-2 lg:flex lg:[&>button]:min-w-24">
-      <Button variant="dark" onClick={after(() => actions.use(item))}>
-        Use
-      </Button>
-      {frozen ? (
-        <Button variant="outline" onClick={after(() => void actions.defrost(item))}>
-          Defrost
-        </Button>
-      ) : (
-        <Button variant="outline" disabled={item.actions.freeze !== null} title={item.actions.freeze ?? undefined} onClick={after(() => void actions.freeze(item))}>
-          Freeze
-        </Button>
-      )}
-      <Button variant="outline" onClick={after(() => actions.move(item))}>
-        Move
-      </Button>
-      <Button variant="danger" onClick={after(() => void actions.discard(item))}>
-        Binned
-      </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      <StockRowActions item={item} name={item.productName} size="sm" />
     </div>
   );
 }
 
-function StockRow({ group, today, expanded, onToggle, plannedGrams }: { group: StockGroup; today: string; expanded: boolean; onToggle: () => void; plannedGrams?: number }) {
-  const tone = toneFor(group.first, today);
-  const t = toneClasses[tone];
-  return (
-    <li className={`border-b border-line last:border-b-0 ${expanded ? 'bg-accent-soft/60' : ''}`}>
-      <div className="flex items-center gap-3 px-4 py-3.5">
-        <span aria-hidden className={`h-11 w-1.5 shrink-0 rounded-full ${t.bar}`} />
-        <button type="button" onClick={onToggle} aria-expanded={expanded} className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-[1.0625rem] font-semibold">{group.name}</span>
-          <span className="block truncate text-[0.9375rem] text-muted">
-            {groupSummary(group)}
-            {plannedGrams ? ` · ${gramsLabel(plannedGrams)} planned` : ''}
-          </span>
-        </button>
-        <Pill className={t.pill}>{group.first.state === 'frozen' && !group.first.bestBefore ? 'Frozen' : dateLabel(group.first.bestBefore, today)}</Pill>
-      </div>
-      {expanded && (
-        <div className="flex flex-col gap-3 px-4 pb-4">
-          <StockActionsRow item={group.first} />
-          <Link to={`/stock/${group.first.id}`} className="inline-flex min-h-11 items-center gap-1 self-start text-sm font-semibold text-accent-text">
-            {group.packs.length > 1 ? `See all ${group.packs.length} packs` : 'Details and history'}
-            <Icon name="chevronRight" className="size-4" />
-          </Link>
-        </div>
-      )}
-    </li>
-  );
+type FilterId = string; // 'all' | 'opened' | 'frozen' | 'soon' | `loc:${id}`
+type SortId = 'best-before' | 'name' | 'location' | 'added';
+type GroupId = 'none' | 'location' | 'status';
+
+const STATUS: Record<Tone, string> = { red: 'Use first', amber: 'This week', green: 'Fine', blue: 'Frozen', grey: 'No date' };
+const STATUS_ORDER = [STATUS.red, STATUS.amber, STATUS.green, STATUS.blue, STATUS.grey];
+
+/** "2 packs · 3.4L" without the location (which has its own column). */
+function amountOnly(g: StockGroup): string {
+  return groupSummary(g)
+    .split(' · ')
+    .slice(1)
+    .filter((p) => p !== 'opened' && p !== 'defrosted')
+    .join(' · ');
 }
 
 export function StockPage() {
   const me = useMe();
   const stock = useStock();
-  const locations = useLocations().data ?? [];
-  const [filter, setFilter] = useState<Filter>({ kind: 'all' });
-  const [q, setQ] = useState('');
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const locationsQuery = useLocations().data;
+  const locations = useMemo(() => locationsQuery ?? [], [locationsQuery]);
   const planned = new Map((useEarmarks().data ?? []).map((m) => [m.ingredientId, m.grams]));
+  const [filter, setFilter] = useState<FilterId>('all');
+  const [sort, setSort] = useState<SortId>('best-before');
+  const [group, setGroup] = useState<GroupId>('none');
+  const [q, setQ] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [openId, openPanel, closePanel] = usePanelParam();
+  const navigate = useNavigate();
 
-  const groups = useMemo(() => {
+  const rows = useMemo(() => {
+    const soon = addDays(me.today, 3);
     const items = (stock.data ?? []).filter((i) => {
-      if (filter.kind === 'location' && i.locationId !== filter.id) return false;
-      if (filter.kind === 'opened' && i.state !== 'opened') return false;
-      if (filter.kind === 'frozen' && i.state !== 'frozen') return false;
-      if (q && !`${i.productName} ${i.brand ?? ''}`.toLowerCase().includes(q.toLowerCase())) return false;
-      return true;
+      if (filter.startsWith('loc:') && i.locationId !== filter.slice(4)) return false;
+      if (filter === 'opened' && i.state !== 'opened') return false;
+      if (filter === 'frozen' && i.state !== 'frozen') return false;
+      if (filter === 'soon' && (i.state === 'frozen' || !i.bestBefore || i.bestBefore > soon)) return false;
+      return !q || matchesSearch(`${i.productName} ${i.brand ?? ''} ${i.locationName}`, q);
     });
-    return groupStock(items);
-  }, [stock.data, filter, q]);
+    const groups = groupStock(items);
+    if (sort === 'name') return sortRows(groups, (g) => g.name);
+    if (sort === 'location') return sortRows(groups, (g) => g.locationName);
+    if (sort === 'added') return sortRows(groups, (g) => g.packs.reduce((m, p) => (p.addedAt > m ? p.addedAt : m), ''), 'desc');
+    return groups; // The server sends stock in best-before order.
+  }, [stock.data, filter, sort, q, me.today]);
 
-  const chips: { label: string; f: Filter }[] = [
-    { label: 'All', f: { kind: 'all' } },
-    ...locations.map((l) => ({ label: l.name, f: { kind: 'location', id: l.id } as Filter })),
-    { label: 'Opened', f: { kind: 'opened' } },
+  const tables = useMemo(() => {
+    if (group === 'location') {
+      const order = locations.map((l) => l.name);
+      return groupRows(rows, (g) => g.locationName, order).map((x) => ({ key: x.key, label: x.key, rows: x.rows }));
+    }
+    if (group === 'status') return groupRows(rows, (g) => STATUS[toneFor(g.first, me.today)], STATUS_ORDER).map((x) => ({ key: x.key, label: x.key, rows: x.rows }));
+    return undefined;
+  }, [rows, group, locations, me.today]);
+
+  const plannedFor = (g: StockGroup) => (g.first.ingredientId ? planned.get(g.first.ingredientId) : undefined);
+  const datePill = (g: StockGroup) => (
+    <Pill className={toneClasses[toneFor(g.first, me.today)].pill}>
+      {g.first.state === 'frozen' && <Icon name="snowflake" className="size-3" strokeWidth={2.2} />}
+      {g.first.state === 'frozen' && !g.first.bestBefore ? 'Frozen' : dateLabel(g.first.bestBefore, me.today)}
+    </Pill>
+  );
+
+  const columns: Column<StockGroup>[] = [
+    {
+      key: 'status',
+      header: <span className="sr-only">Freshness</span>,
+      className: 'w-6 pr-0',
+      cell: (g) => <span aria-hidden className={`inline-block size-2 rounded-full ${toneClasses[toneFor(g.first, me.today)].dot}`} />,
+    },
+    { key: 'name', header: 'Item', primary: true, cell: (g) => g.name, className: 'max-w-[18rem]' },
+    {
+      key: 'where',
+      header: 'Where',
+      className: 'whitespace-nowrap',
+      cell: (g) => (
+        <>
+          {g.locationName}
+          {g.first.state === 'opened' || g.first.state === 'defrosted' ? <span className="text-muted"> · {stateLabel[g.first.state].toLowerCase()}</span> : null}
+        </>
+      ),
+    },
+    {
+      key: 'left',
+      header: 'Left',
+      className: 'whitespace-nowrap',
+      cell: (g) => (
+        <>
+          {amountOnly(g) || '–'}
+          {plannedFor(g) ? <span className="ml-1.5 text-xs text-accent-text">{gramsLabel(plannedFor(g)!)} planned</span> : null}
+        </>
+      ),
+    },
+    { key: 'date', header: 'Best before', className: 'whitespace-nowrap', cell: datePill },
   ];
-  const same = (a: Filter, b: Filter) => a.kind === b.kind && (a.kind !== 'location' || (b.kind === 'location' && a.id === b.id));
+
+  const openGroup = (g: StockGroup) => openPanel(g.first.id);
+  const activeKey = rows.find((g) => g.packs.some((p) => p.id === openId))?.key ?? null;
+
+  const chosen = rows.filter((g) => selected.has(g.key));
+  const filterOptions = [
+    { value: 'all', label: 'Everything' },
+    { value: 'soon', label: 'Going off in 3 days' },
+    { value: 'opened', label: 'Opened' },
+    { value: 'frozen', label: 'Frozen' },
+    ...locations.map((l) => ({ value: `loc:${l.id}`, label: l.name })),
+  ];
 
   return (
     <>
-      <PageHeader title="Stock" left={<MenuButton />} right={<span className="text-muted">{stock.data?.length ?? 0} items</span>} />
-      <label className="mb-4 flex min-h-13 items-center gap-3 rounded-2xl border border-line bg-card px-4">
-        <Icon name="search" className="size-5 text-muted" />
-        <span className="sr-only">Search stock</span>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search stock" className="min-h-12 flex-1 bg-transparent text-[1.0625rem] outline-none placeholder:text-muted" />
-      </label>
-      <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4" role="group" aria-label="Filter">
-        {chips.map((c) => (
-          <button
-            key={c.label}
-            type="button"
-            aria-pressed={same(c.f, filter)}
-            onClick={() => setFilter(c.f)}
-            className={`min-h-11 shrink-0 rounded-full border px-5 text-[0.9375rem] font-semibold ${same(c.f, filter) ? 'border-strong bg-strong text-strong-ink' : 'border-line bg-card'}`}
+      <PageTop
+        title="Stock"
+        subtitle={stock.data ? `${stock.data.length} ${stock.data.length === 1 ? 'pack' : 'packs'}` : undefined}
+        left={<MenuButton />}
+        actions={
+          <Link
+            to="/scan"
+            className="hidden min-h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-sm font-semibold text-accent-ink hover:brightness-110 lg:inline-flex"
           >
-            {c.label}
-          </button>
-        ))}
-      </div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
-        <span className="hidden sm:inline">Sorted by best-before</span>
-        <span className="flex gap-3">
-          {(['red', 'amber', 'green'] as const).map((tone) => (
-            <span key={tone} className="inline-flex items-center gap-1.5">
-              <span aria-hidden className={`size-2.5 rounded-full ${toneClasses[tone].dot}`} />
-              {tone === 'red' ? 'Go off' : tone === 'amber' ? 'This week' : 'Fine'}
-            </span>
-          ))}
-        </span>
-      </div>
+            <Icon name="scan" className="size-4" /> Scan items
+          </Link>
+        }
+      />
+      <Toolbar search={<SearchBox value={q} onChange={setQ} placeholder="Search stock" label="Search stock" />}>
+        <PickerMenu label="Filter" icon="filter" value={filter} defaultValue="all" options={filterOptions} onChange={setFilter} />
+        <PickerMenu
+          label="Sort"
+          icon="sort"
+          value={sort}
+          defaultValue="best-before"
+          onChange={setSort}
+          options={[
+            { value: 'best-before', label: 'Best before' },
+            { value: 'name', label: 'Name' },
+            { value: 'location', label: 'Location' },
+            { value: 'added', label: 'Recently added' },
+          ]}
+        />
+        <PickerMenu
+          label="Group"
+          icon="group"
+          value={group}
+          defaultValue="none"
+          onChange={setGroup}
+          options={[
+            { value: 'none', label: 'No grouping' },
+            { value: 'location', label: 'Location' },
+            { value: 'status', label: 'Freshness' },
+          ]}
+        />
+      </Toolbar>
+
+      {chosen.length > 0 && <BulkBar groups={chosen} onDone={() => setSelected(new Set())} />}
+
       <ErrorNote error={stock.error} />
       {stock.isPending ? (
         <Spinner />
-      ) : groups.length === 0 ? (
-        <EmptyState title={q || filter.kind !== 'all' ? 'Nothing matches' : 'Nothing in stock yet'}>
-          {!q && filter.kind === 'all' && (
-            <p>
-              Tap <strong>Scan</strong> and scan your shopping in, one beep per pack.
-            </p>
-          )}
-        </EmptyState>
       ) : (
-        <ul className="overflow-hidden rounded-[18px] border border-line bg-card">
-          {groups.map((g) => (
-            <StockRow
-              key={g.key}
-              group={g}
-              today={me.today}
-              expanded={expanded === g.key}
-              onToggle={() => setExpanded(expanded === g.key ? null : g.key)}
-              plannedGrams={g.first.ingredientId ? planned.get(g.first.ingredientId) : undefined}
-            />
-          ))}
-        </ul>
+        <DataTable
+          label="Stock"
+          columns={columns}
+          rows={tables ? undefined : rows}
+          groups={tables}
+          rowKey={(g) => g.key}
+          onOpen={openGroup}
+          openLabel={(g) => `${g.name}, ${g.locationName}`}
+          activeKey={activeKey}
+          selection={{ selected, onChange: setSelected }}
+          actions={(g) => <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} />}
+          phone={(g) => ({
+            lead: <span aria-hidden className={`h-10 w-1 shrink-0 rounded-full ${toneClasses[toneFor(g.first, me.today)].bar}`} />,
+            title: g.name,
+            meta: `${groupSummary(g)}${plannedFor(g) ? ` · ${gramsLabel(plannedFor(g)!)} planned` : ''}`,
+            badge: datePill(g),
+            actions: <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} compact />,
+          })}
+          empty={
+            <EmptyState title={q || filter !== 'all' ? 'Nothing matches' : 'Nothing in stock yet'}>
+              {q || filter !== 'all' ? (
+                <button
+                  type="button"
+                  className="font-semibold text-accent-text"
+                  onClick={() => {
+                    setQ('');
+                    setFilter('all');
+                  }}
+                >
+                  Clear the search and filter
+                </button>
+              ) : (
+                <button type="button" className="font-semibold text-accent-text" onClick={() => navigate('/scan')}>
+                  Scan your shopping in
+                </button>
+              )}
+            </EmptyState>
+          }
+        />
       )}
+      <StockPanel id={openId} onClose={closePanel} onOpenPack={openPanel} />
     </>
+  );
+}
+
+function StockPanel({ id, onClose, onOpenPack }: { id: string | null; onClose: () => void; onOpenPack: (id: string) => void }) {
+  const item = useStockItem(id ?? '').data?.item;
+  return (
+    <SidePanel open={Boolean(id)} onClose={onClose} title={item?.productName ?? 'Loading…'} subtitle={item?.brand ?? undefined}>
+      {id && <StockItemDetail id={id} onOpenPack={onOpenPack} />}
+    </SidePanel>
+  );
+}
+
+/** Ticked rows: bin, freeze or move them all at once, with one Undo. */
+function BulkBar({ groups, onDone }: { groups: StockGroup[]; onDone: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const locations = useLocations().data ?? [];
+  const [busy, setBusy] = useState(false);
+  const packs = groups.flatMap((g) => g.packs);
+  const run = async (verb: string, path: (p: StockItemDto) => string | null, body: object = {}) => {
+    setBusy(true);
+    const events: string[] = [];
+    let skipped = 0;
+    try {
+      for (const p of packs) {
+        const url = path(p);
+        if (!url) {
+          skipped++;
+          continue;
+        }
+        const c = await api.post<StockChangeDto>(url, body);
+        events.push(c.eventId);
+      }
+      await qc.invalidateQueries({ queryKey: ['stock'] });
+      toast.show(`${verb} ${events.length} ${events.length === 1 ? 'pack' : 'packs'}.${skipped ? ` ${skipped} couldn't be.` : ''}`, {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            for (const e of [...events].reverse()) await api.post(`/api/events/${e}/undo`);
+            await qc.invalidateQueries({ queryKey: ['stock'] });
+          },
+        },
+      });
+      onDone();
+    } catch (e) {
+      await qc.invalidateQueries({ queryKey: ['stock'] });
+      toast.show(errorMessage(e), { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div role="region" aria-label="Selected rows" className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2 text-sm">
+      <span className="mr-auto font-semibold text-accent-text">
+        {groups.length} selected · {packs.length} {packs.length === 1 ? 'pack' : 'packs'}
+      </span>
+      <Button size="xs" disabled={busy} onClick={() => void run('Froze', (p) => (p.actions.freeze === null ? `/api/stock/${p.id}/freeze` : null))}>
+        Freeze
+      </Button>
+      <Menu
+        label="Move selected to"
+        align="end"
+        triggerClassName="inline-flex min-h-10 items-center rounded-lg border border-line bg-card px-2.5 text-sm font-semibold lg:min-h-7 lg:rounded-md lg:px-2 lg:text-[0.8125rem]"
+        trigger={<>Move to…</>}
+        items={locations.map((l) => ({ label: l.name, onSelect: () => void run(`Moved to ${l.name}:`, (p) => (p.locationId === l.id ? null : `/api/stock/${p.id}/move`), { locationId: l.id }) }))}
+      />
+      <Button size="xs" variant="danger" disabled={busy} onClick={() => void run('Binned', (p) => `/api/stock/${p.id}/discard`)}>
+        Bin
+      </Button>
+      <Button size="xs" variant="ghost" onClick={onDone}>
+        Clear
+      </Button>
+    </div>
   );
 }

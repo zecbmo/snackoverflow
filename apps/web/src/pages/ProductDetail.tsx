@@ -14,6 +14,17 @@ import { ProductForm } from './ProductForm';
 
 export function ProductDetailPage() {
   const { id = '' } = useParams();
+  const p = useProduct(id).data;
+  return (
+    <>
+      <PageHeader title={p ? (p.name ?? 'Unnamed product') : 'Product'} subtitle={p?.brand ?? undefined} left={<BackButton to="/products" />} />
+      <ProductDetail id={id} onDeleted={() => undefined} />
+    </>
+  );
+}
+
+/** The product's form, packs in stock, price and tidy-up. On its own page, or stacked in the Products side panel. */
+export function ProductDetail({ id, stacked = false, onDeleted }: { id: string; stacked?: boolean; onDeleted?: () => void }) {
   const product = useProduct(id);
   const packs = useProductStock(id);
   const me = useMe();
@@ -33,7 +44,8 @@ export function ProductDetailPage() {
       await api.del(`/api/products/${p.id}`);
       await qc.invalidateQueries({ queryKey: ['products'] });
       toast.show('Product deleted.');
-      navigate('/products');
+      if (onDeleted) onDeleted();
+      else navigate('/products');
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     }
@@ -41,10 +53,9 @@ export function ProductDetailPage() {
 
   return (
     <>
-      <PageHeader title={p.name ?? 'Unnamed product'} subtitle={p.brand ?? undefined} left={<BackButton to="/products" />} />
-      <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <Card className="p-5">
-          <h2 className="mb-4 text-lg font-bold">Details</h2>
+      <div className={`grid gap-4 ${stacked ? '' : 'lg:grid-cols-[minmax(0,1fr)_20rem]'}`}>
+        <Card className="p-4">
+          <h2 className="mb-3 font-bold">Details</h2>
           <ProductForm
             key={p.id}
             product={p}
@@ -57,10 +68,10 @@ export function ProductDetailPage() {
             }}
           />
         </Card>
-        <div className="flex flex-col gap-5">
-          <Card className="p-5">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold">In stock</h2>
+        <div className="flex flex-col gap-4">
+          <Card className="p-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-bold">In stock</h2>
               <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
                 <Icon name="plus" className="size-4" /> Add a pack
               </Button>
@@ -73,7 +84,7 @@ export function ProductDetailPage() {
                   const tone = toneClasses[toneFor(s, me.today)];
                   return (
                     <li key={s.id}>
-                      <Link to={`/stock/${s.id}`} className="flex min-h-14 items-center gap-3 py-2">
+                      <Link to={`/stock?open=${s.id}`} className="flex min-h-11 items-center gap-3 py-1.5 text-sm hover:underline lg:min-h-9">
                         <span className="min-w-0 flex-1">
                           <span className="block font-medium">{s.locationName}</span>
                           <span className="block text-sm text-muted">
@@ -89,19 +100,19 @@ export function ProductDetailPage() {
             )}
           </Card>
           {me.household.settings.pricingEnabled && <PriceCard productId={p.id} />}
-          <Card className="p-5">
-            <h2 className="mb-2 text-lg font-bold">Best-before</h2>
+          <Card className="p-4">
+            <h2 className="mb-1 font-bold">Best-before</h2>
             <p className="text-muted">
               {p.learnedClosedDays !== null ? `Learned: usually ${p.learnedClosedDays} days.` : 'Estimated from its ingredient or category.'}
               {p.learnedFrozenDays !== null && ` In the freezer: about ${p.learnedFrozenDays} days.`}
             </p>
             <p className="mt-2 text-sm text-muted">Change a pack's date and the app learns it for next time.</p>
           </Card>
-          <Card className="flex flex-col gap-3 p-5">
-            <h2 className="text-lg font-bold">Tidy up</h2>
+          <Card className="flex flex-col items-start gap-2 p-4">
+            <h2 className="font-bold">Tidy up</h2>
             <Button onClick={() => setMerging(true)}>Merge into another product…</Button>
             <Button variant="danger" disabled={inStock.length > 0} onClick={() => void remove()}>
-              <Icon name="trash" className="size-5" /> Delete product
+              <Icon name="trash" className="size-4" /> Delete product
             </Button>
             {inStock.length > 0 && <p className="text-sm text-muted">Use or bin what's in stock before deleting.</p>}
           </Card>
@@ -233,11 +244,11 @@ function PriceCard({ productId }: { productId: string }) {
   const rows = history.data ?? [];
   const latest = rows[0];
   return (
-    <Card className="p-5">
+    <Card className="p-4">
       <h2 className="mb-2 text-lg font-bold">Price</h2>
       {latest ? (
         <p className="mb-3">
-          <span className="font-display text-xl font-bold sm:text-2xl">{formatPence(latest.pricePence)}</span>{' '}
+          <span className="text-xl font-bold tabular-nums">{formatPence(latest.pricePence)}</span>{' '}
           <span className="text-muted">
             {[latest.store, formatShortDate(latest.date), SOURCE_LABEL[latest.source] ?? latest.source].filter(Boolean).join(' · ')}
           </span>

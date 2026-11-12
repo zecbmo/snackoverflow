@@ -1,29 +1,62 @@
+/**
+ * Today: tonight's meal, the week's dinners, food to use soon (with the same row actions as
+ * Stock), and a side column of figures: calories, waste, running low, the shopping list.
+ */
 import { useQueryClient } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import type { PlanEntryDto } from '@snackoverflow/shared';
-import { addDays, formatPence } from '@snackoverflow/shared';
+import { addDays, formatPence, type PlanEntryDto, type StockItemDto } from '@snackoverflow/shared';
+import { dayName } from '../components/AddToPlanSheet';
+import { type Column, DataTable } from '../components/DataTable';
 import { BellButton, MenuButton, useMe } from '../components/Layout';
-import { useStockActions } from '../components/StockActions';
-import { Button, Card, EmptyState, PageHeader, Pill, Spinner } from '../components/ui';
-import { amountLabel, dateLabel, greeting, longToday, stateLabel, toneClasses, toneFor } from '../lib/format';
+import { StockRowActions } from '../components/StockRowActions';
+import { useToast } from '../components/Toast';
+import { PageTop } from '../components/Toolbar';
+import { Button, Card, EmptyState, Pill, Spinner } from '../components/ui';
+import { api } from '../lib/api';
+import { amountLabel, dateLabel, greeting, longToday, minutesLabel, stateLabel, toneClasses, toneFor } from '../lib/format';
 import { useCalories, usePlan, useProducts, useRecipes, useRunningLow, useShopping, useStock, useWasteReport } from '../lib/queries';
 import { changeLine, weightLabel } from './Dashboard';
 import { itemTitle } from './Shopping';
-import { dayName } from '../components/AddToPlanSheet';
-import { api } from '../lib/api';
-import { minutesLabel } from '../lib/format';
-import { useToast } from '../components/Toast';
+
+function SectionHead({ id, title, link }: { id: string; title: string; link?: { to: string; label: string } }) {
+  return (
+    <div className="mb-2 flex items-baseline justify-between gap-3">
+      <h2 id={id} className="text-lg font-bold lg:text-base">
+        {title}
+      </h2>
+      {link && (
+        <Link to={link.to} className="text-sm font-semibold text-accent-text hover:underline">
+          {link.label}
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** A figure in the side column: label, big number, a line under it, a link. */
+function Tile({ label, value, unit, children, className = '' }: { label: string; value: ReactNode; unit?: ReactNode; children?: ReactNode; className?: string }) {
+  return (
+    <Card className={`p-4 ${className}`}>
+      <p className="text-sm text-muted">{label}</p>
+      <p className="mt-0.5 text-2xl font-bold tabular-nums">
+        {value} {unit && <span className="text-sm font-normal text-muted">{unit}</span>}
+      </p>
+      {children}
+    </Card>
+  );
+}
 
 export function TodayPage() {
   const me = useMe();
   const stock = useStock();
+  const navigate = useNavigate();
   const waste = useWasteReport('month').data;
   const thisMonth = waste?.periods.at(-1);
   const calories = useCalories('me').data;
   const target = me.user.kcalTarget;
   const avg7 = calories?.avg7 ?? null;
   const unnamed = useProducts('', true).data ?? [];
-  const actions = useStockActions();
   const soonLimit = addDays(me.today, 3);
   const soon = (stock.data ?? []).filter((i) => i.state !== 'frozen' && i.bestBefore !== null && i.bestBefore <= soonLimit);
   const shown = soon.slice(0, 8);
@@ -32,178 +65,126 @@ export function TodayPage() {
   const day = usePlan(me.today, me.today, 'me').data?.days[0];
   const eatenKcal = (day?.entries ?? []).filter((e) => e.status === 'cooked').reduce((n, e) => n + (e.kcal ?? 0), 0);
   const plannedKcal = (day?.entries ?? []).filter((e) => e.status !== 'skipped').reduce((n, e) => n + (e.kcal ?? 0), 0);
-  const tonight = (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned' && e.slot === 'dinner') ?? (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned');
+  const tonight =
+    (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned' && e.slot === 'dinner') ?? (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned');
   const low = (useRunningLow().data ?? []).filter((l) => !l.onList);
   const qc = useQueryClient();
   const toast = useToast();
+  const open = (item: StockItemDto) => navigate(`/stock?open=${item.id}`);
+
+  const columns: Column<StockItemDto>[] = [
+    {
+      key: 'status',
+      header: <span className="sr-only">Freshness</span>,
+      className: 'w-6 pr-0',
+      cell: (i) => <span aria-hidden className={`inline-block size-2 rounded-full ${toneClasses[toneFor(i, me.today)].dot}`} />,
+    },
+    { key: 'name', header: 'Item', primary: true, cell: (i) => i.productName },
+    { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (i) => `${i.locationName}${i.state !== 'closed' ? ` · ${stateLabel[i.state].toLowerCase()}` : ''}` },
+    { key: 'left', header: 'Left', className: 'whitespace-nowrap', cell: (i) => amountLabel(i) },
+    { key: 'date', header: 'Best before', className: 'whitespace-nowrap', cell: (i) => <Pill className={toneClasses[toneFor(i, me.today)].pill}>{dateLabel(i.bestBefore, me.today)}</Pill> },
+  ];
 
   return (
     <>
-      <PageHeader title={greeting()} subtitle={longToday(me.today)} left={<MenuButton />} right={<BellButton />} />
+      <PageTop title={greeting()} subtitle={longToday(me.today)} left={<MenuButton />} actions={<BellButton />} />
       {tonight && <TonightCard entry={tonight} />}
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-start lg:gap-6">
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0">
           <WeekDinners />
           <section aria-labelledby="use-soon" className="mb-6">
-            <div className="mb-3 flex items-baseline justify-between">
-              <h2 id="use-soon" className="text-xl font-bold sm:text-2xl">
-                Use soon
-              </h2>
-              {soon.length > 0 && (
-                <Link to="/stock" className="font-semibold text-accent-text">
-                  See all {soon.length}
-                </Link>
-              )}
-            </div>
+            <SectionHead id="use-soon" title="Use soon" link={soon.length > 0 ? { to: '/stock', label: 'All stock' } : undefined} />
             {stock.isPending ? (
               <Spinner />
-            ) : shown.length === 0 ? (
-              <EmptyState title="Nothing going off in the next 3 days">
-                <p>Nice. Scan your shopping in to keep it that way.</p>
-              </EmptyState>
             ) : (
-              <>
-                {/* Phone: horizontal cards. Desktop: a table. */}
-                <ul className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 lg:hidden">
-                  {shown.map((item) => {
-                    const t = toneClasses[toneFor(item, me.today)];
-                    const freezeOk = item.actions.freeze === null;
-                    return (
-                      <li key={item.id} className="w-[46%] min-w-40 shrink-0 snap-start">
-                        <Card className="flex h-full flex-col gap-2 p-4">
-                          <Pill className={`self-start ${t.pill}`}>{dateLabel(item.bestBefore, me.today)}</Pill>
-                          <Link to={`/stock/${item.id}`} className="text-lg font-semibold leading-snug">
-                            {item.productName}
-                          </Link>
-                          <p className="text-muted">
-                            {item.locationName}
-                            {item.state === 'opened' ? ' · opened' : item.remainingGrams !== null ? ` · ${amountLabel(item)}` : ''}
-                          </p>
-                          <Button className="mt-auto bg-card-muted" variant="outline" onClick={() => (freezeOk && item.state === 'closed' ? void actions.freeze(item) : actions.use(item))}>
-                            {freezeOk && item.state === 'closed' ? 'Freeze it' : 'Use'}
-                          </Button>
-                        </Card>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <Card className="hidden overflow-hidden lg:block">
-                  <table className="w-full text-left">
-                    <thead className="text-sm text-muted">
-                      <tr className="border-b border-line">
-                        <th className="px-5 py-3 font-medium">Item</th>
-                        <th className="px-3 py-3 font-medium">Where</th>
-                        <th className="px-3 py-3 font-medium">Left</th>
-                        <th className="px-3 py-3 font-medium">Best before</th>
-                        <th className="px-5 py-3 text-right font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shown.map((item) => (
-                        <tr key={item.id} className="border-b border-line last:border-b-0">
-                          <td className="px-5 py-3 font-semibold">
-                            <Link to={`/stock/${item.id}`}>{item.productName}</Link>
-                          </td>
-                          <td className="px-3 py-3 text-muted">
-                            {item.locationName}
-                            {item.state !== 'closed' ? ` · ${stateLabel[item.state]}` : ''}
-                          </td>
-                          <td className="px-3 py-3 text-muted">{amountLabel(item)}</td>
-                          <td className="px-3 py-3">
-                            <Pill className={toneClasses[toneFor(item, me.today)].pill}>{dateLabel(item.bestBefore, me.today)}</Pill>
-                          </td>
-                          <td className="px-5 py-3">
-                            <div className="flex justify-end gap-2">
-                              <Button size="sm" variant="dark" onClick={() => actions.use(item)}>
-                                Use
-                              </Button>
-                              <Button size="sm" variant="outline" disabled={item.actions.freeze !== null} onClick={() => void actions.freeze(item)}>
-                                Freeze
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Card>
-              </>
+              <DataTable
+                label="Use soon"
+                columns={columns}
+                rows={shown}
+                rowKey={(i) => i.id}
+                onOpen={open}
+                openLabel={(i) => `${i.productName}, details`}
+                actions={(i) => <StockRowActions item={i} name={i.productName} onDetails={() => open(i)} />}
+                phone={(i) => ({
+                  lead: <span aria-hidden className={`h-10 w-1 shrink-0 rounded-full ${toneClasses[toneFor(i, me.today)].bar}`} />,
+                  title: i.productName,
+                  meta: `${i.locationName}${i.state === 'opened' ? ' · opened' : ''} · ${amountLabel(i)}`,
+                  badge: <Pill className={toneClasses[toneFor(i, me.today)].pill}>{dateLabel(i.bestBefore, me.today)}</Pill>,
+                  actions: <StockRowActions item={i} name={i.productName} onDetails={() => open(i)} compact />,
+                })}
+                empty={
+                  <EmptyState title="Nothing going off in the next 3 days">
+                    <p>Nice. Scan your shopping in to keep it that way.</p>
+                  </EmptyState>
+                }
+              />
+            )}
+            {soon.length > shown.length && (
+              <Link to="/stock" className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-accent-text hover:underline">
+                {soon.length - shown.length} more going off soon
+              </Link>
             )}
           </section>
         </div>
 
-        <aside className="mb-6 grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:gap-4" aria-label="At a glance">
-          <Card className="p-5">
-            <p className="text-muted">{target ? 'Calories today' : 'Today so far'}</p>
-            <p className="mt-1 font-display text-3xl font-bold sm:text-4xl">
-              {eatenKcal.toLocaleString('en-GB')} <span className="whitespace-nowrap font-sans text-lg font-normal text-muted">{target ? `of ${target.toLocaleString('en-GB')} kcal` : 'kcal'}</span>
-            </p>
+        <aside className="mb-6 grid grid-cols-2 gap-3 lg:flex lg:flex-col" aria-label="At a glance">
+          <Tile label={target ? 'Calories today' : 'Eaten today'} value={eatenKcal.toLocaleString('en-GB')} unit={target ? `of ${target.toLocaleString('en-GB')} kcal` : 'kcal'}>
             {(target ?? plannedKcal) > 0 && (
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-card-muted" role="img" aria-label={`${eatenKcal} of ${target ?? plannedKcal} ${target ? 'target' : 'planned'} calories`}>
-                <div
-                  className="h-full rounded-full bg-accent"
-                  style={{
-                    width: `${Math.min(100, (eatenKcal / (target ?? plannedKcal)) * 100)}%`,
-                  }}
-                />
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-card-muted" role="img" aria-label={`${eatenKcal} of ${target ?? plannedKcal} ${target ? 'target' : 'planned'} calories`}>
+                <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (eatenKcal / (target ?? plannedKcal)) * 100)}%` }} />
               </div>
             )}
-            <p className="mt-2 text-[0.9375rem] text-muted">
+            <p className="mt-2 text-sm text-muted">
               {avg7 !== null && <span className="hidden sm:inline">7-day average {avg7.toLocaleString('en-GB')} · </span>}
-              <Link to="/dashboard" className="font-semibold text-accent-text">
+              <Link to="/dashboard" className="font-semibold text-accent-text hover:underline">
                 Dashboard
               </Link>
             </p>
-          </Card>
-          <Card className="p-5">
-            <p className="text-muted">Binned this month</p>
-            <p className="mt-1 font-display text-3xl font-bold sm:text-4xl">
-              {thisMonth ? weightLabel(thisMonth.grams).replace(/ (kg|g)$/, '') : '–'}{' '}
-              <span className="font-sans text-lg font-normal text-muted">
+          </Tile>
+          <Tile
+            label="Binned this month"
+            value={thisMonth ? weightLabel(thisMonth.grams).replace(/ (kg|g)$/, '') : '–'}
+            unit={
+              <>
                 {thisMonth && thisMonth.grams >= 100 ? 'kg' : 'g'}
                 {thisMonth?.pence ? ` · ${formatPence(thisMonth.pence)}` : ''}
-              </span>
-            </p>
-            {wasteChange && <p className={`mt-2 text-[0.9375rem] font-semibold ${waste!.changePercent! <= 0 ? 'text-fresh-green-text' : 'text-muted'}`}>{wasteChange}</p>}
-            <Link to="/waste" className="mt-1 inline-block text-[0.9375rem] font-semibold text-accent-text">
+              </>
+            }
+          >
+            {wasteChange && <p className={`mt-1 text-sm font-semibold ${waste!.changePercent! <= 0 ? 'text-fresh-green-text' : 'text-muted'}`}>{wasteChange}</p>}
+            <Link to="/waste" className="mt-1 inline-block text-sm font-semibold text-accent-text hover:underline">
               Waste report
             </Link>
-          </Card>
+          </Tile>
 
           {low.length > 0 && (
-            <Card className="col-span-2 flex items-center gap-4 p-5">
-              <div className="flex-1">
-                <p className="text-lg font-semibold">Running low</p>
-                <p className="text-muted">{low.map((l) => (l.daysLeft ? `${l.name} (about ${l.daysLeft} day${l.daysLeft === 1 ? '' : 's'})` : l.name)).join(', ')}</p>
+            <Card className="col-span-2 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold">Running low</p>
+                <Button
+                  size="xs"
+                  variant="dark"
+                  onClick={async () => {
+                    for (const l of low) await api.post('/api/shopping', { ingredientId: l.ingredientId, reason: 'running-low' }).catch(() => {});
+                    await qc.invalidateQueries({ queryKey: ['shopping'] });
+                    toast.show('Added to the shopping list.');
+                  }}
+                >
+                  Add all to list
+                </Button>
               </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  for (const l of low)
-                    await api
-                      .post('/api/shopping', {
-                        ingredientId: l.ingredientId,
-                        reason: 'running-low',
-                      })
-                      .catch(() => {});
-                  await qc.invalidateQueries({ queryKey: ['shopping'] });
-                  toast.show('Added to the shopping list.');
-                }}
-                className="inline-flex min-h-11 items-center rounded-xl bg-strong px-4 font-semibold text-strong-ink"
-              >
-                Add to list
-              </button>
+              <p className="mt-1 text-sm text-muted">{low.map((l) => (l.daysLeft ? `${l.name} (about ${l.daysLeft} day${l.daysLeft === 1 ? '' : 's'})` : l.name)).join(' · ')}</p>
             </Card>
           )}
 
           {unnamed.length > 0 && (
-            <Card className="col-span-2 flex items-center gap-4 p-5">
-              <div className="flex-1">
-                <p className="text-lg font-semibold">{unnamed.length === 1 ? '1 product needs a name' : `${unnamed.length} products need a name`}</p>
-                <p className="text-muted">Name it once and everyone's phone will know it.</p>
+            <Card className="col-span-2 flex items-center gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">{unnamed.length === 1 ? '1 product needs a name' : `${unnamed.length} products need a name`}</p>
+                <p className="text-sm text-muted">Name it once and everyone's phone will know it.</p>
               </div>
-              <Link to="/products?unnamed=1" className="inline-flex min-h-11 items-center rounded-xl bg-strong px-4 font-semibold text-strong-ink">
+              <Link to="/products?unnamed=1" className="inline-flex min-h-10 shrink-0 items-center rounded-lg bg-strong px-3 text-sm font-semibold text-strong-ink lg:min-h-7 lg:rounded-md">
                 Name them
               </Link>
             </Card>
@@ -223,34 +204,27 @@ function WeekDinners() {
   if (!plan) return null;
   return (
     <section aria-labelledby="week-dinners" className="mb-6">
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 id="week-dinners" className="text-xl font-bold sm:text-2xl">
-          This week's dinners
-        </h2>
-        <Link to="/plan" className="font-semibold text-accent-text">
-          Open planner
-        </Link>
-      </div>
+      <SectionHead id="week-dinners" title="This week's dinners" link={{ to: '/plan', label: 'Open planner' }} />
       <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-7 lg:px-0">
         {plan.days.map((d) => {
           const dinner = d.entries.find((e) => e.slot === 'dinner' && e.status !== 'skipped');
-          const day = new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }).toUpperCase();
+          const day = new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
           const isToday = d.date === me.today;
           return (
-            <li key={d.date} className="w-24 shrink-0 lg:w-auto">
+            <li key={d.date} className="w-28 shrink-0 lg:w-auto">
               <Link
                 to={dinner ? `/plan?date=${d.date}` : `/plan?date=${d.date}&add=dinner`}
                 aria-label={`${dayName(d.date, me.today)}: ${dinner ? dinner.title : 'nothing planned, add a dinner'}`}
-                className={`flex h-full min-h-24 flex-col gap-1 rounded-2xl border bg-card p-3 ${isToday ? 'border-accent' : 'border-line'}`}
+                className={`flex h-full min-h-20 flex-col gap-0.5 rounded-lg border bg-card p-2.5 hover:bg-card-muted ${isToday ? 'border-accent ring-1 ring-accent' : 'border-line'}`}
               >
-                <span className="text-xs font-semibold tracking-wider text-muted">{day}</span>
+                <span className={`text-xs font-semibold ${isToday ? 'text-accent-text' : 'text-muted'}`}>{isToday ? 'Today' : day}</span>
                 {dinner ? (
                   <>
-                    <span className="line-clamp-3 break-words font-semibold leading-snug">{dinner.title}</span>
-                    <span className="text-xs text-muted">{dinner.status === 'cooked' ? 'Eaten' : isToday ? 'Tonight' : (dinner.detail ?? '')}</span>
+                    <span className="line-clamp-2 break-words text-sm font-semibold leading-snug">{dinner.title}</span>
+                    <span className="text-xs text-muted">{dinner.status === 'cooked' ? 'Eaten' : (dinner.detail ?? '')}</span>
                   </>
                 ) : (
-                  <span className="font-semibold text-accent-text">+ Add</span>
+                  <span className="text-sm font-medium text-muted">+ Add</span>
                 )}
               </Link>
             </li>
@@ -270,36 +244,36 @@ function ShoppingSummary() {
   const priced = items.filter((i) => i.pricePence !== null);
   const total = priced.reduce((s, i) => s + i.pricePence!, 0);
   return (
-    <Card className="col-span-2 hidden p-5 lg:block">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">Shopping list</h2>
-        <span className="text-[0.9375rem] text-muted">
+    <Card className="col-span-2 hidden p-4 lg:block">
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <h2 className="font-semibold">Shopping list</h2>
+        <span className="text-sm text-muted">
           {items.length} {items.length === 1 ? 'thing' : 'things'}
           {pricing && priced.length ? ` · about ${formatPence(total)}` : ''}
         </span>
       </div>
-      <ul>
+      <ul className="text-sm">
         {items.slice(0, 5).map((i) => (
-          <li key={i.id} className="flex justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
+          <li key={i.id} className="flex justify-between gap-3 border-b border-line py-2 last:border-b-0">
             <span className="min-w-0 truncate">{itemTitle(i)}</span>
             {pricing && i.pricePence !== null && <span className="tabular-nums text-muted">{formatPence(i.pricePence)}</span>}
           </li>
         ))}
       </ul>
-      <Link to="/shop" className="mt-1 inline-flex min-h-11 items-center font-semibold text-accent-text">
+      <Link to="/shop" className="mt-1 inline-flex min-h-8 items-center text-sm font-semibold text-accent-text hover:underline">
         Open list
       </Link>
     </Card>
   );
 }
 
-/** "Tonight · 6pm: Fish pie" with Cooked it / Skip / Move. */
+/** Tonight's meal: "Tonight · Chicken curry" with Cooked it / Skip / Move. */
 function TonightCard({ entry }: { entry: PlanEntryDto }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
   const recipe = useRecipes().data?.find((r) => r.id === entry.recipeId);
-  const label = entry.slot === 'dinner' ? 'Tonight · 6pm' : entry.slot === 'lunch' ? 'Lunch · 12:30' : entry.slot === 'breakfast' ? 'Breakfast' : 'Today';
+  const label = entry.slot === 'dinner' ? 'Tonight' : entry.slot === 'lunch' ? 'Lunch' : entry.slot === 'breakfast' ? 'Breakfast' : 'Today';
   const skip = async () => {
     await api.patch(`/api/plan/${entry.id}`, { status: 'skipped' });
     await qc.invalidateQueries({ queryKey: ['plan'] });
@@ -310,30 +284,22 @@ function TonightCard({ entry }: { entry: PlanEntryDto }) {
       },
     });
   };
+  const meta = [entry.people.length ? entry.people.map((p) => p.name).join(' + ') : null, `serves ${entry.servings}`, minutesLabel(recipe?.totalMinutes ?? null), entry.kcalPerServing ? `${entry.kcalPerServing} kcal each` : null]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    <section className="mb-6 rounded-[24px] bg-hero p-6 text-white lg:flex lg:items-center lg:gap-6" aria-label="Today's meal">
-      <div className="lg:flex-1">
-        <div className="mb-2 flex justify-between text-sm font-semibold uppercase tracking-wider">
-          <span className="text-[#b4a6ff]">{label}</span>
-          {entry.people.length > 0 && <span className="normal-case tracking-normal text-white/70">{entry.people.map((p) => p.name).join(' + ')}</span>}
-        </div>
-        <h2 className="text-2xl font-bold sm:text-3xl">{entry.title}</h2>
-        <p className="mt-1 text-white/75">{[`Serves ${entry.servings}`, minutesLabel(recipe?.totalMinutes ?? null), entry.kcalPerServing ? `${entry.kcalPerServing} kcal each` : null].filter(Boolean).join(' · ')}</p>
+    <section aria-label="Today's meal" className="mb-5 flex flex-col gap-3 rounded-xl border border-line bg-card p-4 lg:flex-row lg:items-center lg:rounded-lg lg:py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent-text">{label}</p>
+        <h2 className="truncate text-lg font-bold">{entry.title}</h2>
+        <p className="text-sm text-muted">{meta}</p>
       </div>
-      <div className="mt-5 flex gap-3 lg:mt-0">
-        <button
-          type="button"
-          onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}`)}
-          className="min-h-12 flex-1 whitespace-nowrap rounded-xl bg-accent px-4 text-base font-semibold text-accent-ink lg:flex-none"
-        >
+      <div className="flex gap-2">
+        <Button variant="primary" className="flex-1 lg:flex-none" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}`)}>
           Cooked it
-        </button>
-        <button type="button" onClick={() => void skip()} className="min-h-12 rounded-xl border border-white/25 px-5 text-base font-semibold">
-          Skip
-        </button>
-        <button type="button" onClick={() => navigate(`/plan?entry=${entry.id}&date=${entry.date}`)} className="min-h-12 rounded-xl border border-white/25 px-5 text-base font-semibold">
-          Move
-        </button>
+        </Button>
+        <Button onClick={() => void skip()}>Skip</Button>
+        <Button onClick={() => navigate(`/plan?entry=${entry.id}&date=${entry.date}`)}>Move</Button>
       </div>
     </section>
   );

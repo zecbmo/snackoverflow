@@ -4,9 +4,14 @@ import type { IngredientDto, IngredientInput, ShelfLife } from '@snackoverflow/s
 import { Icon } from '../components/Icon';
 import { MenuButton } from '../components/Layout';
 import { useToast } from '../components/Toast';
-import { Button, Card, EmptyState, ErrorNote, Field, PageHeader, Select, Sheet, Spinner, TextInput, Toggle } from '../components/ui';
+import { type Column, DataTable } from '../components/DataTable';
+import { PickerMenu } from '../components/Menu';
+import { SidePanel, usePanelParam } from '../components/SidePanel';
+import { PageTop, SearchBox, Toolbar } from '../components/Toolbar';
+import { Button, EmptyState, ErrorNote, Field, Select, Sheet, Spinner, TextInput, Toggle } from '../components/ui';
 import { api } from '../lib/api';
 import { useIngredients, useShelfLife } from '../lib/queries';
+import { groupRows, matchesSearch } from '../lib/table';
 
 function shelfSummary(s: ShelfLife): string {
   const parts: string[] = [];
@@ -16,53 +21,71 @@ function shelfSummary(s: ShelfLife): string {
   return parts.length ? parts.join(' · ') : 'No shelf life set';
 }
 
-type Editing = IngredientDto | 'new' | null;
-
 export function IngredientsPage() {
   const ingredients = useIngredients();
   const [q, setQ] = useState('');
-  const [editing, setEditing] = useState<Editing>(null);
-  const list = (ingredients.data ?? []).filter((i) => i.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const [group, setGroup] = useState<'none' | 'aisle'>('none');
+  const [adding, setAdding] = useState(false);
+  const [openId, openPanel, closePanel] = usePanelParam();
+  const list = (ingredients.data ?? []).filter((i) => !q.trim() || matchesSearch(`${i.name} ${i.aisle ?? ''}`, q));
+  const editing = (ingredients.data ?? []).find((i) => i.id === openId) ?? null;
+  const days = (n: number | null) => (n === null ? '' : `${n} d`);
+  const columns: Column<IngredientDto>[] = [
+    { key: 'name', header: 'Name', primary: true, cell: (i) => i.name },
+    { key: 'aisle', header: 'Aisle', cell: (i) => i.aisle ?? '' },
+    { key: 'closed', header: 'Keeps', align: 'right', className: 'tabular-nums', cell: (i) => days(i.shelfLife.closedDays) },
+    { key: 'opened', header: 'Once opened', align: 'right', className: 'tabular-nums', cell: (i) => days(i.shelfLife.openedDays) },
+    { key: 'frozen', header: 'Frozen', align: 'right', className: 'tabular-nums', cell: (i) => (i.shelfLife.freezable === false ? 'No' : days(i.shelfLife.frozenDays)) },
+  ];
+  const groups = group === 'aisle' ? groupRows(list, (i) => i.aisle ?? 'Other').map((g) => ({ key: g.key, label: g.key, rows: g.rows })) : undefined;
 
   return (
     <>
-      <PageHeader
+      <PageTop
         title="Ingredients"
+        subtitle={ingredients.data ? `${ingredients.data.length}` : undefined}
         left={<MenuButton />}
-        right={
-          <Button variant="primary" onClick={() => setEditing('new')}>
-            <Icon name="plus" className="size-5" /> Add
+        actions={
+          <Button variant="primary" onClick={() => setAdding(true)}>
+            <Icon name="plus" className="size-4" /> Add ingredient
           </Button>
         }
       />
-      <label className="relative mb-4 block">
-        <span className="sr-only">Search ingredients</span>
-        <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted" />
-        <TextInput type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search ingredients" className="pl-10" />
-      </label>
+      <Toolbar search={<SearchBox value={q} onChange={setQ} placeholder="Search ingredients" label="Search ingredients" />}>
+        <PickerMenu
+          label="Group"
+          icon="group"
+          value={group}
+          defaultValue="none"
+          onChange={setGroup}
+          options={[
+            { value: 'none', label: 'No grouping' },
+            { value: 'aisle', label: 'Aisle' },
+          ]}
+        />
+      </Toolbar>
+      <ErrorNote error={ingredients.error} />
       {ingredients.isPending ? (
         <Spinner />
-      ) : ingredients.error ? (
-        <ErrorNote error={ingredients.error} />
-      ) : list.length === 0 ? (
-        <EmptyState title="No ingredients found" />
       ) : (
-        <Card className="divide-y divide-line overflow-hidden">
-          {list.map((i) => (
-            <button key={i.id} type="button" onClick={() => setEditing(i)} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-card-muted">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">{i.name}</span>
-                <span className="block truncate text-sm text-muted">
-                  {[i.aisle, shelfSummary(i.shelfLife)].filter(Boolean).join(' · ')}
-                </span>
-              </span>
-              <Icon name="chevronRight" className="size-5 text-muted" />
-            </button>
-          ))}
-        </Card>
+        <DataTable
+          label="Ingredients"
+          columns={columns}
+          rows={groups ? undefined : list}
+          groups={groups}
+          rowKey={(i) => i.id}
+          onOpen={(i) => openPanel(i.id)}
+          openLabel={(i) => `Edit ${i.name}`}
+          activeKey={openId}
+          phone={(i) => ({ title: i.name, meta: [i.aisle, shelfSummary(i.shelfLife)].filter(Boolean).join(' · '), badge: <Icon name="chevronRight" className="size-4 text-muted" /> })}
+          empty={<EmptyState title="No ingredients found" />}
+        />
       )}
-      <Sheet open={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add ingredient' : 'Edit ingredient'}>
-        {editing !== null && <IngredientEditor key={editing === 'new' ? 'new' : editing.id} ingredient={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />}
+      <SidePanel open={Boolean(openId)} onClose={closePanel} title={editing?.name ?? 'Ingredient'} subtitle="Used to match recipes, receipts and products">
+        {editing && <IngredientEditor key={editing.id} ingredient={editing} onDone={closePanel} />}
+      </SidePanel>
+      <Sheet open={adding} onClose={() => setAdding(false)} title="Add ingredient">
+        {adding && <IngredientEditor key="new" ingredient={null} onDone={() => setAdding(false)} />}
       </Sheet>
     </>
   );

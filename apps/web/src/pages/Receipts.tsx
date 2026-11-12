@@ -1,12 +1,14 @@
 /** Add a whole shop at once: photograph a receipt, upload a photo or PDF, or paste an order email. */
 import { useQueryClient } from '@tanstack/react-query';
 import { type ChangeEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { formatPence, formatShortDate, type ReceiptSummaryDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { BackButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
-import { Button, Card, ErrorNote, Field, PageHeader, Sheet, Spinner } from '../components/ui';
+import { type Column, DataTable } from '../components/DataTable';
+import { PageTop, Toolbar } from '../components/Toolbar';
+import { Button, EmptyState, ErrorNote, Field, Pill, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useReceipts } from '../lib/queries';
 
@@ -83,72 +85,71 @@ export function ReceiptsPage() {
     }
   };
 
-  const pickerClass = 'flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl font-semibold';
+  const fileButton = 'inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold lg:min-h-8 lg:rounded-md';
+  const columns: Column<ReceiptSummaryDto>[] = [
+    { key: 'store', header: 'Shop', primary: true, cell: (r) => r.store ?? 'Receipt' },
+    { key: 'date', header: 'Date', className: 'whitespace-nowrap', cell: (r) => (r.purchasedOn ? formatShortDate(r.purchasedOn) : '') },
+    { key: 'status', header: 'Status', cell: (r) => <Pill className={r.status === 'review' ? 'bg-accent-soft text-accent-text' : 'bg-card-muted text-muted'}>{STATUS_LABEL[r.status]}</Pill> },
+    { key: 'items', header: 'Items', align: 'right', className: 'tabular-nums', cell: (r) => r.lineCount || '' },
+    { key: 'total', header: 'Total', align: 'right', className: 'tabular-nums', cell: (r) => (r.totalPence !== null ? formatPence(r.totalPence) : '') },
+  ];
   return (
     <>
-      <PageHeader title="Receipts" left={<BackButton to="/shop" />} />
-      <Card className="mb-5 flex flex-col gap-3 p-5">
-        <p className="text-muted">Add a whole shop at once. We match each line to your food, you check it, and it all goes into stock.</p>
-        <label className={`${pickerClass} bg-accent text-accent-ink ${busy ? 'pointer-events-none opacity-50' : ''}`}>
-          <Icon name="camera" className="size-5" /> Take a photo
-          <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={onFile('photo')} disabled={busy} />
+      <PageTop
+        title="Receipts"
+        left={<BackButton to="/shop" />}
+        actions={
+          <>
+            <label className={`${fileButton} bg-accent text-accent-ink hover:brightness-110 ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+              <Icon name="camera" className="size-4" /> <span className="hidden sm:inline">Take a photo</span>
+              <span className="sm:hidden">Photo</span>
+              <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={onFile('photo')} disabled={busy} />
+            </label>
+          </>
+        }
+      />
+      <Toolbar>
+        <label className={`${fileButton} hover:bg-card-muted ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+          <Icon name="download" className="size-4" /> Upload photo or PDF
+          <input type="file" accept="image/*,application/pdf" className="sr-only" onChange={onFile('upload')} disabled={busy} />
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className={`${pickerClass} border border-line bg-card ${busy ? 'pointer-events-none opacity-50' : ''}`}>
-            Upload photo or PDF
-            <input type="file" accept="image/*,application/pdf" className="sr-only" onChange={onFile('upload')} disabled={busy} />
-          </label>
-          <Button size="lg" onClick={() => setPasting(true)} disabled={busy}>
-            Paste text
-          </Button>
-        </div>
-        {!me.features.ai && (
-          <p className="text-sm text-muted">
-            Photos and PDFs are read by AI when it's set up on the server. Without it, your own assistant can read them for you
-            {me.features.mcp ? ' (it can see receipts waiting to be read)' : ''}, or you can paste the text.
-          </p>
-        )}
-        {me.features.receiptEmail && (
-          <p className="text-sm text-muted">You can also forward online-order emails (Tesco, Asda, Sainsbury's, Ocado…) to the household's receipts mailbox. They'll show up here ready to check.</p>
-        )}
-        {busy && <Spinner label="Sending" />}
-      </Card>
-
-      <h2 className="mb-2 text-xl font-bold">Recent</h2>
+        <Button size="sm" variant="ghost" onClick={() => setPasting(true)} disabled={busy}>
+          <Icon name="copy" className="size-4" /> Paste text
+        </Button>
+      </Toolbar>
+      <p className="mb-3 max-w-3xl text-sm text-muted">
+        Add a whole shop at once: each line is matched to your food, you check it, and it all goes into stock.{' '}
+        {!me.features.ai &&
+          `Photos and PDFs are read by AI when it's set up on the server; without it, your own assistant can read them${me.features.mcp ? ' (it can see receipts waiting to be read)' : ''}, or paste the text.`}{' '}
+        {me.features.receiptEmail && "You can also forward online-order emails to the household's receipts mailbox."}
+      </p>
+      {busy && <Spinner label="Sending" />}
       <ErrorNote error={receipts.error} />
       {receipts.isPending ? (
         <Spinner />
-      ) : receipts.data?.length ? (
-        <ul className="overflow-hidden rounded-[18px] border border-line bg-card">
-          {receipts.data.map((r) => (
-            <li key={r.id} className="border-b border-line last:border-b-0">
-              <Link to={`/receipts/${r.id}`} className="flex min-h-14 items-center gap-3 px-4 py-3">
-                <span className="flex-1">
-                  <span className="block font-semibold">
-                    {r.store ?? 'Receipt'}
-                    {r.purchasedOn ? ` · ${formatShortDate(r.purchasedOn)}` : ''}
-                  </span>
-                  <span className="block text-sm text-muted">
-                    {STATUS_LABEL[r.status]}
-                    {r.lineCount ? ` · ${r.lineCount} items` : ''}
-                    {r.totalPence !== null ? ` · ${formatPence(r.totalPence)}` : ''}
-                  </span>
-                </span>
-                <Icon name="chevronRight" className="size-5 text-muted" />
-              </Link>
-            </li>
-          ))}
-        </ul>
       ) : (
-        <p className="text-muted">No receipts yet.</p>
+        <DataTable
+          label="Receipts"
+          columns={columns}
+          rows={receipts.data ?? []}
+          rowKey={(r) => r.id}
+          onOpen={(r) => navigate(`/receipts/${r.id}`)}
+          openLabel={(r) => `${r.store ?? 'Receipt'}${r.purchasedOn ? `, ${formatShortDate(r.purchasedOn)}` : ''}`}
+          phone={(r) => ({
+            title: `${r.store ?? 'Receipt'}${r.purchasedOn ? ` · ${formatShortDate(r.purchasedOn)}` : ''}`,
+            meta: `${STATUS_LABEL[r.status]}${r.lineCount ? ` · ${r.lineCount} items` : ''}${r.totalPence !== null ? ` · ${formatPence(r.totalPence)}` : ''}`,
+            badge: <Icon name="chevronRight" className="size-4 text-muted" />,
+          })}
+          empty={<EmptyState title="No receipts yet">Take a photo of your next receipt, or paste an online order.</EmptyState>}
+        />
       )}
 
       <Sheet open={pasting} onClose={() => setPasting(false)} title="Paste a receipt">
         <div className="flex flex-col gap-3">
           <Field label="Receipt or order email" hint="Each item needs its price on the same line. Totals and payments are skipped.">
-            {(id) => <textarea id={id} rows={10} value={text} onChange={(e) => setText(e.target.value)} className="w-full rounded-xl border border-line bg-card p-3 text-base" />}
+            {(id) => <textarea id={id} rows={10} value={text} onChange={(e) => setText(e.target.value)} className="w-full rounded-lg border border-line bg-card p-3 text-base lg:text-sm" />}
           </Field>
-          <Button variant="primary" size="lg" disabled={busy || text.trim().length < 3} onClick={() => void paste()}>
+          <Button variant="primary" disabled={busy || text.trim().length < 3} onClick={() => void paste()}>
             Read it
           </Button>
         </div>

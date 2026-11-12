@@ -1,82 +1,106 @@
+/** Every product the household has scanned or added: what it is, its pack size, barcodes and price. */
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
-import { formatPackSize, type ProductDto } from '@snackoverflow/shared';
+import { useNavigate, useSearchParams } from 'react-router';
+import { formatPackSize, formatPence, type ProductDto } from '@snackoverflow/shared';
+import { type Column, DataTable } from '../components/DataTable';
 import { Icon } from '../components/Icon';
-import { MenuButton } from '../components/Layout';
+import { MenuButton, useMe } from '../components/Layout';
+import { Menu, PickerMenu } from '../components/Menu';
+import { SidePanel, usePanelParam } from '../components/SidePanel';
 import { useToast } from '../components/Toast';
-import { Button, Card, EmptyState, ErrorNote, PageHeader, Sheet, Spinner, TextInput } from '../components/ui';
+import { PageTop, SearchBox, Toolbar } from '../components/Toolbar';
+import { Button, EmptyState, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api } from '../lib/api';
-import { useProducts } from '../lib/queries';
+import { useProduct, useProducts } from '../lib/queries';
+import { ProductDetail } from './ProductDetail';
 import { ProductForm } from './ProductForm';
 
-function packLabel(p: ProductDto): string | null {
-  return formatPackSize(p.packAmount, p.packUnit) || null;
+function packLabel(p: ProductDto): string {
+  return formatPackSize(p.packAmount, p.packUnit) || '';
 }
 
 export function ProductsPage() {
+  const me = useMe();
   const [q, setQ] = useState('');
   const [params] = useSearchParams();
-  const [unnamed, setUnnamed] = useState(params.get('unnamed') === '1');
+  const [show, setShow] = useState<'all' | 'unnamed'>(params.get('unnamed') === '1' ? 'unnamed' : 'all');
   const [adding, setAdding] = useState(false);
-  const products = useProducts(q.trim(), unnamed);
+  const products = useProducts(q.trim(), show === 'unnamed');
+  const [openId, openPanel, closePanel] = usePanelParam();
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
+  const pricing = me.household.settings.pricingEnabled;
 
-  const chip = (active: boolean) =>
-    `min-h-11 rounded-full border px-4 text-[0.9375rem] font-semibold ${active ? 'border-strong bg-strong text-strong-ink' : 'border-line bg-card text-ink'}`;
+  const columns: Column<ProductDto>[] = [
+    { key: 'name', header: 'Name', primary: true, className: 'max-w-[20rem]', cell: (p) => <span className={p.name ? '' : 'text-muted'}>{p.name ?? 'Unnamed product'}</span> },
+    { key: 'brand', header: 'Brand', cell: (p) => p.brand ?? '' },
+    { key: 'ingredient', header: 'Ingredient', cell: (p) => p.ingredientName ?? <span className="text-fresh-amber-text">Not linked</span> },
+    { key: 'pack', header: 'Pack', className: 'whitespace-nowrap', cell: packLabel },
+    { key: 'barcode', header: 'Barcode', className: 'whitespace-nowrap tabular-nums', cell: (p) => (p.barcodes.length ? `${p.barcodes[0]}${p.barcodes.length > 1 ? ` +${p.barcodes.length - 1}` : ''}` : '') },
+  ];
+  if (pricing) columns.push({ key: 'price', header: 'Price', align: 'right', className: 'tabular-nums', cell: (p) => (p.pricePence !== null ? formatPence(p.pricePence) : '') });
 
   return (
     <>
-      <PageHeader
+      <PageTop
         title="Products"
+        subtitle={products.data ? `${products.data.length}` : undefined}
         left={<MenuButton />}
-        right={
+        actions={
           <Button variant="primary" onClick={() => setAdding(true)}>
-            <Icon name="plus" className="size-5" /> Add
+            <Icon name="plus" className="size-4" /> Add product
           </Button>
         }
       />
-      <div className="mb-4 flex flex-col gap-3">
-        <label className="relative block">
-          <span className="sr-only">Search products</span>
-          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted" />
-          <TextInput type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, brand or barcode" className="pl-10" />
-        </label>
-        <div className="flex gap-2">
-          <button type="button" aria-pressed={!unnamed} className={chip(!unnamed)} onClick={() => setUnnamed(false)}>
-            All
-          </button>
-          <button type="button" aria-pressed={unnamed} className={chip(unnamed)} onClick={() => setUnnamed(true)}>
-            Needs a name
-          </button>
-        </div>
-      </div>
+      <Toolbar search={<SearchBox value={q} onChange={setQ} placeholder="Name, brand or barcode" label="Search products" />}>
+        <PickerMenu
+          label="Filter"
+          icon="filter"
+          value={show}
+          defaultValue="all"
+          onChange={setShow}
+          options={[
+            { value: 'all', label: 'All products' },
+            { value: 'unnamed', label: 'Needs a name' },
+          ]}
+        />
+      </Toolbar>
+      <ErrorNote error={products.error} />
       {products.isPending ? (
         <Spinner />
-      ) : products.error ? (
-        <ErrorNote error={products.error} />
-      ) : products.data.length === 0 ? (
-        <EmptyState title={unnamed ? 'Everything has a name' : 'No products yet'}>
-          {unnamed ? 'Nice and tidy.' : 'Scan something in, or add a product by hand.'}
-        </EmptyState>
       ) : (
-        <Card className="divide-y divide-line overflow-hidden">
-          {products.data.map((p) => {
-            const meta = [p.brand, p.ingredientName, packLabel(p)].filter(Boolean).join(' · ');
-            return (
-              <Link key={p.id} to={`/products/${p.id}`} className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-card-muted">
-                <span className="min-w-0 flex-1">
-                  <span className={`block truncate font-semibold ${p.name ? '' : 'text-muted'}`}>{p.name ?? 'Unnamed product'}</span>
-                  <span className="block truncate text-sm text-muted">{p.name ? meta || 'No details yet' : (p.barcodes[0] ?? 'No barcode')}</span>
-                </span>
-                <Icon name="chevronRight" className="size-5 text-muted" />
-              </Link>
-            );
+        <DataTable
+          label="Products"
+          columns={columns}
+          rows={products.data ?? []}
+          rowKey={(p) => p.id}
+          onOpen={(p) => openPanel(p.id)}
+          openLabel={(p) => p.name ?? 'Unnamed product'}
+          activeKey={openId}
+          actions={(p) => (
+            <Menu
+              label={`More for ${p.name ?? 'this product'}`}
+              items={[
+                { label: 'Edit', icon: 'edit', onSelect: () => openPanel(p.id) },
+                { label: 'Open full page', icon: 'external', onSelect: () => navigate(`/products/${p.id}`) },
+              ]}
+            />
+          )}
+          phone={(p) => ({
+            title: <span className={p.name ? '' : 'text-muted'}>{p.name ?? 'Unnamed product'}</span>,
+            meta: p.name ? [p.brand, p.ingredientName, packLabel(p)].filter(Boolean).join(' · ') || 'No details yet' : (p.barcodes[0] ?? 'No barcode'),
+            badge: pricing && p.pricePence !== null ? <span className="text-sm text-muted">{formatPence(p.pricePence)}</span> : <Icon name="chevronRight" className="size-4 text-muted" />,
           })}
-        </Card>
+          empty={
+            <EmptyState title={show === 'unnamed' ? 'Everything has a name' : q ? 'Nothing matches' : 'No products yet'}>
+              {show === 'unnamed' ? 'Nice and tidy.' : q ? 'Try a different word or barcode.' : 'Scan something in, or add a product by hand.'}
+            </EmptyState>
+          }
+        />
       )}
+      <ProductPanel id={openId} onClose={closePanel} />
       <Sheet open={adding} onClose={() => setAdding(false)} title="Add product">
         <ProductForm
           showCategory
@@ -86,10 +110,19 @@ export function ProductsPage() {
             await qc.invalidateQueries({ queryKey: ['products'] });
             setAdding(false);
             toast.show(`Added ${p.name ?? 'the product'}.`);
-            navigate(`/products/${p.id}`);
+            openPanel(p.id);
           }}
         />
       </Sheet>
     </>
+  );
+}
+
+function ProductPanel({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const p = useProduct(id ?? '').data;
+  return (
+    <SidePanel open={Boolean(id)} onClose={onClose} title={p ? (p.name ?? 'Unnamed product') : 'Loading…'} subtitle={p?.brand ?? undefined}>
+      {id && <ProductDetail id={id} stacked onDeleted={onClose} />}
+    </SidePanel>
   );
 }
