@@ -29,4 +29,4 @@ Secrets and environment-specific settings will live in a `.env` file, which is g
 
 ## Licence
 
-To be decided.
+[MIT](LICENSE)
