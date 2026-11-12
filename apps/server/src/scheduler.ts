@@ -3,6 +3,7 @@ import { wallClockIn } from '@snackoverflow/shared';
 import { backupsEnabled, listBackups, runBackup } from './backup';
 import type { AppContext } from './context';
 import { runNotifications } from './notify/notifications';
+import { refreshPrices } from './services/pricing';
 import { checkReceiptMail } from './services/receiptEmail';
 
 interface Logger {
@@ -30,6 +31,16 @@ export function startScheduler(ctx: AppContext, log: Logger): () => void {
         if (made) log.info({ receipts: made }, 'receipts imported from email');
       } catch (err) {
         log.error({ err }, 'checking the receipt mailbox failed');
+      }
+    }
+    // Open Prices: once a day, only for households with pricing on.
+    if (now.getTime() - lastPriceRefresh >= 24 * 60 * 60_000) {
+      lastPriceRefresh = now.getTime();
+      try {
+        const found = await refreshPrices(ctx, now);
+        if (found) log.info({ prices: found }, 'prices refreshed from Open Prices');
+      } catch (err) {
+        log.error({ err }, 'price refresh failed');
       }
     }
     try {
@@ -62,4 +73,5 @@ async function maybeBackup(ctx: AppContext, now: Date, log: Logger) {
 }
 
 let lastFailedOn: string | null = null;
+let lastPriceRefresh = 0;
 let lastMailCheck = 0;

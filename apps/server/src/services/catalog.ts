@@ -114,7 +114,7 @@ export function ingredientDto(i: IngredientRow, catalog: Catalog): IngredientDto
   };
 }
 
-export function productDto(p: ProductRow, codes: string[], catalog: Catalog): ProductDto {
+export function productDto(p: ProductRow, codes: string[], catalog: Catalog, pricePence: number | null = null): ProductDto {
   return {
     id: p.id,
     name: p.name,
@@ -132,6 +132,7 @@ export function productDto(p: ProductRow, codes: string[], catalog: Catalog): Pr
     learnedClosedDays: p.learnedClosedDays,
     learnedFrozenDays: p.learnedFrozenDays,
     source: p.source,
+    pricePence,
   };
 }
 

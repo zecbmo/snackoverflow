@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
-import type { BackupDto, ShelfLifeCategoryDto } from '@snackoverflow/shared';
+import type { BackupDto, HouseholdSettings, ShelfLifeCategoryDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
-import { Button, Card, ErrorNote, Field, PageHeader, Select, Spinner, TextInput } from '../components/ui';
+import { Button, Card, ErrorNote, Field, PageHeader, Select, Spinner, TextInput, Toggle } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { keys, useShelfLife } from '../lib/queries';
 
@@ -17,6 +17,8 @@ export function SettingsPage() {
       <div className="flex flex-col gap-5">
         <HouseholdCard />
         <ShelfLifeCard />
+        <PricesCard />
+        <SuggestionsCard />
         {isAdmin && me.features.backups && <BackupsCard />}
         <Card className="p-5">
           <h2 className="mb-2 text-lg font-bold">Recipes and assistants</h2>
@@ -261,6 +263,97 @@ function BackupsCard() {
           ))}
         </ul>
       )}
+    </Card>
+  );
+}
+
+function useSaveSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  return async (settings: Partial<HouseholdSettings>, message = 'Saved.') => {
+    try {
+      await api.patch('/api/household', { settings });
+      await qc.invalidateQueries({ queryKey: keys.session });
+      await qc.invalidateQueries({ queryKey: ['shopping'] });
+      await qc.invalidateQueries({ queryKey: ['products'] });
+      toast.show(message);
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
+}
+
+/** Optional pricing: off by default, and hidden everywhere when off. */
+function PricesCard() {
+  const me = useMe();
+  const isAdmin = me.user.role === 'admin';
+  const save = useSaveSettings();
+  const on = me.household.settings.pricingEnabled;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold">Prices</h2>
+          <p className="text-[15px] text-muted">
+            No UK supermarket has a public price API, so prices come from your receipts, what you type in, and Open Prices (shared by Open Food Facts users). When on, the list shows an
+            estimated total and meal suggestions favour cheaper extras.
+          </p>
+        </div>
+        {isAdmin ? (
+          <Toggle checked={on} label="Use prices" onChange={(v) => void save({ pricingEnabled: v }, v ? 'Prices are on.' : 'Prices are off and hidden.')} />
+        ) : (
+          <span className="font-semibold">{on ? 'On' : 'Off'}</span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** Rules for "Suggest meals" and "Plan my week". */
+function SuggestionsCard() {
+  const me = useMe();
+  const isAdmin = me.user.role === 'admin';
+  const save = useSaveSettings();
+  const s = me.household.settings;
+  const [noRepeat, setNoRepeat] = useState(String(s.noRepeatDays));
+  const [tags, setTags] = useState(s.excludedTags.join(', '));
+  const [maxExtra, setMaxExtra] = useState(String(s.maxExtraIngredients));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    void save({
+      noRepeatDays: Math.max(0, Math.min(60, Math.round(Number(noRepeat) || 0))),
+      excludedTags: tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
+      maxExtraIngredients: Number(maxExtra),
+    });
+  };
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 text-lg font-bold">Meal suggestions</h2>
+      <p className="mb-4 text-[15px] text-muted">Rules for “Suggest meals” and “Plan my week”.</p>
+      <form onSubmit={submit} className="grid gap-4 sm:grid-cols-3">
+        <Field label="Don't repeat within (days)">
+          {(id) => <TextInput id={id} inputMode="numeric" disabled={!isAdmin} value={noRepeat} onChange={(e) => setNoRepeat(e.target.value)} />}
+        </Field>
+        <Field label="Most extra ingredients to buy">
+          {(id) => (
+            <Select id={id} disabled={!isAdmin} value={maxExtra} onChange={(e) => setMaxExtra(e.target.value)}>
+              {[0, 1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Never suggest tags" hint="Comma separated, e.g. dessert, party">
+          {(id) => <TextInput id={id} disabled={!isAdmin} value={tags} onChange={(e) => setTags(e.target.value)} />}
+        </Field>
+        {isAdmin && (
+          <Button type="submit" className="self-start sm:col-span-3">
+            Save
+          </Button>
+        )}
+      </form>
     </Card>
   );
 }

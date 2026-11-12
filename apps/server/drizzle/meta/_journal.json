@@ -43,6 +43,13 @@
       "when": 1794509328426,
       "tag": "0005_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794510780064,
+      "tag": "0006_household_settings",
+      "breakpoints": true
     }
   ]
 }

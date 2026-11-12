@@ -13,6 +13,7 @@ import type {
   ReceiptDto,
   ReceiptSummaryDto,
   RecipeDto,
+  RecipeScore,
   RecipeSummaryDto,
   RunningLowDto,
   SessionDto,
@@ -49,6 +50,8 @@ export const keys = {
   shopping: ['shopping'] as const,
   runningLow: ['shopping', 'running-low'] as const,
   receipts: ['receipts'] as const,
+  recipeScores: ['stock', 'recipe-scores'] as const,
+  surplus: ['stock', 'surplus'] as const,
   receipt: (id: string) => ['receipts', id] as const,
 };
 
@@ -99,3 +102,14 @@ export const useReceipt = (id: string) =>
     // While AI is reading it, check every couple of seconds.
     refetchInterval: (q) => (q.state.data?.status === 'reading' ? 2000 : false),
   });
+export const useRecipeScores = () =>
+  useQuery({ queryKey: keys.recipeScores, queryFn: () => api.get<{ on: string; scores: RecipeScore[] }>('/api/optimiser/recipes') });
+export interface SurplusHint {
+  ingredientId: string;
+  name: string;
+  grams: number;
+  goesOffBy: string | null;
+  ideas: number;
+  topIdea: { recipeId: string; title: string; missing: string[] } | null;
+}
+export const useSurplus = () => useQuery({ queryKey: keys.surplus, queryFn: () => api.get<SurplusHint[]>('/api/optimiser/surplus') });

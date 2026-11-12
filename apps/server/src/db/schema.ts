@@ -16,7 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { NotificationPrefs, Nutrition } from '@snackoverflow/shared';
+import type { HouseholdSettings, NotificationPrefs, Nutrition } from '@snackoverflow/shared';
 
 const id = () => uuid('id').primaryKey().defaultRandom();
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -54,6 +54,8 @@ export const households = pgTable('households', {
   id: id(),
   name: text('name').notNull(),
   timeZone: text('time_zone').notNull().default('Europe/London'),
+  /** Optimiser and pricing choices (see HouseholdSettings); missing keys use the defaults. */
+  settings: jsonb('settings').$type<Partial<HouseholdSettings>>(),
   createdAt: createdAt(),
 });
 

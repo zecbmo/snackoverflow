@@ -26,15 +26,17 @@ export async function peopleRoutes(app: FastifyInstance) {
   const appUrl = () => ctx.config.APP_URL.replace(/\/$/, '');
 
   // --- Household --------------------------------------------------------------
-  app.get('/api/household', async (req) => householdDto(requireAuth(req).household));
+  app.get('/api/household', async (req) => householdDto(requireAuth(req).household, ctx.config.PRICING_ENABLED));
 
   app.patch('/api/household', async (req) => {
     const auth = requireAdmin(req);
-    const input = parse(updateHouseholdInput, req.body);
-    const [h] = await ctx.db.update(households).set(input).where(eq(households.id, auth.household.id)).returning();
+    const { settings, ...input } = parse(updateHouseholdInput, req.body);
+    const patch: Partial<typeof households.$inferInsert> = { ...input };
+    if (settings) patch.settings = { ...(auth.household.settings ?? {}), ...settings };
+    const [h] = await ctx.db.update(households).set(patch).where(eq(households.id, auth.household.id)).returning();
     if (!h) throw notFound();
     ctx.live.publish(h.id, 'household');
-    return householdDto(h);
+    return householdDto(h, ctx.config.PRICING_ENABLED);
   });
 
   // --- Users (admin) ------------------------------------------------------------

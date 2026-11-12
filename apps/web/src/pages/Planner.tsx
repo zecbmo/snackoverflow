@@ -12,7 +12,9 @@ import { useToast } from '../components/Toast';
 import { Button, Card, ErrorNote, Field, IconButton, PageHeader, Select, Sheet, Spinner, TextInput } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { amountLabel } from '../lib/format';
-import { usePlan, useProducts, useRecipes, useStock, useUsers } from '../lib/queries';
+import { usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
+import { PlanWeekSheet, SuggestSheet } from '../components/OptimiserSheets';
+import { formatQuantity } from '@snackoverflow/shared';
 
 const SLOT_LABEL: Record<MealSlot, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
 
@@ -53,6 +55,10 @@ export function PlannerPage() {
   const [adding, setAdding] = useState<{ date: CalendarDate; slot: MealSlot } | null>(null);
   const [open, setOpen] = useState<PlanEntryDto | null>(null);
   const [showEarlier, setShowEarlier] = useState(false);
+  const [suggesting, setSuggesting] = useState<{ ingredient: { id: string; name: string } | null } | null>(null);
+  const [planningWeek, setPlanningWeek] = useState(false);
+  const surplus = useSurplus().data ?? [];
+  const hint = surplus.find((h) => h.ideas > 0) ?? surplus[0];
 
   // Opened from a "Move" notification: show that meal.
   const entryParam = params.get('entry');
@@ -105,20 +111,38 @@ export function PlannerPage() {
           </button>
         ))}
       </div>
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <Button variant="dark" size="lg" onClick={() => void build()}>
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <Button variant="dark" size="lg" onClick={() => setSuggesting({ ingredient: null })}>
+          Suggest meals
+        </Button>
+        <Button size="lg" onClick={() => setPlanningWeek(true)}>
+          Plan my week
+        </Button>
+      </div>
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Button onClick={() => void build()}>
           <Icon name="cart" className="size-5" /> Build shopping list
         </Button>
-        {from !== weekStart(me.today) ? (
-          <Button size="lg" onClick={() => setFrom(weekStart(me.today))}>
-            This week
-          </Button>
-        ) : (
-          <Link to="/recipes" className="inline-flex min-h-14 items-center justify-center rounded-xl border border-line bg-card font-semibold">
-            Find a recipe
-          </Link>
-        )}
+        {from !== weekStart(me.today) && <Button onClick={() => setFrom(weekStart(me.today))}>This week</Button>}
       </div>
+      {hint && (
+        <button
+          type="button"
+          onClick={() => setSuggesting({ ingredient: { id: hint.ingredientId, name: hint.name } })}
+          className="mb-4 flex w-full items-center gap-3 rounded-[18px] border border-accent/40 bg-accent-soft p-5 text-left"
+        >
+          <span className="flex-1">
+            <span className="block text-lg font-semibold">
+              {formatQuantity(hint.grams)} {hint.name.toLowerCase()} spare after this plan
+            </span>
+            <span className="block text-muted">
+              {hint.topIdea ? `${hint.topIdea.title} would use it${hint.topIdea.missing.length ? ` (needs ${hint.topIdea.missing.join(', ').toLowerCase()})` : ''}. ` : ''}
+              {hint.ideas ? `${hint.ideas} idea${hint.ideas === 1 ? '' : 's'}` : 'No recipes use it yet'}
+            </span>
+          </span>
+          <Icon name="chevronRight" className="size-5 text-accent-text" />
+        </button>
+      )}
       <ErrorNote error={plan.error} />
       {plan.isPending ? (
         <Spinner />
@@ -180,9 +204,24 @@ export function PlannerPage() {
         </div>
       )}
       {adding && <AddSheet target={adding} members={members} onClose={() => setAdding(null)} />}
+      {suggesting && (
+        <SuggestSheet
+          open
+          onClose={() => setSuggesting(null)}
+          defaultDate={firstFreeDinner(plan.data?.days ?? [], me.today)}
+          ingredient={suggesting.ingredient}
+          servings={Math.max(1, members.length)}
+        />
+      )}
+      <PlanWeekSheet open={planningWeek} onClose={() => setPlanningWeek(false)} from={from} to={to} defaultServings={Math.max(1, members.length)} />
       {open && <EntrySheet entry={open} onClose={() => setOpen(null)} />}
     </>
   );
+}
+
+/** The first day from today with no dinner planned (for "Suggest meals"). */
+function firstFreeDinner(days: { date: CalendarDate; entries: PlanEntryDto[] }[], today: CalendarDate): CalendarDate {
+  return days.find((d) => d.date >= today && !d.entries.some((e) => e.slot === 'dinner' && e.status !== 'skipped'))?.date ?? today;
 }
 
 type Tab = 'recipe' | 'stock' | 'product' | 'text';

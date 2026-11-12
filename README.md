@@ -2,7 +2,7 @@
 
 A self-hosted household food app: scan your shopping in, see what's going off, plan meals around what you already have, and build a cheap shopping list that wastes as little as possible.
 
-> Status: phases 1 to 4 are built: **stock**, the **Android app**, **recipes and cooking**, and the **planner and shopping list**. The optimiser, pricing and the dashboard come next (see [the build phases](docs/SPEC.md#build-phases)).
+> Status: phases 1 to 5 are built: **stock**, the **Android app**, **recipes and cooking**, the **planner and shopping list**, and the **waste-aware optimiser and prices**. The dashboard comes next (see [the build phases](docs/SPEC.md#build-phases)).
 
 ## What it does today
 
@@ -13,15 +13,17 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 - **Android app.** Native ML Kit barcode scanning, phone notifications with action buttons, and an offline queue: scans made with no signal are kept and added when you're back online (the web app queues offline scans too). No Firebase: the app checks your server's inbox in the background about every 15 minutes.
 - **Recipes and cooking.** Import recipes from a link (BBC Good Food, Hello Fresh, most blogs), type them in, or let your own Claude add them over MCP. Ingredient lines are matched to your food, with calories per serving. Cook from stock in one go (earliest-expiring first), keep leftovers with the right food-safety dates, or batch cook into fridge and freezer portions. Every cook can be undone.
 - **Meal planner.** Each person's week as breakfast, lunch, dinner and snack, with calories per person (a shared meal is split between who's eating it). Plan recipes, leftovers, food or a note; scan in **Eat** mode to log a snack to your current meal. "Cooking Fish pie tonight?" at meal times with Cooked it / Skip / Move. Planned meals don't lock stock, but using food a planned meal needs gets a warning first.
+- **Use it up.** Recipes sorted into **Cook now** (everything's in stock), **Nearly there** (missing one to three things) and **Use it up** (ranked by how much soon-to-expire food they save, with "Uses spinach (tomorrow)"). In the planner, **Suggest meals** gives ideas with a reason for any day, and **Plan my week** fills the empty slots around what's going off (leftovers first, then freezer portions), for you to swap or remove before anything is planned. Spare food left after the plan ("2.1kg potatoes spare after this plan") shows on the plan and the list, with recipes that would use it. No repeats within a week and excluded tags are set in Settings.
 - **Shopping list.** One shared list, built from the plan (what it needs, minus stock, rounded up to real pack sizes, with what's left over), staples running low, and anything typed in. Tick things off in the shop, then put them away in one tap.
 - **Receipts.** Photograph a receipt, upload or share a photo or PDF, paste one, or forward an online-order email: the whole shop is matched to your food (learning your shop's abbreviations as it goes), checked on one screen and added to stock in one go, ticked off the list, with prices saved. Photos are read by AI if you set a key, or by your own assistant over MCP; the photo is deleted once it's been checked.
+- **Prices (optional, off by default).** Turn prices on in Settings and the list shows an estimated total, each product shows its latest price, and meal suggestions favour cheaper extras. Prices come from receipts, what you type when scanning, and [Open Prices](https://prices.openfoodfacts.org/); no supermarket site is scraped.
 - **Household ready.** Several people and phones see the same stock live. Admin and member roles, invite links, and optional sign-in through a self-hosted identity provider (OpenID Connect).
 - **Installable.** A web app you can add to your phone's home screen; works on desktop with a sidebar layout. Dark mode follows your device.
 - **Self-hosted.** Docker Compose (app + PostgreSQL), nightly database backups and a JSON export.
 
 ## Coming next
 
-The waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
+The dashboard (6): calories per person, waste by week and month, and spending. The full design is in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Try it on Windows (one click)
 

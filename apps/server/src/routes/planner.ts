@@ -22,6 +22,7 @@ import { deliver, prefsOf } from '../notify/notifications';
 import { barcodesFor, loadCatalog, productDto } from '../services/catalog';
 import { createEntry, deleteEntry, earmarks, eatEntry, getEntry, listPlan, logEaten, updateEntry } from '../services/planner';
 import { resolveBarcode } from '../services/scan';
+import { pricingOn } from '../services/pricing';
 import { addItem, buildFromPlan, deleteItems, listShopping, putAway, runningLow, updateItem } from '../services/shopping';
 import { getStockItem, type StockDeps } from '../services/stock';
 
@@ -102,7 +103,10 @@ export async function plannerRoutes(app: FastifyInstance) {
   });
 
   // --- Shopping list -------------------------------------------------------------------
-  app.get('/api/shopping', async (req) => listShopping(ctx.db, requireAuth(req)));
+  app.get('/api/shopping', async (req) => {
+    const auth = requireAuth(req);
+    return listShopping(ctx.db, auth, pricingOn(ctx, auth.household));
+  });
 
   app.post('/api/shopping', async (req) => {
     const auth = requireAuth(req);
@@ -110,7 +114,7 @@ export async function plannerRoutes(app: FastifyInstance) {
     const id = await addItem(ctx.db, auth, input);
     ctx.live.publish(auth.household.id, 'shopping');
     void notifyListChanged(auth.user.id, auth.household.id, auth.user.name, input.text ?? null);
-    return { id, items: await listShopping(ctx.db, auth) };
+    return { id, items: await listShopping(ctx.db, auth, pricingOn(ctx, auth.household)) };
   });
 
   app.patch<{ Params: { id: string } }>('/api/shopping/:id', async (req) => {

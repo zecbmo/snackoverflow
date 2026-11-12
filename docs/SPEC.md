@@ -123,6 +123,9 @@ It works out the surplus for every ingredient: what you have, plus what the shop
 - **Plan my week:** fills the empty slots automatically, then lets the user swap or remove anything before it is final.
 - Rules it respects: servings, no repeat within N days (default 7), excluded tags, and a cap on extra ingredients.
 - Surplus hints also show on the plan and list ("2.1kg potatoes spare after this plan").
+- Scoring, as built: every 100g of at-risk surplus a recipe uses scores 1 point times how soon it goes off (1 / (1 + days left / 2), so food going off today counts most); frozen food, food past its date and food still on the list don't count as at risk. Extras cost 1 point per ingredient to buy, or, with pricing on and prices known, 0.5 points per pound. Recipes needing more than the cap of extras are left out.
+- Plan my week puts leftovers in the fridge into the earliest empty slots before their date, then fills the rest one day at a time (re-working the surplus after each pick, so two recipes don't both count the same spinach). On a day where nothing at risk would be saved, a portion from the freezer comes before cooking from scratch. Each recipe is picked at most once a week, and "no repeat" counts recipes cooked or planned in the last N days.
+- The rules (no-repeat days, excluded tags, cap on extras) are household settings, under Settings → Meal suggestions.
 
 ## Shopping list, pricing and notifications
 

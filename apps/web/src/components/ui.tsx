@@ -91,6 +91,7 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 /** Bottom sheet on phones, centred dialog on wide screens. Uses <dialog> for focus handling and Escape. */
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -100,6 +101,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       onClose={onClose}
       onCancel={(e) => {
         e.preventDefault();
@@ -113,7 +115,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
       {open && (
         <div className="animate-slide-up max-h-[85vh] overflow-y-auto rounded-t-3xl bg-card p-5 pb-8 text-ink sm:rounded-3xl">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-bold">{title}</h2>
+            <h2 id={titleId} className="text-xl font-bold">{title}</h2>
             <button type="button" aria-label="Close" onClick={onClose} className="inline-flex size-11 items-center justify-center rounded-full hover:bg-card-muted">
               <Icon name="close" className="size-5" />
             </button>

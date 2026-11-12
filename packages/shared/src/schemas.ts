@@ -36,7 +36,21 @@ export const updateMeInput = z.object({
   newPassword: password.optional(),
 });
 
+/** Household-wide choices for the optimiser and pricing. */
+export const householdSettingsInput = z.object({
+  pricingEnabled: z.boolean(),
+  /** Don't suggest a recipe cooked or planned within this many days. */
+  noRepeatDays: z.number().int().min(0).max(60),
+  /** Tags the optimiser never suggests (e.g. "dessert"). */
+  excludedTags: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(30),
+  /** Most extra ingredients a suggestion may need buying. */
+  maxExtraIngredients: z.number().int().min(0).max(10),
+});
+export type HouseholdSettings = z.infer<typeof householdSettingsInput>;
+export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = { pricingEnabled: false, noRepeatDays: 7, excludedTags: [], maxExtraIngredients: 3 };
+
 export const updateHouseholdInput = z.object({
+  settings: householdSettingsInput.partial().optional(),
   name: name.optional(),
   timeZone: z
     .string()

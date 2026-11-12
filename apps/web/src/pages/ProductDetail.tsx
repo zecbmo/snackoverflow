@@ -1,13 +1,14 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import type { ProductDto } from '@snackoverflow/shared';
+import { formatPence, formatShortDate, type PriceDto, type ProductDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { BackButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
 import { Button, Card, ErrorNote, Field, PageHeader, Pill, Select, Sheet, Spinner, TextInput } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { amountLabel, dateLabel, toneClasses, toneFor } from '../lib/format';
+import { parsePounds } from '../lib/money';
 import { useLocations, useProduct, useProductStock, useProducts } from '../lib/queries';
 import { ProductForm } from './ProductForm';
 
@@ -87,6 +88,7 @@ export function ProductDetailPage() {
               </ul>
             )}
           </Card>
+          {me.household.settings.pricingEnabled && <PriceCard productId={p.id} />}
           <Card className="p-5">
             <h2 className="mb-2 text-lg font-bold">Best-before</h2>
             <p className="text-muted">
@@ -202,5 +204,63 @@ function MergeSheet({ open, onClose, product }: { open: boolean; onClose: () => 
           ))}
       </ul>
     </Sheet>
+  );
+}
+
+const SOURCE_LABEL: Record<string, string> = { manual: 'typed in', receipt: 'receipt', 'open-prices': 'Open Prices' };
+
+/** Latest price, a short history, and adding one by hand. Only shown when pricing is on. */
+function PriceCard({ productId }: { productId: string }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const history = useQuery({ queryKey: ['products', 'prices', productId], queryFn: () => api.get<PriceDto[]>(`/api/products/${productId}/prices`) });
+  const [amount, setAmount] = useState('');
+  const [store, setStore] = useState('');
+  const pence = parsePounds(amount);
+  const add = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!pence) return;
+    try {
+      await api.post(`/api/products/${productId}/prices`, { pricePence: pence, store: store.trim() || null });
+      setAmount('');
+      await qc.invalidateQueries({ queryKey: ['products'] });
+      await qc.invalidateQueries({ queryKey: ['shopping'] });
+      toast.show('Price saved.');
+    } catch (err) {
+      toast.show(errorMessage(err), { tone: 'error' });
+    }
+  };
+  const rows = history.data ?? [];
+  const latest = rows[0];
+  return (
+    <Card className="p-5">
+      <h2 className="mb-2 text-lg font-bold">Price</h2>
+      {latest ? (
+        <p className="mb-3">
+          <span className="font-display text-2xl font-bold">{formatPence(latest.pricePence)}</span>{' '}
+          <span className="text-muted">
+            {[latest.store, formatShortDate(latest.date), SOURCE_LABEL[latest.source] ?? latest.source].filter(Boolean).join(' · ')}
+          </span>
+        </p>
+      ) : (
+        <p className="mb-3 text-muted">No price yet. Receipts add prices automatically.</p>
+      )}
+      {rows.length > 1 && (
+        <ul className="mb-3 text-sm text-muted">
+          {rows.slice(1, 5).map((r) => (
+            <li key={r.id}>
+              {formatPence(r.pricePence)} · {[r.store, formatShortDate(r.date)].filter(Boolean).join(' · ')}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={add} className="grid grid-cols-[6rem_1fr_auto] items-end gap-2">
+        <Field label="Price (£)">{(id) => <TextInput id={id} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1.55" />}</Field>
+        <Field label="Shop">{(id) => <TextInput id={id} value={store} onChange={(e) => setStore(e.target.value)} placeholder="Optional" />}</Field>
+        <Button type="submit" disabled={!pence}>
+          Add
+        </Button>
+      </form>
+    </Card>
   );
 }

@@ -1,5 +1,5 @@
 import { count, eq } from 'drizzle-orm';
-import { DEFAULT_TIME_ZONE, type HouseholdDto, type UserDto } from '@snackoverflow/shared';
+import { DEFAULT_HOUSEHOLD_SETTINGS, DEFAULT_TIME_ZONE, type HouseholdDto, type HouseholdSettings, type UserDto } from '@snackoverflow/shared';
 import { hashPassword } from '../auth/crypto';
 import type { AppContext, HouseholdRow, UserRow } from '../context';
 import type { Db } from '../db/client';
@@ -10,8 +10,13 @@ export function userDto(u: UserRow): UserDto {
   return { id: u.id, name: u.name, email: u.email, role: u.role };
 }
 
-export function householdDto(h: HouseholdRow): HouseholdDto {
-  return { id: h.id, name: h.name, timeZone: h.timeZone };
+/** The household's settings with defaults filled in. PRICING_ENABLED sets the starting value for pricing. */
+export function householdSettings(h: Pick<HouseholdRow, 'settings'>, pricingDefault = false): HouseholdSettings {
+  return { ...DEFAULT_HOUSEHOLD_SETTINGS, pricingEnabled: pricingDefault, ...(h.settings ?? {}) };
+}
+
+export function householdDto(h: HouseholdRow, pricingDefault = false): HouseholdDto {
+  return { id: h.id, name: h.name, timeZone: h.timeZone, settings: householdSettings(h, pricingDefault) };
 }
 
 export async function userCount(db: Db): Promise<number> {

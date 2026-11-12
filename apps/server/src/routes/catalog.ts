@@ -5,6 +5,7 @@ import { ingredientInput, locationInput, productInput, shelfLifeInput, updatePro
 import { requireAuth } from '../auth/session';
 import { barcodes, ingredients, locations, products, shelfLifeCategories, stockEvents, stockItems } from '../db/schema';
 import { badRequest, conflict, notFound, parse } from '../http';
+import { latestPrices, pricingOn } from '../services/pricing';
 import {
   barcodesFor,
   categoryDto,
@@ -183,8 +184,12 @@ export async function catalogRoutes(app: FastifyInstance) {
       .where(and(...conditions))
       .orderBy(asc(products.name))
       .limit(200);
-    const [catalog, codes] = await Promise.all([loadCatalog(ctx.db, auth.household.id), barcodesFor(ctx.db, rows.map((r) => r.id))]);
-    return rows.map((p) => productDto(p, codes.get(p.id) ?? [], catalog));
+    const [catalog, codes, latest] = await Promise.all([
+      loadCatalog(ctx.db, auth.household.id),
+      barcodesFor(ctx.db, rows.map((r) => r.id)),
+      pricingOn(ctx, auth.household) ? latestPrices(ctx.db, auth.household.id) : null,
+    ]);
+    return rows.map((p) => productDto(p, codes.get(p.id) ?? [], catalog, latest?.get(p.id)?.pricePence ?? null));
   });
 
   app.get<{ Params: { id: string } }>('/api/products/:id', async (req) => {
@@ -194,8 +199,12 @@ export async function catalogRoutes(app: FastifyInstance) {
       .from(products)
       .where(and(eq(products.id, req.params.id), eq(products.householdId, auth.household.id)));
     if (!p) throw notFound('No such product.');
-    const [catalog, codes] = await Promise.all([loadCatalog(ctx.db, auth.household.id), barcodesFor(ctx.db, [p.id])]);
-    return productDto(p, codes.get(p.id) ?? [], catalog);
+    const [catalog, codes, latest] = await Promise.all([
+      loadCatalog(ctx.db, auth.household.id),
+      barcodesFor(ctx.db, [p.id]),
+      pricingOn(ctx, auth.household) ? latestPrices(ctx.db, auth.household.id) : null,
+    ]);
+    return productDto(p, codes.get(p.id) ?? [], catalog, latest?.get(p.id)?.pricePence ?? null);
   });
 
   async function saveBarcodes(householdId: string, productId: string, codes: string[] | undefined) {

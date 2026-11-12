@@ -1,6 +1,6 @@
 /** API response shapes shared by the server and the web app. */
 import type { CalendarDate } from './dates';
-import type { Channel, NotificationPrefs, Nutrition, Role } from './schemas';
+import type { Channel, HouseholdSettings, NotificationPrefs, Nutrition, Role } from './schemas';
 import type { LocationType, ShelfLife, StockState } from './shelfLife';
 import type { DisplayUnit } from './units';
 import type { MealSlot } from './shopping';
@@ -16,6 +16,7 @@ export interface HouseholdDto {
   id: string;
   name: string;
   timeZone: string;
+  settings: HouseholdSettings;
 }
 
 export interface FeaturesDto {
@@ -90,6 +91,8 @@ export interface ProductDto {
   learnedClosedDays: number | null;
   learnedFrozenDays: number | null;
   source: 'off' | 'manual' | 'scan' | 'receipt';
+  /** Latest known price of one pack, in pence; null when pricing is off or unknown. */
+  pricePence: number | null;
 }
 
 export interface StockItemDto {
@@ -381,6 +384,8 @@ export interface ShoppingItemDto {
   /** The spare amount, said the same way. */
   surplusLabel: string | null;
   reason: 'plan' | 'running-low' | 'manual';
+  /** Estimated cost of this line in pence; null when pricing is off or unknown. */
+  pricePence: number | null;
   forMeals: string | null;
   checked: boolean;
   addedByName: string | null;
@@ -442,4 +447,20 @@ export interface ReceiptSummaryDto {
 export interface ReceiptDto extends ReceiptSummaryDto {
   lines: ReceiptLineDto[];
   hasFile: boolean;
+}
+
+export interface PriceDto {
+  id: string;
+  pricePence: number;
+  store: string | null;
+  date: CalendarDate;
+  source: string;
+}
+
+export interface ShoppingEstimateDto {
+  enabled: boolean;
+  totalPence: number | null;
+  /** Unticked items with a price, and without. */
+  priced: number;
+  unpriced: number;
 }

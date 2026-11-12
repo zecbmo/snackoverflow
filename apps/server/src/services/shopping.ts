@@ -23,6 +23,7 @@ import { ingredients, locations, products, shoppingItems, stockEvents, stockItem
 import { notFound } from '../http';
 import { type Catalog, type IngredientRow, loadCatalog } from './catalog';
 import { earmarks } from './planner';
+import { estimateItemPence, ingredientPrices, latestPrices } from './pricing';
 import { addPack, firstLocationOfType, type StockDeps } from './stock';
 
 type ItemRow = typeof shoppingItems.$inferSelect;
@@ -31,7 +32,8 @@ function aisleOf(item: ItemRow, catalog: Catalog): string {
   return (item.ingredientId ? catalog.ingredients.get(item.ingredientId)?.aisle : null) ?? 'Other';
 }
 
-export async function listShopping(db: Db, auth: Auth): Promise<ShoppingItemDto[]> {
+/** The list, grouped by aisle. With `pricing` on, each line gets an estimated cost. */
+export async function listShopping(db: Db, auth: Auth, pricing = false): Promise<ShoppingItemDto[]> {
   const [rows, catalog, people, prods] = await Promise.all([
     db.select().from(shoppingItems).where(eq(shoppingItems.householdId, auth.household.id)).orderBy(asc(shoppingItems.createdAt)),
     loadCatalog(db, auth.household.id),
@@ -40,6 +42,7 @@ export async function listShopping(db: Db, auth: Auth): Promise<ShoppingItemDto[
   ]);
   const names = new Map(people.map((p) => [p.id, p.name]));
   const productsById = new Map(prods.map((p) => [p.id, p]));
+  const [latest, byIngredient] = pricing ? await Promise.all([latestPrices(db, auth.household.id), ingredientPrices(db, auth.household.id)]) : [null, null];
   /** Grams said the way the food is sold: "568ml" for milk, "12 eggs", "2.5kg". */
   const say = (grams: number | null, r: ItemRow): string | null => {
     if (!grams) return null;
@@ -70,6 +73,7 @@ export async function listShopping(db: Db, auth: Auth): Promise<ShoppingItemDto[
       surplusGrams: r.surplusGrams,
       surplusLabel: say(r.surplusGrams, r),
       reason: r.reason,
+      pricePence: latest && byIngredient ? estimateItemPence(r, latest, byIngredient) : null,
       forMeals: r.forMeals,
       checked: r.checked,
       addedByName: r.addedBy ? (names.get(r.addedBy) ?? null) : null,

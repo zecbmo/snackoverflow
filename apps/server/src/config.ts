@@ -52,6 +52,9 @@ const envSchema = z.object({
   SEED_DATA_DIR: optional,
   WEB_DIST_DIR: optional,
   SCHEDULER_ENABLED: bool(true),
+  /** Starting value of the household's pricing switch (changeable in Settings). */
+  PRICING_ENABLED: bool(false),
+  OPEN_PRICES_BASE_URL: z.string().default('https://prices.openfoodfacts.org'),
 });
 
 export type Config = z.infer<typeof envSchema> & {

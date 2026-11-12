@@ -31,7 +31,7 @@ export function features(ctx: AppContext): SessionDto['features'] {
 export function sessionDto(ctx: AppContext, auth: Auth): SessionDto {
   return {
     user: userDto(auth.user),
-    household: householdDto(auth.household),
+    household: householdDto(auth.household, ctx.config.PRICING_ENABLED),
     features: features(ctx),
     today: todayIn(auth.household.timeZone, ctx.now()),
   };

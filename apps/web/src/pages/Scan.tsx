@@ -15,6 +15,7 @@ import { Button, Field, Select, Sheet, TextInput } from '../components/ui';
 import { api, errorMessage, isOffline } from '../lib/api';
 import { enqueueScan, type QueuedScan, removeQueued } from '../lib/offlineQueue';
 import { longDate } from '../lib/format';
+import { parsePounds } from '../lib/money';
 import { useIngredients, useLocations } from '../lib/queries';
 import { beep, useBarcodeScanner } from '../scanner/useBarcodeScanner';
 
@@ -586,7 +587,9 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
 
 function ScanDateSheet({ open, item, onClose, onSaved }: { open: boolean; item: StockItemDto; onClose: () => void; onSaved: (i: StockItemDto) => void }) {
   const [value, setValue] = useState(item.bestBefore ?? '');
+  const [price, setPrice] = useState('');
   const toast = useToast();
+  const pricing = useMe().household.settings.pricingEnabled;
   return (
     <Sheet open={open} onClose={onClose} title="Best-before date">
       <form
@@ -595,6 +598,8 @@ function ScanDateSheet({ open, item, onClose, onSaved }: { open: boolean; item: 
           e.preventDefault();
           try {
             const c = await api.patch<{ item: StockItemDto }>(`/api/stock/${item.id}`, { bestBefore: value || null });
+            const pence = pricing ? parsePounds(price) : null;
+            if (pence) await api.post(`/api/products/${item.productId}/prices`, { pricePence: pence });
             onSaved(c.item);
             toast.show("Saved. We'll use this date next time too.");
             onClose();
@@ -604,6 +609,11 @@ function ScanDateSheet({ open, item, onClose, onSaved }: { open: boolean; item: 
         }}
       >
         <Field label="Best before">{(id) => <TextInput id={id} type="date" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
+        {pricing && (
+          <Field label="Price paid (£)" hint="Optional.">
+            {(id) => <TextInput id={id} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 1.55" />}
+          </Field>
+        )}
         <Button type="submit" variant="primary" size="lg">
           Save
         </Button>

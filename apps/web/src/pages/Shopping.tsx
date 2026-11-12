@@ -5,13 +5,15 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { addDays, type ShoppingItemDto } from '@snackoverflow/shared';
+import { addDays, formatPence, type ShoppingItemDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
 import { Button, Card, EmptyState, ErrorNote, Field, PageHeader, Select, Sheet, Spinner, TextInput } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
-import { useIngredients, useRunningLow, useShopping } from '../lib/queries';
+import { useIngredients, useRunningLow, useShopping, useSurplus, useUsers } from '../lib/queries';
+import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
+import { SuggestSheet } from '../components/OptimiserSheets';
 
 /** "Potatoes, 2.5kg bag", "Red peppers × 3", "Milk × 2". */
 export function itemTitle(i: ShoppingItemDto): string {
@@ -42,8 +44,15 @@ export function ShoppingPage() {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const items = useMemo(() => (list.data ?? []).map((i) => (i.id in pending ? { ...i, checked: pending[i.id]! } : i)), [list.data, pending]);
   const toGet = items.filter((i) => !i.checked);
+  const pricing = me.household.settings.pricingEnabled;
+  const pricedToGet = toGet.filter((i) => i.pricePence !== null);
+  const estimate = pricedToGet.length ? pricedToGet.reduce((sum, i) => sum + i.pricePence!, 0) : null;
   const ticked = items.filter((i) => i.checked);
   const aisles = useMemo(() => [...new Set(items.map((i) => i.aisle))], [items]);
+  const surplus = useSurplus().data ?? [];
+  const people = Math.max(1, useUsers().data?.length ?? 2);
+  const [planning, setPlanning] = useState<PlanTarget | null>(null);
+  const [ideasFor, setIdeasFor] = useState<{ id: string; name: string } | null>(null);
   const biggestSpare = items.filter((i) => !i.checked && (i.surplusGrams ?? 0) >= 200).sort((a, b) => (b.surplusGrams ?? 0) - (a.surplusGrams ?? 0))[0];
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['shopping'] });
@@ -91,7 +100,7 @@ export function ShoppingPage() {
     <>
       <PageHeader
         title="Shopping"
-        subtitle={`${toGet.length} to get`}
+        subtitle={`${toGet.length} to get${pricing && estimate !== null ? ` · about ${formatPence(estimate)}` : ''}`}
         left={<MenuButton />}
         right={
           <button type="button" aria-label="Add to the list" onClick={() => setAdding(true)} className="inline-flex size-14 items-center justify-center rounded-full bg-ink text-bg">
@@ -105,12 +114,39 @@ export function ShoppingPage() {
             The {biggestSpare.packLabel ? `${biggestSpare.packLabel} ` : ''}
             {biggestSpare.text.toLowerCase()} leave {biggestSpare.surplusLabel} spare
           </p>
-          <p className="text-muted">Shops sell whole packs. Plan something else with {biggestSpare.text.toLowerCase()} this week so it gets used.</p>
-          <Link to="/recipes" className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-ink px-4 font-semibold text-bg">
-            Find a recipe
-          </Link>
+          {(() => {
+            const hint = surplus.find((h) => h.ingredientId === biggestSpare.ingredientId);
+            const idea = hint?.topIdea;
+            return (
+              <>
+                <p className="text-muted">
+                  {idea
+                    ? `${idea.title} would use it${idea.missing.length ? ` (you'd also need ${idea.missing.join(', ').toLowerCase()})` : ''}.`
+                    : `Shops sell whole packs. Plan something else with ${biggestSpare.text.toLowerCase()} this week so it gets used.`}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {idea && (
+                    <Button variant="dark" onClick={() => setPlanning({ kind: 'recipe', id: idea.recipeId, title: idea.title, servings: people })}>
+                      Add to plan
+                    </Button>
+                  )}
+                  {hint && hint.ideas > (idea ? 1 : 0) ? (
+                    <Button onClick={() => setIdeasFor({ id: hint.ingredientId, name: hint.name })}>More ideas</Button>
+                  ) : (
+                    !idea && (
+                      <Link to="/recipes" className="inline-flex min-h-11 items-center rounded-xl bg-ink px-4 font-semibold text-bg">
+                        Find a recipe
+                      </Link>
+                    )
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </Card>
       )}
+      <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
+      {ideasFor && <SuggestSheet open onClose={() => setIdeasFor(null)} defaultDate={me.today} ingredient={ideasFor} servings={people} />}
       {low.length > 0 && (
         <Card className="mb-4 flex items-center gap-3 p-4">
           <p className="flex-1">
@@ -155,6 +191,7 @@ export function ShoppingPage() {
                         <span className={`block text-[17px] font-semibold ${i.checked ? 'text-muted line-through' : ''}`}>{itemTitle(i)}</span>
                         {itemDetail(i) && <span className="block text-[15px] text-muted">{itemDetail(i)}</span>}
                       </span>
+                      {pricing && i.pricePence !== null && <span className="whitespace-nowrap text-[17px] font-semibold text-muted">{formatPence(i.pricePence)}</span>}
                       <button type="button" aria-label={`Remove ${i.text}`} onClick={() => void remove(i)} className="inline-flex size-11 items-center justify-center rounded-full text-muted hover:bg-card-muted">
                         <Icon name="close" className="size-5" />
                       </button>
