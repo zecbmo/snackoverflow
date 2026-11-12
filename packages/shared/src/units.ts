@@ -226,3 +226,14 @@ export function parsePackSizes(list: string, defaultUnit: string): ParsedQuantit
     })
     .filter((p): p is ParsedQuantity => p !== null);
 }
+
+/** A pack size as printed: "2.27L", "500g", "1kg", "6 pack". */
+export function formatPackSize(amount: number | null | undefined, unit: string | null | undefined): string {
+  if (!amount || !unit) return '';
+  const u = normaliseUnit(unit);
+  const n = String(Number(amount.toFixed(2)));
+  if (u === 'l') return `${n}L`;
+  if (u === 'count') return `${n} pack`;
+  if (u === 'pint_uk') return `${n} pint${amount === 1 ? '' : 's'}`;
+  return `${n}${u}`;
+}

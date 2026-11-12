@@ -110,6 +110,7 @@ export function ingredientDto(i: IngredientRow, catalog: Catalog): IngredientDto
     countUnit: i.countUnit,
     trackRunningLow: i.trackRunningLow,
     shelfLife: ingredientShelfLife(i, catalog),
+    overrides: { closedDays: i.closedDays, openedDays: i.openedDays, frozenDays: i.frozenDays, defrostedDays: i.defrostedDays },
   };
 }
 

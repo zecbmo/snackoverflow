@@ -1,0 +1,81 @@
+import '@fontsource-variable/inter';
+import '@fontsource-variable/bricolage-grotesque';
+import './index.css';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createBrowserRouter, RouterProvider } from 'react-router';
+import { AppShell } from './components/Layout';
+import { StockActionsProvider } from './components/StockActions';
+import { ToastProvider } from './components/Toast';
+import { ApiError } from './lib/api';
+import { InvitePage, LoginPage, SetupPage } from './pages/Auth';
+import { ComingSoonPage } from './pages/ComingSoon';
+import { IngredientsPage } from './pages/Ingredients';
+import { ItemDetailPage } from './pages/ItemDetail';
+import { LocationsPage } from './pages/Locations';
+import { NotificationsPage } from './pages/Notifications';
+import { PeoplePage } from './pages/People';
+import { ProductDetailPage } from './pages/ProductDetail';
+import { ProductsPage } from './pages/Products';
+import { ProfilePage } from './pages/Profile';
+import { ScanPage } from './pages/Scan';
+import { SettingsPage } from './pages/Settings';
+import { StockPage } from './pages/Stock';
+import { TodayPage } from './pages/Today';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: (count, err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500) && count < 2,
+    },
+  },
+});
+
+const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  { path: '/setup', element: <SetupPage /> },
+  { path: '/invite/:token', element: <InvitePage /> },
+  {
+    element: <AppShell bare />,
+    children: [{ path: '/scan', element: <ScanPage /> }],
+  },
+  {
+    element: <AppShell />,
+    children: [
+      { path: '/', element: <TodayPage /> },
+      { path: '/stock', element: <StockPage /> },
+      { path: '/stock/:id', element: <ItemDetailPage /> },
+      { path: '/plan', element: <ComingSoonPage title="Planner" phase="Meal planning arrives with the planner update." /> },
+      { path: '/shop', element: <ComingSoonPage title="Shopping list" phase="The shopping list arrives with the planner update." /> },
+      { path: '/products', element: <ProductsPage /> },
+      { path: '/products/:id', element: <ProductDetailPage /> },
+      { path: '/ingredients', element: <IngredientsPage /> },
+      { path: '/locations', element: <LocationsPage /> },
+      { path: '/people', element: <PeoplePage /> },
+      { path: '/notifications', element: <NotificationsPage /> },
+      { path: '/settings', element: <SettingsPage /> },
+      { path: '/profile', element: <ProfilePage /> },
+      { path: '*', element: <ComingSoonPage title="Not found" phase="There's nothing here." /> },
+    ],
+  },
+]);
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <StockActionsProvider>
+          <RouterProvider router={router} />
+        </StockActionsProvider>
+      </ToastProvider>
+    </QueryClientProvider>
+  </StrictMode>,
+);
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js');
+  });
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Snack Overflow",
+  "short_name": "Snacks",
+  "description": "Your household's food: stock, best-before dates and meals.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F6F5F1",
+  "theme_color": "#6B4EFF",
+  "lang": "en-GB",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Scan", "url": "/scan", "icons": [{ "src": "/icon.svg", "sizes": "any" }] },
+    { "name": "Stock", "url": "/stock", "icons": [{ "src": "/icon.svg", "sizes": "any" }] }
+  ]
+}

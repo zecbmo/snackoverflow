@@ -53,7 +53,9 @@ export interface TestApp {
 
 const seed = loadSeedData(seedDataDir());
 
-export async function makeTestApp(opts: { now?: string; config?: Partial<Config>; off?: FakeOff } = {}): Promise<TestApp> {
+export async function makeTestApp(
+  opts: { now?: string; config?: Partial<Config>; off?: FakeOff; webDist?: string | null; realClock?: boolean } = {},
+): Promise<TestApp> {
   const client = new PGlite();
   const db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder: migrationsDir() });
@@ -69,9 +71,9 @@ export async function makeTestApp(opts: { now?: string; config?: Partial<Config>
     off,
     push,
     mailer,
-    now: () => now,
+    now: () => (opts.realClock ? new Date() : now),
   };
-  const app = await buildApp(ctx);
+  const app = await buildApp(ctx, { webDist: opts.webDist ?? null });
   return {
     app,
     ctx,

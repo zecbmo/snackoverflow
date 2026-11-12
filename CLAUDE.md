@@ -71,4 +71,20 @@ A change is done when:
 
 ## Commands
 
-Fill this section in once the scaffolding exists (install, dev, test, lint, type-check, build, migrate, docker).
+| Task | Command |
+| --- | --- |
+| Install | `pnpm install` |
+| Dev (API :3000 + web :5173) | `pnpm dev` (needs Postgres; set `DATABASE_URL` in `.env`) |
+| Lint / type-check / tests | `pnpm lint`, `pnpm typecheck`, `pnpm test` (all three: `pnpm check`) |
+| Build | `pnpm build` (web to `apps/web/dist`, server bundle to `apps/server/dist`) |
+| E2E (Playwright) | `pnpm build && pnpm test:e2e` (`PW_CHANNEL=chrome` uses installed Chrome) |
+| New migration after editing `apps/server/src/db/schema.ts` | `pnpm db:generate` (commit the files in `apps/server/drizzle`) |
+| Apply migrations | `pnpm db:migrate` (the server also applies them on start) |
+| Docker | `docker compose up -d --build` |
+
+Notes:
+
+- API tests (`apps/server/test`) run on PGlite (in-memory Postgres) with fake Open Food Facts, push and email; use `makeTestApp()` and `setupAdmin()` from `test/helpers.ts`.
+- The Playwright web server (`apps/server/test/e2e-server.ts`) is the real app on PGlite serving the built web app.
+- Every stock change goes through `apps/server/src/services/stock.ts`, which writes the stock event used for undo.
+- Food-safety rules live in `packages/shared/src/shelfLife.ts`; day counts come from the seed CSVs.

@@ -7,6 +7,7 @@ Starting defaults the app ships with. Every value is a **default the user can ov
 | `shelf-life-defaults.csv` | Days an item keeps by category: closed, opened, frozen and defrosted |
 | `unit-conversions.csv` | Fixed unit sizes, densities for volume → grams, and typical weights for counted items |
 | `pack-sizes.csv` | Typical UK supermarket pack sizes, used to round shopping-list amounts to whole packs |
+| `ingredients.csv` | The starting ingredient list: aisle, which shelf-life category, density and count keys (from `unit-conversions.csv`), pack-size key, "track running low", and alternative names used to match scanned products. It holds no numbers of its own |
 
 ## Safety rules (from UK food-safety guidance — hard-code these, don't make them editable defaults)
 

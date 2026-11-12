@@ -241,6 +241,7 @@ Configuration and secrets come from environment variables (`.env`, never committ
 Each phase ends with a working, deployable app.
 
 1. **Foundation and stock.** Docker stack, users and household, locations, ingredients and products, Open Food Facts lookup, scan in/out, stock screen, open / freeze / defrost / discard, best-before estimates and learning, expiry notifications (web push and email), backups.
+   The scanner's **Eat** mode logs food to a meal slot, so it ships with the planner in phase 4; phase 1 has Add and Use. The Plan and Shop tabs show a "coming soon" note until then.
 2. **Android app.** Capacitor wrapper with native scanning, phone push notifications, offline queue for scans.
 3. **Recipes and cooking.** URL import, AI clean-up, MCP endpoint, unit conversions, ingredient matching, cook with deductions, leftovers, batch cooks, calories.
 4. **Planner and shopping list.** Per-person week planner, planned-stock warnings, meal-time prompts, build list from plan with pack rounding, running-low tracking, put-away mode.

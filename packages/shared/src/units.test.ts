@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseCsv } from './csv';
 import {
+  formatPackSize,
   formatQuantity,
   fromGrams,
   normaliseUnit,
@@ -139,5 +140,14 @@ describe('parsePackSizes', () => {
       { amount: 1000, unit: 'g' },
       { amount: 3, unit: 'count' },
     ]);
+  });
+});
+
+describe('formatPackSize', () => {
+  it('shows the pack as printed', () => {
+    expect(formatPackSize(2.27, 'l')).toBe('2.27L');
+    expect(formatPackSize(500, 'g')).toBe('500g');
+    expect(formatPackSize(4, 'pint_uk')).toBe('4 pints');
+    expect(formatPackSize(null, 'g')).toBe('');
   });
 });

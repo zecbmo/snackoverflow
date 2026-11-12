@@ -60,7 +60,10 @@ export interface IngredientDto {
   gramsPerCount: number | null;
   countUnit: string | null;
   trackRunningLow: boolean;
+  /** Effective shelf life (own values, then the category). */
   shelfLife: ShelfLife;
+  /** Days set on this ingredient itself; null means "from the category". */
+  overrides: Pick<ShelfLife, 'closedDays' | 'openedDays' | 'frozenDays' | 'defrostedDays'>;
 }
 
 export interface ProductDto {
