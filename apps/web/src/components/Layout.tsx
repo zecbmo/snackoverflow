@@ -4,7 +4,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react
 import type { SessionDto } from '@snackoverflow/shared';
 import { api, ApiError } from '../lib/api';
 import { connectLive } from '../lib/live';
-import { configureBackgroundChecks, forgetDevice, requestNotificationPermission } from '../lib/native';
+import { configureBackgroundChecks, flushSharedFile, forgetDevice, requestNotificationPermission } from '../lib/native';
 import { startQueueSync, syncQueue, useQueuedCount } from '../lib/offlineQueue';
 import { hasServer, isNative } from '../lib/platform';
 import { useToast } from './Toast';
@@ -44,6 +44,7 @@ function useMenuSections(): { title: string; links: MenuLink[] }[] {
       links: [
         { to: '/recipes', label: 'Recipes', badge: recipes ? String(recipes) : undefined },
         { to: '/meals', label: 'Batch cooks & leftovers', badge: portions ? String(portions) : undefined },
+        { to: '/receipts', label: 'Receipts' },
         { to: '/products', label: 'Products & barcodes', badge: unnamed ? `${unnamed} unnamed` : undefined },
         { to: '/ingredients', label: 'Ingredients & units' },
       ],
@@ -300,9 +301,13 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
         : undefined,
     [signedIn, qc, toast],
   );
+  const navigateTo = useNavigate();
   useEffect(() => {
-    if (signedIn && isNative()) void requestNotificationPermission().then(configureBackgroundChecks);
-  }, [signedIn]);
+    if (!signedIn || !isNative()) return;
+    void requestNotificationPermission().then(configureBackgroundChecks);
+    // A receipt shared into the app before signing in.
+    flushSharedFile(navigateTo, (msg) => toast.show(msg, { tone: 'error' }));
+  }, [signedIn, navigateTo, toast]);
 
   if (!serverSet) return <Navigate to="/connect" replace />;
   if (session.isPending) return <Spinner />;

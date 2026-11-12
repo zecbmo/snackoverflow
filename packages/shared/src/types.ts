@@ -24,6 +24,8 @@ export interface FeaturesDto {
   email: boolean;
   oidc: { enabled: boolean; displayName: string; allowPassword: boolean };
   backups: boolean;
+  /** Receipts forwarded by email are picked up (RECEIPT_IMAP_HOST set). */
+  receiptEmail: boolean;
   /** AI recipe clean-up is set up (AI_API_KEY). */
   ai: boolean;
   /** The MCP endpoint for assistants is on (MCP_TOKEN); it lives at APP_URL/mcp. */
@@ -87,7 +89,7 @@ export interface ProductDto {
   nutritionPer100g: Nutrition | null;
   learnedClosedDays: number | null;
   learnedFrozenDays: number | null;
-  source: 'off' | 'manual' | 'scan';
+  source: 'off' | 'manual' | 'scan' | 'receipt';
 }
 
 export interface StockItemDto {
@@ -188,7 +190,7 @@ export interface InviteDto {
 
 /** Messages pushed over the WebSocket so every phone stays in step. */
 export type LiveMessage = { type: 'invalidate'; topics: LiveTopic[] };
-export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household' | 'notifications' | 'recipes' | 'plan' | 'shopping';
+export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household' | 'notifications' | 'recipes' | 'plan' | 'shopping' | 'receipts';
 
 export interface NotificationDto {
   id: string;
@@ -405,4 +407,39 @@ export interface EatResultDto {
   product: ProductDto;
   /** The stock change, when it was in stock. */
   change: StockChangeDto | null;
+}
+
+export interface ReceiptLineDto {
+  id: string;
+  text: string;
+  quantity: number;
+  pricePence: number | null;
+  productId: string | null;
+  productName: string | null;
+  ingredientId: string | null;
+  ingredientName: string | null;
+  matchSource: 'alias' | 'list' | 'product' | 'ingredient' | 'none';
+  confidence: 'high' | 'low' | 'none';
+  /** On the shopping list. */
+  onList: boolean;
+  skip: boolean;
+  locationId: string | null;
+  bestBefore: CalendarDate | null;
+}
+
+export interface ReceiptSummaryDto {
+  id: string;
+  source: 'photo' | 'upload' | 'email' | 'text' | 'mcp';
+  status: 'reading' | 'waiting' | 'review' | 'done' | 'failed';
+  store: string | null;
+  purchasedOn: CalendarDate | null;
+  lineCount: number;
+  totalPence: number | null;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface ReceiptDto extends ReceiptSummaryDto {
+  lines: ReceiptLineDto[];
+  hasFile: boolean;
 }

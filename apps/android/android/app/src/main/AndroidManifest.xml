@@ -32,6 +32,14 @@
                 <data android:scheme="snackoverflow" android:host="notification" />
             </intent-filter>
 
+            <!-- Share a receipt photo, screenshot or PDF into the app from any other app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+
         </activity>
 
         <!-- ML Kit barcode scanning (on-device, no Firebase). -->

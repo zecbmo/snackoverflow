@@ -14,6 +14,7 @@ const TYPES: { type: NotificationType; title: string; when: string; channels: Ch
   { type: 'mealTime', title: 'Did you cook it?', when: 'At meal times, for planned meals, with Cooked it, Skip and Move', channels: ['app', 'push'] },
   { type: 'runningLow', title: 'Running low', when: 'When staples look like running out', channels: ['app', 'push'] },
   { type: 'listChanged', title: 'Shopping list changed', when: 'When someone else adds to the list', channels: ['app', 'push'] },
+  { type: 'receiptReady', title: 'Receipt ready to check', when: 'When a receipt you emailed in has been read', channels: ['app', 'push'] },
 ];
 
 const channelName: Record<Channel, string> = { app: 'In the app', push: 'Browser push', email: 'Email' };

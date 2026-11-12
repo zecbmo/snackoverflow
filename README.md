@@ -14,13 +14,14 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 - **Recipes and cooking.** Import recipes from a link (BBC Good Food, Hello Fresh, most blogs), type them in, or let your own Claude add them over MCP. Ingredient lines are matched to your food, with calories per serving. Cook from stock in one go (earliest-expiring first), keep leftovers with the right food-safety dates, or batch cook into fridge and freezer portions. Every cook can be undone.
 - **Meal planner.** Each person's week as breakfast, lunch, dinner and snack, with calories per person (a shared meal is split between who's eating it). Plan recipes, leftovers, food or a note; scan in **Eat** mode to log a snack to your current meal. "Cooking Fish pie tonight?" at meal times with Cooked it / Skip / Move. Planned meals don't lock stock, but using food a planned meal needs gets a warning first.
 - **Shopping list.** One shared list, built from the plan (what it needs, minus stock, rounded up to real pack sizes, with what's left over), staples running low, and anything typed in. Tick things off in the shop, then put them away in one tap.
+- **Receipts.** Photograph a receipt, upload or share a photo or PDF, paste one, or forward an online-order email: the whole shop is matched to your food (learning your shop's abbreviations as it goes), checked on one screen and added to stock in one go, ticked off the list, with prices saved. Photos are read by AI if you set a key, or by your own assistant over MCP; the photo is deleted once it's been checked.
 - **Household ready.** Several people and phones see the same stock live. Admin and member roles, invite links, and optional sign-in through a self-hosted identity provider (OpenID Connect).
 - **Installable.** A web app you can add to your phone's home screen; works on desktop with a sidebar layout. Dark mode follows your device.
 - **Self-hosted.** Docker Compose (app + PostgreSQL), nightly database backups and a JSON export.
 
 ## Coming next
 
-Receipt import (rest of 4), the waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
+The waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Try it on Windows (one click)
 
@@ -57,6 +58,9 @@ Optional features switch on when configured in `.env` and stay hidden otherwise:
 | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`) |
 | Single sign-on | `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`; callback URL is `APP_URL/api/auth/oidc/callback` |
 | Online barcode lookup | on by default; `OFF_ENABLED=false` to turn off |
+| AI recipe clean-up and receipt reading | `AI_API_KEY` (and optionally `AI_MODEL`) |
+| Your own assistant over MCP (recipes, reading receipts) | `MCP_TOKEN`; the endpoint is `APP_URL/mcp` |
+| Receipts by email | `RECEIPT_IMAP_*` and `RECEIPT_ALLOWED_SENDERS`: forward online-order emails to that mailbox (with no allowed senders set, only household members' own addresses are accepted) |
 
 ### Recipes: import, AI clean-up and Claude (MCP)
 

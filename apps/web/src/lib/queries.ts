@@ -10,6 +10,8 @@ import type {
   NotificationSettingsDto,
   PlanDto,
   ProductDto,
+  ReceiptDto,
+  ReceiptSummaryDto,
   RecipeDto,
   RecipeSummaryDto,
   RunningLowDto,
@@ -46,6 +48,8 @@ export const keys = {
   earmarks: ['plan', 'earmarks'] as const,
   shopping: ['shopping'] as const,
   runningLow: ['shopping', 'running-low'] as const,
+  receipts: ['receipts'] as const,
+  receipt: (id: string) => ['receipts', id] as const,
 };
 
 export const useSession = () => useQuery({ queryKey: keys.session, queryFn: () => api.get<SessionDto>('/api/session'), retry: false });
@@ -87,3 +91,11 @@ export const usePlan = (from: string, to: string, person = 'me') =>
 export const useEarmarks = () => useQuery({ queryKey: keys.earmarks, queryFn: () => api.get<EarmarkDto[]>('/api/plan/earmarks') });
 export const useShopping = () => useQuery({ queryKey: keys.shopping, queryFn: () => api.get<ShoppingItemDto[]>('/api/shopping') });
 export const useRunningLow = () => useQuery({ queryKey: keys.runningLow, queryFn: () => api.get<RunningLowDto[]>('/api/running-low') });
+export const useReceipts = () => useQuery({ queryKey: keys.receipts, queryFn: () => api.get<ReceiptSummaryDto[]>('/api/receipts') });
+export const useReceipt = (id: string) =>
+  useQuery({
+    queryKey: keys.receipt(id),
+    queryFn: () => api.get<ReceiptDto>(`/api/receipts/${id}`),
+    // While AI is reading it, check every couple of seconds.
+    refetchInterval: (q) => (q.state.data?.status === 'reading' ? 2000 : false),
+  });

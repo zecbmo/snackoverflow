@@ -64,6 +64,10 @@ describe('MCP endpoint', () => {
       'parse_ingredient_lines',
       'create_recipe',
       'update_recipe',
+      'list_receipts_to_read',
+      'get_receipt_image',
+      'submit_receipt_lines',
+      'add_receipt_text',
     ]);
     expect((await rpc('nope/method')).json().error.code).toBe(-32601);
     expect((await t!.app.inject({ method: 'GET', url: '/mcp', headers: { authorization: `Bearer ${TOKEN}` } })).statusCode).toBe(405);
@@ -115,3 +119,57 @@ describe('MCP endpoint', () => {
     expect(r.data).toMatch(/title/);
   });
 });
+
+describe('MCP receipt tools', () => {
+  it('lists receipts waiting to be read, hands over the image, and takes the lines back', async () => {
+    const { rpc, call } = await setup();
+    const admin = await setupAdminClient();
+    // A tiny PNG uploaded with no AI key: it waits for the assistant.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const { id } = await admin.post<{ id: string }>('/api/receipts/file', { data: png.toString('base64'), type: 'image/png', source: 'photo' });
+    const waiting = await call('list_receipts_to_read', {});
+    expect(waiting.data).toEqual([expect.objectContaining({ id, status: 'waiting', fileType: 'image/png' })]);
+
+    const res = await rpc('tools/call', { name: 'get_receipt_image', arguments: { id } });
+    const content = res.json().result.content as { type: string; data?: string; mimeType?: string }[];
+    expect(content[0]).toEqual({ type: 'image', data: png.toString('base64'), mimeType: 'image/png' });
+
+    const submitted = await call('submit_receipt_lines', {
+      id,
+      store: 'Tesco',
+      date: '2026-11-12',
+      lines: [
+        { text: 'TES SEMI SKM MLK 4PT', quantity: 1, pricePence: 155 },
+        { text: 'CARRIER BAG', quantity: 1, pricePence: 10 },
+      ],
+    });
+    expect(submitted.isError).toBe(false);
+    expect(submitted.data).toMatchObject({ status: 'review', store: 'Tesco', date: '2026-11-12' });
+    expect(submitted.data.lines).toEqual([
+      expect.objectContaining({ text: 'TES SEMI SKM MLK 4PT', matchedTo: 'Milk', skipped: false }),
+      expect.objectContaining({ text: 'CARRIER BAG', skipped: true }),
+    ]);
+    // No longer waiting.
+    expect((await call('list_receipts_to_read', {})).data).toEqual([]);
+  });
+
+  it('adds a receipt from pasted order text', async () => {
+    const { call } = await setup();
+    const r = await call('add_receipt_text', { text: "Sainsbury's\n1 x Basmati Rice 1kg £1.99\nTotal £1.99" });
+    expect(r.data).toMatchObject({ status: 'review', store: "Sainsbury's" });
+    expect(r.data.lines[0]).toMatchObject({ matchedTo: 'Rice', pricePence: 199 });
+  });
+
+  it('rejects bad lines as a tool error', async () => {
+    const { call } = await setup();
+    const r = await call('submit_receipt_lines', { id: '00000000-0000-4000-8000-000000000000', lines: [{ text: '' }] });
+    expect(r.isError).toBe(true);
+  });
+});
+
+/** A signed-in browser client for the same test app (the admin made by setup()). */
+async function setupAdminClient() {
+  const { client, cookieFrom } = await import('./helpers');
+  const res = await t!.app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'admin@example.com', password: 'correct horse battery' } });
+  return client(t!.app, cookieFrom(res));
+}

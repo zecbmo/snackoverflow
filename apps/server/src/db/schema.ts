@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigserial,
+  customType,
   boolean,
   date,
   doublePrecision,
@@ -25,7 +26,15 @@ export const roleEnum = pgEnum('role', ['admin', 'member']);
 export const locationTypeEnum = pgEnum('location_type', ['cupboard', 'fridge', 'freezer']);
 export const stockStateEnum = pgEnum('stock_state', ['closed', 'opened', 'frozen', 'defrosted']);
 export const displayUnitEnum = pgEnum('display_unit', ['g', 'ml', 'count']);
-export const productSourceEnum = pgEnum('product_source', ['off', 'manual', 'scan']);
+export const productSourceEnum = pgEnum('product_source', ['off', 'manual', 'scan', 'receipt']);
+export const receiptSourceEnum = pgEnum('receipt_source', ['photo', 'upload', 'email', 'text', 'mcp']);
+export const receiptStatusEnum = pgEnum('receipt_status', ['reading', 'waiting', 'review', 'done', 'failed']);
+
+/** Binary column. Always hands back a Buffer (PGlite returns a plain Uint8Array). */
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType: () => 'bytea',
+  fromDriver: (v) => (Buffer.isBuffer(v) ? v : Buffer.from(v)),
+});
 export const mealSlotEnum = pgEnum('meal_slot', ['breakfast', 'lunch', 'dinner', 'snack']);
 export const planKindEnum = pgEnum('plan_kind', ['recipe', 'product', 'stock', 'text']);
 export const planStatusEnum = pgEnum('plan_status', ['planned', 'cooked', 'skipped']);
@@ -507,4 +516,92 @@ export const shoppingItems = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('shopping_household_idx').on(t.householdId)],
+);
+
+/** A receipt being imported: read into lines, reviewed, then added to stock. */
+export const receipts = pgTable(
+  'receipts',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    source: receiptSourceEnum('source').notNull(),
+    /** reading: AI is reading it; waiting: needs reading (no AI key: send to your assistant); review; done; failed. */
+    status: receiptStatusEnum('status').notNull(),
+    store: text('store'),
+    purchasedOn: day('purchased_on'),
+    /** The photo or PDF, kept only until the receipt has been reviewed. */
+    file: bytea('file'),
+    fileType: text('file_type'),
+    /** Pasted or emailed text. */
+    rawText: text('raw_text'),
+    error: text('error'),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+  },
+  (t) => [index('receipts_household_idx').on(t.householdId)],
+);
+
+export const receiptLines = pgTable(
+  'receipt_lines',
+  {
+    id: id(),
+    receiptId: uuid('receipt_id')
+      .notNull()
+      .references(() => receipts.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    text: text('text').notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    /** Line total in pence. */
+    pricePence: integer('price_pence'),
+    productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+    ingredientId: uuid('ingredient_id').references(() => ingredients.id, { onDelete: 'set null' }),
+    /** How it was matched: alias (learned), list, product, ingredient, none. */
+    matchSource: text('match_source').notNull().default('none'),
+    confidence: text('confidence').notNull().default('none'),
+    /** Not food (bags, toiletries) or left out by the person reviewing. */
+    skip: boolean('skip').notNull().default(false),
+    locationId: uuid('location_id').references(() => locations.id, { onDelete: 'set null' }),
+    bestBefore: day('best_before'),
+  },
+  (t) => [index('receipt_lines_receipt_idx').on(t.receiptId)],
+);
+
+/** Receipt wording this household has matched before ("TES SEMI SKM MLK 4PT" -> that milk). */
+export const receiptAliases = pgTable(
+  'receipt_aliases',
+  {
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }),
+    ingredientId: uuid('ingredient_id').references(() => ingredients.id, { onDelete: 'cascade' }),
+    /** Learned as "not food": skip it next time. */
+    skip: boolean('skip').notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.householdId, t.key] })],
+);
+
+/** Prices paid, mostly from receipts (used by the optimiser when pricing is on). */
+export const prices = pgTable(
+  'prices',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    store: text('store'),
+    /** Price of one item, in pence. */
+    pricePence: integer('price_pence').notNull(),
+    date: day('date').notNull(),
+    source: text('source').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('prices_product_idx').on(t.productId)],
 );

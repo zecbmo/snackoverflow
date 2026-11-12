@@ -118,3 +118,103 @@ export async function tidyRecipe(config: Config, draft: RecipeDraftDto, catalog:
   }
   return applyTidy(draft, response.parsed_output, catalog);
 }
+
+// --- Receipts -----------------------------------------------------------------------
+
+const ReadReceipt = z.object({
+  store: z.string().nullable(),
+  /** YYYY-MM-DD */
+  date: z.string().nullable(),
+  lines: z.array(
+    z.object({
+      text: z.string(),
+      quantity: z.number(),
+      /** Line total in pence. */
+      pricePence: z.number().nullable(),
+    }),
+  ),
+});
+
+const RECEIPT_SYSTEM = [
+  'You read UK supermarket receipts and online grocery order confirmations for a household food app.',
+  'Return the store name, the date of purchase (YYYY-MM-DD) if shown, and one entry per item bought.',
+  'For each item keep the wording as printed in "text" (include the pack size if printed), the quantity bought, and the line total in pence.',
+  'Leave out totals, subtotals, payment lines, change, loyalty points, savings and discount lines. Keep non-food items (bags, toiletries) as printed: the app skips them itself.',
+  'If a line shows a multibuy like "2 @ 1.25", quantity is 2 and the line total is 250.',
+].join('\n');
+
+/** Read a photo or PDF of a receipt into lines. Only used when AI_API_KEY is set. */
+export async function readReceiptWithAi(config: Config, file: Buffer, fileType: string, f?: typeof fetch) {
+  if (!config.AI_API_KEY) throw badRequest(NOT_SET_UP);
+  const client = new Anthropic({ apiKey: config.AI_API_KEY, timeout: 120_000, maxRetries: 1, ...(f ? { fetch: f } : {}) });
+  const data = file.toString('base64');
+  const media =
+    fileType === 'application/pdf'
+      ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data } }
+      : { type: 'image' as const, source: { type: 'base64' as const, media_type: fileType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', data } };
+  let response;
+  try {
+    response = await client.beta.messages.parse({
+      model: config.AI_MODEL ?? DEFAULT_AI_MODEL,
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: betaZodOutputFormat(ReadReceipt) },
+      system: RECEIPT_SYSTEM,
+      messages: [{ role: 'user', content: [media, { type: 'text', text: 'Read this receipt.' }] }],
+    });
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) throw new Error('The AI key was rejected. Check AI_API_KEY.');
+    if (e instanceof Anthropic.RateLimitError) throw new Error('The AI service is busy. Try again in a minute.');
+    throw new Error("Couldn't reach the AI service. Try again later, or type the receipt in.");
+  }
+  if (response.stop_reason === 'refusal' || !response.parsed_output) throw new Error("The AI couldn't read this receipt. Try a clearer photo, or type it in.");
+  const out = response.parsed_output;
+  const date = out.date && /^\d{4}-\d{2}-\d{2}$/.test(out.date) ? out.date : null;
+  return {
+    store: out.store?.trim().slice(0, 80) || null,
+    date,
+    lines: out.lines
+      .filter((l) => l.text.trim())
+      .slice(0, 300)
+      .map((l) => ({
+        text: l.text.trim().slice(0, 200),
+        quantity: Math.min(99, Math.max(1, Math.round(l.quantity) || 1)),
+        pricePence: l.pricePence !== null && Number.isFinite(l.pricePence) && l.pricePence >= 0 ? Math.round(l.pricePence) : null,
+      })),
+  };
+}
+
+/** Read the text of an online-order email into lines, when the plain parser finds nothing. */
+export async function readReceiptTextWithAi(config: Config, text: string, f?: typeof fetch) {
+  if (!config.AI_API_KEY) throw badRequest(NOT_SET_UP);
+  const client = new Anthropic({ apiKey: config.AI_API_KEY, timeout: 120_000, maxRetries: 1, ...(f ? { fetch: f } : {}) });
+  let response;
+  try {
+    response = await client.beta.messages.parse({
+      model: config.AI_MODEL ?? DEFAULT_AI_MODEL,
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: betaZodOutputFormat(ReadReceipt) },
+      system: RECEIPT_SYSTEM,
+      messages: [{ role: 'user', content: `Read this order confirmation email.\n\n${text.slice(0, 60_000)}` }],
+    });
+  } catch {
+    throw new Error("Couldn't reach the AI service to read that email.");
+  }
+  if (response.stop_reason === 'refusal' || !response.parsed_output) throw new Error("The AI couldn't read that email.");
+  const out = response.parsed_output;
+  return {
+    store: out.store?.trim().slice(0, 80) || null,
+    date: out.date && /^\d{4}-\d{2}-\d{2}$/.test(out.date) ? out.date : null,
+    lines: out.lines
+      .filter((l) => l.text.trim())
+      .slice(0, 300)
+      .map((l) => ({
+        text: l.text.trim().slice(0, 200),
+        quantity: Math.min(99, Math.max(1, Math.round(l.quantity) || 1)),
+        pricePence: l.pricePence !== null && Number.isFinite(l.pricePence) && l.pricePence >= 0 ? Math.round(l.pricePence) : null,
+      })),
+  };
+}

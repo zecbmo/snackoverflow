@@ -38,7 +38,9 @@ export function ShoppingPage() {
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   const [putting, setPutting] = useState<{ added: number; needsScan: ShoppingItemDto[] } | null>(null);
-  const items = useMemo(() => list.data ?? [], [list.data]);
+  // Ticks not saved yet win over whatever the server last said, so a refresh can't flip them back.
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const items = useMemo(() => (list.data ?? []).map((i) => (i.id in pending ? { ...i, checked: pending[i.id]! } : i)), [list.data, pending]);
   const toGet = items.filter((i) => !i.checked);
   const ticked = items.filter((i) => i.checked);
   const aisles = useMemo(() => [...new Set(items.map((i) => i.aisle))], [items]);
@@ -46,13 +48,15 @@ export function ShoppingPage() {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['shopping'] });
   const tick = async (i: ShoppingItemDto) => {
-    qc.setQueryData<ShoppingItemDto[]>(['shopping'], (old) => old?.map((x) => (x.id === i.id ? { ...x, checked: !x.checked } : x)));
+    const checked = !i.checked;
+    setPending((p) => ({ ...p, [i.id]: checked }));
     try {
-      await api.patch(`/api/shopping/${i.id}`, { checked: !i.checked });
+      await api.patch(`/api/shopping/${i.id}`, { checked });
+      await refresh();
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     }
-    await refresh();
+    setPending(({ [i.id]: _done, ...rest }) => rest);
   };
   const remove = async (i: ShoppingItemDto) => {
     await api.del(`/api/shopping/${i.id}`).catch(() => {});

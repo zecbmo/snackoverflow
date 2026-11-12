@@ -13,6 +13,7 @@ import { inboxRoutes } from './routes/inbox';
 import { mcpRoutes } from './routes/mcp';
 import { recipeImportRoutes } from './routes/recipeImport';
 import { plannerRoutes } from './routes/planner';
+import { receiptRoutes } from './routes/receipts';
 import { recipeRoutes } from './routes/recipes';
 import { peopleRoutes } from './routes/people';
 import { stockRoutes } from './routes/stock';
@@ -71,6 +72,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   await app.register(inboxRoutes);
   await app.register(recipeRoutes);
   await app.register(plannerRoutes);
+  await app.register(receiptRoutes);
   await app.register(recipeImportRoutes);
   await app.register(mcpRoutes);
 

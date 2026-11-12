@@ -6,16 +6,22 @@
  * Off unless MCP_TOKEN is set; assistants send it as a Bearer token.
  */
 import { timingSafeEqual } from 'node:crypto';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { type RecipeInput, recipeInput } from '@snackoverflow/shared';
+import { type RecipeInput, recipeInput, receiptLinesInput } from '@snackoverflow/shared';
 import type { Auth } from '../context';
-import { users } from '../db/schema';
+import { receipts, users } from '../db/schema';
 import { HttpError } from '../http';
 import { draftLine, draftLines, getRecipe, listRecipes, saveRecipe } from '../services/recipes';
 import { loadCatalog } from '../services/catalog';
 import { theHousehold } from '../services/household';
+import { getReceipt, receiptFromText, setReceiptLines } from '../services/receipts';
+
+/** A tool result that is already MCP content (e.g. an image), not JSON to wrap in text. */
+class RawContent {
+  constructor(public content: object[]) {}
+}
 
 class RpcError extends Error {
   constructor(
@@ -60,6 +66,16 @@ const recipeProperties = {
   ingredients: { type: 'array', items: ingredientLineSchema },
 } as const;
 
+const receiptLineSchema = {
+  type: 'object',
+  properties: {
+    text: { type: 'string', description: 'The item exactly as printed, including any pack size, e.g. "TES SEMI SKM MLK 4PT".' },
+    quantity: { type: 'integer', minimum: 1, description: 'How many were bought (1 unless the receipt shows more).' },
+    pricePence: { type: ['integer', 'null'], description: 'The line total in pence, e.g. 155 for £1.55. Null if not printed.' },
+  },
+  required: ['text'],
+} as const;
+
 const TOOLS = [
   {
     name: 'list_ingredients',
@@ -94,7 +110,58 @@ const TOOLS = [
     description: 'Replace an existing recipe completely (send every field, including all ingredients and steps). Returns the saved recipe.',
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, ...recipeProperties }, required: ['id', 'title', 'ingredients', 'steps'] },
   },
+  {
+    name: 'list_receipts_to_read',
+    description:
+      'List receipt photos and PDFs the household has added that still need reading (the app has no AI key of its own, or reading failed). Read each with get_receipt_image, then send the items with submit_receipt_lines.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_receipt_image',
+    description: 'Get the photo (or PDF) of a receipt waiting to be read. Read every item line on it.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
+    name: 'submit_receipt_lines',
+    description:
+      'Send the items read from a receipt. Copy each item line as printed, with the quantity and the line total in pence. Leave out totals, subtotals, payment, change, loyalty points and savings lines; keep non-food lines (the app skips them). The household then reviews the matches and adds it all to stock.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        store: { type: ['string', 'null'], description: 'Shop name, e.g. "Tesco".' },
+        date: { type: ['string', 'null'], description: 'Date of purchase as YYYY-MM-DD, if printed.' },
+        lines: { type: 'array', items: receiptLineSchema },
+      },
+      required: ['id', 'lines'],
+    },
+  },
+  {
+    name: 'add_receipt_text',
+    description:
+      'Add a receipt from text: a pasted till receipt or an online grocery order (one item per line with its price on the same line). Use this when the user gives you the text of an order email. Returns the matched lines for the household to review.',
+    inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+  },
 ];
+
+/** What an assistant needs back after sending receipt lines: what each matched to. */
+function receiptSummary(r: Awaited<ReturnType<typeof getReceipt>>) {
+  return {
+    id: r.id,
+    status: r.status,
+    store: r.store,
+    date: r.purchasedOn,
+    message: 'Saved. The household will check the matches in the app and add it all to stock.',
+    lines: r.lines.map((l) => ({
+      text: l.text,
+      quantity: l.quantity,
+      pricePence: l.pricePence,
+      matchedTo: l.productName ?? l.ingredientName,
+      confidence: l.confidence,
+      skipped: l.skip,
+    })),
+  };
+}
 
 function tokenMatches(given: string, expected: string): boolean {
   const a = Buffer.from(given);
@@ -166,6 +233,45 @@ export async function mcpRoutes(app: FastifyInstance) {
         ctx.live.publish(auth.household.id, 'recipes');
         return getRecipe(ctx.db, auth, savedId);
       }
+      case 'list_receipts_to_read': {
+        const rows = await ctx.db
+          .select({ id: receipts.id, createdAt: receipts.createdAt, source: receipts.source, status: receipts.status, fileType: receipts.fileType })
+          .from(receipts)
+          .where(and(eq(receipts.householdId, auth.household.id), inArray(receipts.status, ['waiting', 'failed']), isNotNull(receipts.fileType)))
+          .orderBy(desc(receipts.createdAt));
+        return rows.map((r) => ({ id: r.id, created: r.createdAt.toISOString(), source: r.source, status: r.status, fileType: r.fileType }));
+      }
+      case 'get_receipt_image': {
+        const id = z.string().parse(args.id);
+        const [r] = await ctx.db.select().from(receipts).where(and(eq(receipts.id, id), eq(receipts.householdId, auth.household.id)));
+        if (!r) throw new Error('No such receipt.');
+        if (!r.file || !r.fileType) throw new Error('That receipt has no image (it may already be done).');
+        const data = r.file.toString('base64');
+        const ask = { type: 'text', text: 'Read every item line on this receipt, then call submit_receipt_lines.' };
+        if (r.fileType === 'application/pdf') {
+          return new RawContent([{ type: 'resource', resource: { uri: `snackoverflow://receipts/${r.id}.pdf`, mimeType: 'application/pdf', blob: data } }, ask]);
+        }
+        return new RawContent([{ type: 'image', data, mimeType: r.fileType }, ask]);
+      }
+      case 'submit_receipt_lines': {
+        const id = z.string().parse(args.id);
+        const parsed = receiptLinesInput.safeParse(args);
+        if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
+        const [r] = await ctx.db
+          .select({ id: receipts.id, status: receipts.status })
+          .from(receipts)
+          .where(and(eq(receipts.id, id), eq(receipts.householdId, auth.household.id)));
+        if (!r) throw new Error('No such receipt.');
+        if (r.status === 'done') throw new Error('That receipt has already been added to stock.');
+        await setReceiptLines(ctx.db, auth.household.id, ctx.seed, id, parsed.data);
+        ctx.live.publish(auth.household.id, 'receipts');
+        return receiptSummary(await getReceipt(ctx.db, auth, id, ctx.now()));
+      }
+      case 'add_receipt_text': {
+        const text = z.string().min(3).max(50_000).parse(args.text);
+        const id = await receiptFromText(ctx, auth.household.id, auth.user.id, text, 'mcp');
+        return receiptSummary(await getReceipt(ctx.db, auth, id, ctx.now()));
+      }
       default:
         throw new RpcError(-32602, `Unknown tool: ${name}`);
     }
@@ -198,7 +304,7 @@ export async function mcpRoutes(app: FastifyInstance) {
           const args = (msg.params?.arguments ?? {}) as Record<string, unknown>;
           try {
             const out = await callTool(name, args);
-            result = { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
+            result = out instanceof RawContent ? { content: out.content } : { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
           } catch (e) {
             if (e instanceof RpcError) throw e;
             result = { content: [{ type: 'text', text: e instanceof Error ? e.message : String(e) }], isError: true };

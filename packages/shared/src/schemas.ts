@@ -148,7 +148,7 @@ export const scanInput = z.object({
 
 // --- Notifications ----------------------------------------------------------------
 
-export const NOTIFICATION_TYPES = ['weeklySummary', 'expiresTomorrow', 'mealTime', 'runningLow', 'listChanged'] as const;
+export const NOTIFICATION_TYPES = ['weeklySummary', 'expiresTomorrow', 'mealTime', 'runningLow', 'listChanged', 'receiptReady'] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 /** app = the in-app inbox (the bell) and the Android app's notifications. */
 export const CHANNELS = ['app', 'push', 'email'] as const;
@@ -165,7 +165,7 @@ export const notificationPrefsInput = z.object({
 export type NotificationPrefs = z.infer<typeof notificationPrefsInput>;
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
-  channels: { weeklySummary: ['app', 'push', 'email'], expiresTomorrow: ['app', 'push'], mealTime: ['app', 'push'], runningLow: ['app'], listChanged: [] },
+  channels: { weeklySummary: ['app', 'push', 'email'], expiresTomorrow: ['app', 'push'], mealTime: ['app', 'push'], runningLow: ['app'], listChanged: [], receiptReady: ['app'] },
   quietStart: '22:00',
   quietEnd: '07:00',
 };
@@ -299,3 +299,32 @@ export const updateShoppingItemInput = z.object({
 
 export const buildListInput = z.object({ from: calendarDate, to: calendarDate });
 export const putAwayInput = z.object({ itemIds: z.array(id).max(200).optional() });
+
+// --- Receipts ---------------------------------------------------------------------------
+
+export const receiptTextInput = z.object({ text: z.string().trim().min(3).max(50_000) });
+
+/** Lines read from a receipt by an assistant (MCP) or AI. */
+export const receiptLinesInput = z.object({
+  store: z.string().trim().max(80).nullish(),
+  date: calendarDate.nullish(),
+  lines: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1).max(200),
+        quantity: z.number().int().min(1).max(99).default(1),
+        pricePence: z.number().int().min(0).max(1_000_000).nullish(),
+      }),
+    )
+    .max(300),
+});
+export type ReceiptLinesInput = z.infer<typeof receiptLinesInput>;
+
+export const updateReceiptLineInput = z.object({
+  productId: id.nullish(),
+  ingredientId: id.nullish(),
+  quantity: z.number().int().min(1).max(99).optional(),
+  skip: z.boolean().optional(),
+  locationId: id.optional(),
+  bestBefore: calendarDate.nullish(),
+});

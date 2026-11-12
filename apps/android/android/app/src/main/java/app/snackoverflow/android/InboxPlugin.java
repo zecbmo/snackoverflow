@@ -87,6 +87,24 @@ public class InboxPlugin extends Plugin {
         call.resolve();
     }
 
+    /** A receipt shared into the app from another app, once: { data (base64), type, name }, or {} when there's none. */
+    @PluginMethod
+    public void takeSharedFile(PluginCall call) {
+        SharedFile f = SharedFile.take();
+        JSObject r = new JSObject();
+        if (f != null) {
+            r.put("data", f.data);
+            r.put("type", f.type);
+            r.put("name", f.name);
+        }
+        call.resolve(r);
+    }
+
+    /** Tell the web app a shared receipt is waiting (it then calls takeSharedFile). */
+    void announceSharedFile() {
+        notifyListeners("sharedFile", new JSObject());
+    }
+
     @PluginMethod
     public void requestNotifications(PluginCall call) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || getPermissionState("notifications") == PermissionState.GRANTED) {

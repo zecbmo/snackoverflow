@@ -16,6 +16,39 @@ interface InboxPlugin {
   signOut(): Promise<void>;
   dismiss(options: { id: number }): Promise<void>;
   requestNotifications(): Promise<{ granted: boolean }>;
+  /** A receipt shared in from another app's share sheet, once. */
+  takeSharedFile(): Promise<{ data?: string; type?: string; name?: string }>;
+  addListener(event: 'sharedFile', handler: () => void): Promise<{ remove: () => Promise<void> }>;
+}
+
+/** A shared receipt waiting for the person to sign in. */
+let pendingShare: { data: string; type: string } | null = null;
+
+/**
+ * Upload a receipt shared from another app (photo, screenshot or PDF) and open
+ * its review page. Kept until after sign-in when nobody is signed in yet.
+ */
+async function handleSharedFile(navigate: Navigate, toast: (msg: string) => void): Promise<void> {
+  try {
+    const f = await Inbox.takeSharedFile();
+    if (f.data && f.type) pendingShare = { data: f.data, type: f.type };
+  } catch {
+    // No share support (e.g. an older app build).
+  }
+  if (!pendingShare || !deviceToken()) return;
+  const share = pendingShare;
+  pendingShare = null;
+  try {
+    const { id } = await api.post<{ id: string }>('/api/receipts/file', { data: share.data, type: share.type, source: 'upload' });
+    navigate(`/receipts/${id}`);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't add that receipt.");
+  }
+}
+
+/** Call after signing in on the phone, so a receipt shared before sign-in gets added. */
+export function flushSharedFile(navigate: Navigate, toast: (msg: string) => void): void {
+  if (isNative() && (pendingShare || deviceToken())) void handleSharedFile(navigate, toast);
 }
 
 const Inbox = registerPlugin<InboxPlugin>('Inbox');
@@ -138,7 +171,12 @@ export async function initNative(queryClient: QueryClient, navigate: Navigate, t
 
   await App.addListener('resume', () => {
     void queryClient.invalidateQueries();
+    void handleSharedFile(navigate, toast);
   });
+
+  // Receipts shared in from other apps: at start-up, on resume, and while open.
+  await Inbox.addListener('sharedFile', () => void handleSharedFile(navigate, toast));
+  void handleSharedFile(navigate, toast);
 }
 
 /** For testing on a device: check the inbox now instead of waiting up to 15 minutes. */

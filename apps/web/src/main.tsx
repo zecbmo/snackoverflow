@@ -20,6 +20,8 @@ import { RecipeImportPage } from './pages/RecipeImport';
 import { RecipesPage } from './pages/Recipes';
 import { PlannerPage } from './pages/Planner';
 import { ShoppingPage } from './pages/Shopping';
+import { ReceiptReviewPage } from './pages/ReceiptReview';
+import { ReceiptsPage } from './pages/Receipts';
 import { InboxPage } from './pages/Inbox';
 import { isNative } from './lib/platform';
 import { ComingSoonPage } from './pages/ComingSoon';
@@ -70,6 +72,8 @@ const router = createBrowserRouter([
       { path: '/meals', element: <MealsPage /> },
       { path: '/plan', element: <PlannerPage /> },
       { path: '/shop', element: <ShoppingPage /> },
+      { path: '/receipts', element: <ReceiptsPage /> },
+      { path: '/receipts/:id', element: <ReceiptReviewPage /> },
       { path: '/products', element: <ProductsPage /> },
       { path: '/products/:id', element: <ProductDetailPage /> },
       { path: '/ingredients', element: <IngredientsPage /> },

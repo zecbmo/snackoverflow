@@ -36,6 +36,13 @@
       "when": 1794509170801,
       "tag": "0004_ingredient_pack_unit",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794509328426,
+      "tag": "0005_receipts",
+      "breakpoints": true
     }
   ]
 }
