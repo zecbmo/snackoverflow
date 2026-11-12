@@ -29,11 +29,11 @@ GoogleService-Info.plist
 secrets/
 
 # Local data and Docker volumes
-data/
-pgdata/
-postgres-data/
-backups/
-uploads/
+/data/
+/pgdata/
+/postgres-data/
+/backups/
+/uploads/
 *.sqlite
 *.sqlite3
 *.db

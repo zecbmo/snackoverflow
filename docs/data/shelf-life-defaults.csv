@@ -1,0 +1,40 @@
+category,examples,default_location,closed_days,opened_days,frozen_days,defrosted_days,freezable,source,notes
+raw_poultry,"chicken breasts, thighs, turkey mince",fridge,3,1,90,1,yes,"closed/opened: estimate; frozen/defrosted: FSA",Freeze by use-by date
+raw_red_meat,"steaks, joints, chops",fridge,4,2,120,1,yes,"closed/opened: estimate; frozen/defrosted: FSA",
+raw_mince_sausages,"beef mince, pork sausages",fridge,3,1,90,1,yes,"closed/opened: estimate; frozen/defrosted: FSA",
+bacon,"back bacon, streaky bacon, lardons",fridge,10,3,90,1,yes,"closed: estimate; opened: label; frozen: Which (3-6 months)",
+cooked_sliced_meat,"ham, chicken slices, salami",fridge,7,2,60,1,yes,"closed: estimate; opened: label; frozen: estimate",IFST cites 'once opened use within 2 days' for ham
+raw_fish,"cod, salmon fillets, prawns",fridge,2,1,90,1,yes,"closed/opened: estimate; frozen/defrosted: FSA",
+smoked_fish,"smoked salmon, kippers",fridge,7,2,60,1,yes,"closed: estimate; opened: label; frozen: estimate",
+milk,"semi-skimmed, whole, skimmed",fridge,8,3,30,2,yes,"closed: estimate; opened: label; frozen: Which (1 month)",Freeze before best-before
+cream,"single, double, crème fraîche",fridge,7,3,90,1,yes,"closed: estimate; opened: label; frozen: Which (double cream 3 months)",Single cream may split when frozen
+yogurt,"Greek yogurt, fruit yogurts",fridge,14,3,60,1,yes,"closed/frozen: estimate; opened: label",
+butter,"butter, spreads",fridge,60,30,90,7,yes,"closed/opened: estimate; frozen: Which (3 months)",
+hard_cheese,"cheddar, parmesan, red leicester",fridge,42,7,60,7,yes,"closed: estimate; opened: label (brands say 3-7 days); frozen: Which (2 months)",Grate before freezing
+soft_cheese,"brie, mozzarella, cream cheese, cottage cheese",fridge,14,3,,,no,"estimate; opened: label",Texture suffers when frozen
+eggs,"hen eggs",fridge,21,,,,no,estimate,Do not freeze in shells
+bread,"sliced loaf, rolls, wraps",cupboard,5,5,90,2,yes,"estimate",Freezing on the day of purchase works well
+bagged_salad,"lettuce, mixed leaves, rocket",fridge,5,2,,,no,"closed: estimate; opened: label",
+leafy_greens,"spinach, kale",fridge,5,3,90,1,yes,estimate,Freeze for cooking only
+mushrooms,"button, chestnut",fridge,7,4,90,1,yes,"Which (7 days fridge, 3 months frozen)",
+soft_fruit,"strawberries, raspberries, blueberries",fridge,4,2,180,1,yes,estimate,
+hard_fruit,"apples, pears",fridge,28,,180,1,yes,estimate,
+citrus,"lemons, oranges",fridge,21,5,90,2,yes,estimate,
+bananas,"bananas",cupboard,5,1,90,1,yes,estimate,Freeze peeled for smoothies or baking
+avocado,"avocados",cupboard,5,2,90,1,yes,"closed/opened: estimate; frozen: Which (3 months)",
+tomatoes,"fresh tomatoes",cupboard,7,3,180,1,yes,"closed/opened: estimate; frozen: Which (6 months)",
+root_veg,"carrots, parsnips",fridge,21,,180,1,yes,estimate,
+potatoes,"potatoes, sweet potatoes",cupboard,21,,,,no,estimate,Store cool and dark away from onions; freeze only cooked
+onions_garlic,"onions, shallots, garlic",cupboard,30,7,90,2,yes,estimate,
+fresh_herbs,"coriander, parsley, basil",fridge,5,3,90,1,yes,estimate,
+tinned_food,"chopped tomatoes, beans, tuna, soup",cupboard,730,2,90,1,yes,"closed: estimate; opened: FSS (2 days; move out of the can)",
+jarred_sauce,"pasta sauce, curry sauce",cupboard,365,4,90,1,yes,"closed/frozen: estimate; opened: label",
+pesto,"jarred pesto",cupboard,365,14,90,2,yes,"closed/frozen: estimate; opened: label",Fresh chilled pesto is shorter: use ~5 days
+condiments,"ketchup, mayonnaise, mustard",cupboard,365,60,,,no,"estimate; opened: label",Refrigerate after opening
+dry_goods,"pasta, rice, flour, sugar, lentils",cupboard,365,180,,,no,estimate,
+cereal,"breakfast cereal, oats, granola",cupboard,180,60,,,no,estimate,
+snacks,"crisps, biscuits, chocolate bars",cupboard,180,7,,,no,estimate,
+frozen_bought,"frozen peas, oven chips, ice cream",freezer,180,,180,1,yes,estimate,Bought frozen: closed_days applies in the freezer
+leftovers,"cooked meals, batch-cook portions",fridge,2,2,90,1,yes,FSA,"Eat within 2 days or freeze; reheat once"
+cooked_rice,"cooked rice, rice dishes",fridge,1,1,30,1,yes,"fridge: FSA (1 day); frozen: estimate",Reheat once only
+cooked_pasta,"cooked pasta",fridge,2,2,28,1,yes,"fridge: FSA (leftovers); frozen: Which (4 weeks)",

@@ -1,0 +1,31 @@
+ingredient,pack_sizes,unit,notes
+potatoes,"1000;2000;2500",g,loose also common
+onions,"1000;3 count",g,
+carrots,"500;1000",g,
+red_pepper,"1 count;3 count",count,
+mushrooms,"250;400",g,
+spinach,"200;240",g,bagged
+bagged_salad,"80;120;200",g,
+tomatoes,"250;6 count",g,
+bananas,"5 count",count,
+apples,"6 count",count,
+milk,"568;1136;2272",ml,"1, 2 and 4 pints"
+double_cream,"150;300;600",ml,
+butter,"250",g,
+cheddar,"200;400;800",g,
+greek_yogurt,"170;500;1000",g,
+eggs,"6;12;15",count,
+bread,"400;800",g,
+chicken_breast,"300;650;1000",g,
+chicken_thighs,"500;1000",g,
+beef_mince,"250;500;750",g,
+bacon,"200;300",g,
+sausages,"400;454",g,"6 or 8 count"
+pasta,"500;1000",g,
+rice,"500;1000;2000",g,
+plain_flour,"1500",g,
+sugar,"500;1000",g,
+chopped_tomatoes,"400",g,tin
+baked_beans,"415",g,tin
+olive_oil,"500;1000",ml,
+stock_cubes,"8 count;12 count",count,

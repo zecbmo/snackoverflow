@@ -1,0 +1,48 @@
+type,key,value,unit,notes
+fixed,g,1,g,base unit
+fixed,kg,1000,g,
+fixed,oz,28.35,g,
+fixed,lb,453.6,g,
+fixed,ml,1,ml,converted to grams using the ingredient's density
+fixed,l,1000,ml,
+fixed,tsp,5,ml,
+fixed,tbsp,15,ml,
+fixed,cup_metric,250,ml,UK and Australian recipes
+fixed,cup_us,240,ml,US recipes; default when a recipe says 'cup' and source is US
+fixed,fl_oz_uk,28.41,ml,
+fixed,pint_uk,568,ml,
+fixed,pinch,0.3,g,
+density,water,1.00,g_per_ml,default for any liquid without its own density
+density,milk,1.03,g_per_ml,
+density,cream,1.00,g_per_ml,
+density,oil,0.92,g_per_ml,
+density,honey,1.42,g_per_ml,
+density,plain_flour,0.53,g_per_ml,
+density,self_raising_flour,0.53,g_per_ml,
+density,granulated_sugar,0.85,g_per_ml,
+density,caster_sugar,0.85,g_per_ml,
+density,icing_sugar,0.50,g_per_ml,
+density,brown_sugar,0.90,g_per_ml,packed
+density,butter,0.96,g_per_ml,
+density,rice_uncooked,0.78,g_per_ml,
+density,rolled_oats,0.38,g_per_ml,
+density,salt,1.20,g_per_ml,
+density,grated_cheese,0.40,g_per_ml,loosely packed
+count,onion,150,g,medium
+count,garlic_clove,5,g,
+count,egg,58,g,medium UK egg in shell
+count,carrot,80,g,medium
+count,potato,175,g,medium
+count,tomato,85,g,medium
+count,red_pepper,160,g,
+count,courgette,200,g,
+count,banana,120,g,with skin
+count,apple,150,g,
+count,lemon,100,g,
+count,avocado,170,g,
+count,chicken_breast,150,g,
+count,chicken_thigh,100,g,boneless
+count,sausage,60,g,standard pork sausage
+count,bread_slice,40,g,medium sliced loaf
+count,tin_400,400,g,"standard tin (chopped tomatoes, beans)"
+count,stock_cube,10,g,
