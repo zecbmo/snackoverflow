@@ -1,7 +1,11 @@
 /** React Query hooks for each resource. Keys line up with the server's live-update topics. */
 import { useQuery } from '@tanstack/react-query';
 import type {
+  CalorieStatsDto,
   CookPlanDto,
+  SpendingDto,
+  StatsPeriod,
+  WasteReportDto,
   DeviceDto,
   EarmarkDto,
   IngredientDto,
@@ -22,7 +26,6 @@ import type {
   StockEventDto,
   StockItemDto,
   UserDto,
-  WasteSummaryDto,
 } from '@snackoverflow/shared';
 import { api } from './api';
 
@@ -30,7 +33,6 @@ export const keys = {
   session: ['session'] as const,
   stock: ['stock'] as const,
   stockItem: (id: string) => ['stock', id] as const,
-  waste: ['stock', 'waste'] as const,
   locations: ['locations'] as const,
   products: (q = '', unnamed = false) => ['products', q, unnamed] as const,
   product: (id: string) => ['products', 'one', id] as const,
@@ -59,7 +61,6 @@ export const useSession = () => useQuery({ queryKey: keys.session, queryFn: () =
 export const useStock = () => useQuery({ queryKey: keys.stock, queryFn: () => api.get<StockItemDto[]>('/api/stock') });
 export const useStockItem = (id: string) =>
   useQuery({ queryKey: keys.stockItem(id), queryFn: () => api.get<{ item: StockItemDto; events: StockEventDto[] }>(`/api/stock/${id}`) });
-export const useWaste = () => useQuery({ queryKey: keys.waste, queryFn: () => api.get<WasteSummaryDto>('/api/stats/waste') });
 export const useLocations = () => useQuery({ queryKey: keys.locations, queryFn: () => api.get<LocationDto[]>('/api/locations') });
 export const useProducts = (q = '', unnamed = false) =>
   useQuery({
@@ -113,3 +114,11 @@ export interface SurplusHint {
   topIdea: { recipeId: string; title: string; missing: string[] } | null;
 }
 export const useSurplus = () => useQuery({ queryKey: keys.surplus, queryFn: () => api.get<SurplusHint[]>('/api/optimiser/surplus') });
+
+export const useCalories = (person: string) =>
+  useQuery({ queryKey: ['plan', 'calories', person], queryFn: () => api.get<CalorieStatsDto>(`/api/stats/calories?person=${encodeURIComponent(person)}`) });
+export const useWasteReport = (period: StatsPeriod) =>
+  useQuery({ queryKey: ['stock', 'waste-report', period], queryFn: () => api.get<WasteReportDto>(`/api/stats/waste-report?period=${period}`) });
+/** null while pricing is off. Receipts change it, and confirming one refreshes 'stock'. */
+export const useSpending = (period: StatsPeriod) =>
+  useQuery({ queryKey: ['stock', 'spending', period], queryFn: () => api.get<SpendingDto | null>(`/api/stats/spending?period=${period}`) });

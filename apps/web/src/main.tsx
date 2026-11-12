@@ -25,6 +25,8 @@ import { ReceiptsPage } from './pages/Receipts';
 import { InboxPage } from './pages/Inbox';
 import { isNative } from './lib/platform';
 import { ComingSoonPage } from './pages/ComingSoon';
+import { DashboardPage } from './pages/Dashboard';
+import { WastePage } from './pages/Waste';
 import { IngredientsPage } from './pages/Ingredients';
 import { ItemDetailPage } from './pages/ItemDetail';
 import { LocationsPage } from './pages/Locations';
@@ -72,6 +74,8 @@ const router = createBrowserRouter([
       { path: '/meals', element: <MealsPage /> },
       { path: '/plan', element: <PlannerPage /> },
       { path: '/shop', element: <ShoppingPage /> },
+      { path: '/dashboard', element: <DashboardPage /> },
+      { path: '/waste', element: <WastePage /> },
       { path: '/receipts', element: <ReceiptsPage /> },
       { path: '/receipts/:id', element: <ReceiptReviewPage /> },
       { path: '/products', element: <ProductsPage /> },

@@ -23,6 +23,7 @@ export function PeoplePage() {
   const toast = useToast();
   const [inviting, setInviting] = useState(false);
   const [removing, setRemoving] = useState<UserDto | null>(null);
+  const [targeting, setTargeting] = useState<UserDto | null>(null);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['users'] });
   const setRole = async (u: UserDto, role: Role) => {
@@ -85,10 +86,16 @@ export function PeoplePage() {
                   {u.name}
                   {u.id === me.user.id && <span className="font-normal text-muted"> (you)</span>}
                 </span>
-                <span className="block truncate text-sm text-muted">{u.email}</span>
+                <span className="block truncate text-sm text-muted">
+                  {u.email}
+                  {u.kcalTarget ? ` · ${u.kcalTarget.toLocaleString('en-GB')} kcal a day` : ''}
+                </span>
               </span>
               {isAdmin && u.id !== me.user.id ? (
                 <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setTargeting(u)}>
+                    Target
+                  </Button>
                   <Select aria-label={`Role for ${u.name}`} value={u.role} onChange={(e) => void setRole(u, e.target.value as Role)} className="w-32">
                     <option value="member">Member</option>
                     <option value="admin">Admin</option>
@@ -132,6 +139,7 @@ export function PeoplePage() {
       <Sheet open={inviting} onClose={() => setInviting(false)} title="Invite someone">
         {inviting && <InviteForm onCreated={() => void refresh()} />}
       </Sheet>
+      {targeting && <TargetSheet user={targeting} onClose={() => setTargeting(null)} />}
       <Sheet open={removing !== null} onClose={() => setRemoving(null)} title={`Remove ${removing?.name ?? ''}?`}>
         {removing && (
           <div className="flex flex-col gap-3">
@@ -208,5 +216,36 @@ function InviteForm({ onCreated }: { onCreated: () => void }) {
         Create invite
       </Button>
     </form>
+  );
+}
+
+/** An admin sets someone's daily calorie target (shown on the dashboard). */
+function TargetSheet({ user, onClose }: { user: UserDto; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [value, setValue] = useState(user.kcalTarget ? String(user.kcalTarget) : '');
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.patch(`/api/users/${user.id}`, { kcalTarget: value.trim() ? Number(value) : null });
+      await qc.invalidateQueries({ queryKey: ['users'] });
+      await qc.invalidateQueries({ queryKey: ['plan', 'calories'] });
+      toast.show('Saved.');
+      onClose();
+    } catch (err) {
+      toast.show(errorMessage(err), { tone: 'error' });
+    }
+  };
+  return (
+    <Sheet open onClose={onClose} title={`${user.name}'s calorie target`}>
+      <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
+        <Field label="Calories a day" hint="Leave empty for no target.">
+          {(id) => <TextInput id={id} type="number" inputMode="numeric" min={500} max={10000} step={50} placeholder="2000" value={value} onChange={(e) => setValue(e.target.value)} />}
+        </Field>
+        <Button type="submit" variant="primary" size="lg">
+          Save
+        </Button>
+      </form>
+    </Sheet>
   );
 }

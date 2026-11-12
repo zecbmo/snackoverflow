@@ -30,6 +30,8 @@
   --blue-soft: #e0eafc;
   --blue-text: #1f4fae;
   --scan-bg: #161816;
+  /* Chart bars for days still being logged. */
+  --chart-pending: #c9c5bc;
   color-scheme: light;
 }
 
@@ -58,6 +60,7 @@
     --blue: #5b8ef0;
     --blue-soft: #18284a;
     --blue-text: #a8c4ff;
+    --chart-pending: #4a4d47;
     color-scheme: dark;
   }
 }
@@ -87,6 +90,7 @@
   --color-frozen-soft: var(--blue-soft);
   --color-frozen-text: var(--blue-text);
   --color-scan: var(--scan-bg);
+  --color-chart-pending: var(--chart-pending);
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Bricolage Grotesque Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
 }

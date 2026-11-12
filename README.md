@@ -2,7 +2,7 @@
 
 A self-hosted household food app: scan your shopping in, see what's going off, plan meals around what you already have, and build a cheap shopping list that wastes as little as possible.
 
-> Status: phases 1 to 5 are built: **stock**, the **Android app**, **recipes and cooking**, the **planner and shopping list**, and the **waste-aware optimiser and prices**. The dashboard comes next (see [the build phases](docs/SPEC.md#build-phases)).
+> Status: all six build phases are built: **stock**, the **Android app**, **recipes and cooking**, the **planner and shopping list**, the **waste-aware optimiser and prices**, and the **dashboard** (see [the build phases](docs/SPEC.md#build-phases)).
 
 ## What it does today
 
@@ -17,13 +17,14 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 - **Shopping list.** One shared list, built from the plan (what it needs, minus stock, rounded up to real pack sizes, with what's left over), staples running low, and anything typed in. Tick things off in the shop, then put them away in one tap.
 - **Receipts.** Photograph a receipt, upload or share a photo or PDF, paste one, or forward an online-order email: the whole shop is matched to your food (learning your shop's abbreviations as it goes), checked on one screen and added to stock in one go, ticked off the list, with prices saved. Photos are read by AI if you set a key, or by your own assistant over MCP; the photo is deleted once it's been checked.
 - **Prices (optional, off by default).** Turn prices on in Settings and the list shows an estimated total, each product shows its latest price, and meal suggestions favour cheaper extras. Prices come from receipts, what you type when scanning, and [Open Prices](https://prices.openfoodfacts.org/); no supermarket site is scraped.
+- **Dashboard and waste report.** Calories per day for each person over 7 or 30 days, with 7- and 30-day averages against a daily target you set in your profile (admins can see everyone's). What was binned this month and how it compares with last month at the same point, by item and category, with its value and your spending from receipts when prices are on. On a wide screen, Today shows the week's dinners, calories, waste, running low and the shopping list at a glance.
 - **Household ready.** Several people and phones see the same stock live. Admin and member roles, invite links, and optional sign-in through a self-hosted identity provider (OpenID Connect).
 - **Installable.** A web app you can add to your phone's home screen; works on desktop with a sidebar layout. Dark mode follows your device.
 - **Self-hosted.** Docker Compose (app + PostgreSQL), nightly database backups and a JSON export.
 
-## Coming next
+## What's next
 
-The dashboard (6): calories per person, waste by week and month, and spending. The full design is in [`docs/SPEC.md`](docs/SPEC.md).
+Refinements from real use. The full design is in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Try it on Windows (one click)
 

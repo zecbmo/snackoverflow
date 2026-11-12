@@ -7,7 +7,7 @@ import { households, users } from '../db/schema';
 import { seedHousehold, type SeedData } from '../db/seed';
 
 export function userDto(u: UserRow): UserDto {
-  return { id: u.id, name: u.name, email: u.email, role: u.role };
+  return { id: u.id, name: u.name, email: u.email, role: u.role, kcalTarget: u.kcalTarget ?? null };
 }
 
 /** The household's settings with defaults filled in. PRICING_ENABLED sets the starting value for pricing. */

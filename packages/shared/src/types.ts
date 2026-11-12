@@ -10,6 +10,8 @@ export interface UserDto {
   name: string;
   email: string;
   role: Role;
+  /** Daily calorie target, if they've set one. */
+  kcalTarget: number | null;
 }
 
 export interface HouseholdDto {
@@ -463,4 +465,43 @@ export interface ShoppingEstimateDto {
   /** Unticked items with a price, and without. */
   priced: number;
   unpriced: number;
+}
+
+/** Dashboard: calories per day for one person (or the whole household) over the last 30 days. */
+export interface CalorieStatsDto {
+  personId: string | null;
+  name: string;
+  target: number | null;
+  today: CalendarDate;
+  /** Oldest first, ending today. Only meals marked eaten count. */
+  days: { date: CalendarDate; kcal: number }[];
+  avg7: number | null;
+  avg30: number | null;
+}
+
+export interface WastePeriodDto {
+  start: CalendarDate;
+  label: string;
+  grams: number;
+  /** Value of what was binned, when pricing is on and prices are known. */
+  pence: number | null;
+  items: number;
+}
+
+/** Dashboard and waste report: what was binned, by week or month, item and category. */
+export interface WasteReportDto {
+  period: 'week' | 'month';
+  pricing: boolean;
+  periods: WastePeriodDto[];
+  /** Against the same point in the previous week or month. */
+  changePercent: number | null;
+  byItem: { name: string; grams: number; pence: number | null; items: number }[];
+  byCategory: { name: string; grams: number; pence: number | null }[];
+}
+
+/** Spending from receipts, when pricing is on. */
+export interface SpendingDto {
+  period: 'week' | 'month';
+  periods: { start: CalendarDate; label: string; pence: number; receipts: number }[];
+  changePercent: number | null;
 }

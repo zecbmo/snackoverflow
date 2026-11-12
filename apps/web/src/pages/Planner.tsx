@@ -52,7 +52,12 @@ export function PlannerPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
-  const [adding, setAdding] = useState<{ date: CalendarDate; slot: MealSlot } | null>(null);
+  // "+ Add" on Today's week strip opens the add sheet for that dinner straight away.
+  const [adding, setAdding] = useState<{ date: CalendarDate; slot: MealSlot } | null>(() => {
+    const date = params.get('date');
+    const slot = params.get('add');
+    return date && slot && (MEAL_SLOTS as readonly string[]).includes(slot) ? { date, slot: slot as MealSlot } : null;
+  });
   const [open, setOpen] = useState<PlanEntryDto | null>(null);
   const [showEarlier, setShowEarlier] = useState(false);
   const [suggesting, setSuggesting] = useState<{ ingredient: { id: string; name: string } | null } | null>(null);

@@ -28,12 +28,15 @@ export const appCodeInput = z.object({ code: z.string().min(16).max(200), device
 export const setupInput = z.object({ householdName: name, name, email, password });
 export const acceptInviteInput = z.object({ name, email, password });
 export const createInviteInput = z.object({ email: email.nullish(), role: z.enum(ROLES).default('member') });
-export const updateUserInput = z.object({ name: name.optional(), role: z.enum(ROLES).optional() });
+/** A daily calorie target; null clears it. */
+const kcalTarget = z.number().int().min(500).max(10000).nullable();
+export const updateUserInput = z.object({ name: name.optional(), role: z.enum(ROLES).optional(), kcalTarget: kcalTarget.optional() });
 export const updateMeInput = z.object({
   name: name.optional(),
   email: email.optional(),
   currentPassword: z.string().optional(),
   newPassword: password.optional(),
+  kcalTarget: kcalTarget.optional(),
 });
 
 /** Household-wide choices for the optimiser and pricing. */

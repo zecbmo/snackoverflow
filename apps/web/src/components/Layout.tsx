@@ -50,6 +50,13 @@ function useMenuSections(): { title: string; links: MenuLink[] }[] {
       ],
     },
     {
+      title: 'Insights',
+      links: [
+        { to: '/dashboard', label: 'Dashboard' },
+        { to: '/waste', label: 'Waste report' },
+      ],
+    },
+    {
       title: 'Household',
       links: [
         { to: '/locations', label: 'Locations' },

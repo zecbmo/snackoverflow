@@ -14,6 +14,7 @@ export function ProfilePage() {
   const navigate = useNavigate();
   const [name, setName] = useState(me.user.name);
   const [email, setEmail] = useState(me.user.email);
+  const [target, setTarget] = useState(me.user.kcalTarget ? String(me.user.kcalTarget) : '');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [error, setError] = useState<unknown>(null);
@@ -23,7 +24,8 @@ export function ProfilePage() {
     e.preventDefault();
     setError(null);
     try {
-      await api.patch('/api/me', { name, email });
+      await api.patch('/api/me', { name, email, kcalTarget: target.trim() ? Number(target) : null });
+      await qc.invalidateQueries({ queryKey: ['plan', 'calories'] });
       await Promise.all([qc.invalidateQueries({ queryKey: keys.session }), qc.invalidateQueries({ queryKey: ['users'] })]);
       toast.show('Saved.');
     } catch (err) {
@@ -55,6 +57,9 @@ export function ProfilePage() {
             <Field label="Name">{(id) => <TextInput id={id} required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />}</Field>
             <Field label="Email">
               {(id) => <TextInput id={id} type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />}
+            </Field>
+            <Field label="Daily calorie target" hint="Optional. Shown on the dashboard; leave empty for none.">
+              {(id) => <TextInput id={id} type="number" inputMode="numeric" min={500} max={10000} step={50} placeholder="2000" value={target} onChange={(e) => setTarget(e.target.value)} />}
             </Field>
             <ErrorNote error={error} />
             <Button type="submit" variant="primary" className="self-start">

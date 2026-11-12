@@ -50,6 +50,13 @@
       "when": 1794510780064,
       "tag": "0006_household_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794511617672,
+      "tag": "0007_kcal_target",
+      "breakpoints": true
     }
   ]
 }

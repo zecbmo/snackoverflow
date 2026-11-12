@@ -73,6 +73,8 @@ export const users = pgTable(
     oidcSubject: text('oidc_subject'),
     notificationPrefs: jsonb('notification_prefs').$type<NotificationPrefs>(),
     lastLocationId: uuid('last_location_id'),
+    /** Daily calorie target for the dashboard; null = none set. */
+    kcalTarget: integer('kcal_target'),
     createdAt: createdAt(),
   },
   (t) => [

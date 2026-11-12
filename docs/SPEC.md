@@ -186,8 +186,16 @@ Phone-first, with five tabs (Today, Stock, Scan, Plan, Shop) and Scan as a large
 | Receipt review | Each receipt line with its matched product, quantity, location, best-before and price; uncertain matches highlighted | Fix match, skip line, Add to stock |
 | Recipes (from Planner and Today) | Library with Cook now / Nearly there / Use it up filters | Import URL, Cook, Batch cook, Add to plan |
 | Item detail | Packs with dates and locations, history, product info, shelf-life settings | Edit dates, link to ingredient, merge duplicates |
-| Dashboard (from Today) | Calories per day with 7- and 30-day averages; waste per week/month by item and category (kg, and £ if pricing is on) | Switch person (admins) |
+| Dashboard (from Today) | Calories per day with 7- and 30-day averages against each person's daily target; waste per week/month by item and category (kg, and £ if pricing is on); spending from receipts when pricing is on | Switch person (admins), 7 / 30 days |
+| Waste report (menu) | What was binned by week or month: a chart of the last 8 weeks or 6 months, by item and by category | Week / month |
 | Settings | Household, users and roles, locations, notifications, pricing toggle, AI import key, shelf-life defaults, backups | Invite user, export data |
+
+Dashboard details, as built:
+
+- Calories count meals marked eaten (Cooked it, Eat mode, or logged as eaten). Averages leave out today and days with nothing logged, since an empty day means nobody logged it. Each person can set a daily calorie target in their profile (admins can set anyone's); days over it show in violet. Members see their own calories and the household's; admins can switch to anyone.
+- "Down 40% on October" compares like with like: on 12 November, 1–12 November against 1–12 October.
+- The value of binned food uses the product's latest price per gram, else the ingredient's cheapest known price; spending is the sum of reviewed receipts. Both hide when pricing is off.
+- Charts are plain HTML columns with a tooltip on hover or focus and the numbers as a table, so they work with a screen reader and without colour.
 
 Visual direction: clean, card-based, large touch targets, dark mode. Warm off-white background, near-black ink, a violet accent (#6B4EFF) for primary actions, Bricolage Grotesque headings and Inter body text. Green, amber and red are reserved for freshness (fine, this week, going off); blue marks frozen items. Mock-ups: see the Snack Overflow design canvas.
 

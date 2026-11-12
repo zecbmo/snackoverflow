@@ -9,3 +9,4 @@ export * from './recipes';
 export * from './shopping';
 export * from './receipts';
 export * from './optimiser';
+export * from './stats';

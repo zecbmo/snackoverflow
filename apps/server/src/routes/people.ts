@@ -141,6 +141,7 @@ export async function peopleRoutes(app: FastifyInstance) {
     const input = parse(updateMeInput, req.body);
     const patch: Partial<typeof users.$inferInsert> = {};
     if (input.name) patch.name = input.name;
+    if (input.kcalTarget !== undefined) patch.kcalTarget = input.kcalTarget;
     if (input.email && input.email !== auth.user.email) {
       const other = await getUserByEmail(ctx.db, input.email);
       if (other && other.id !== auth.user.id) throw conflict('Someone already uses that email.');
