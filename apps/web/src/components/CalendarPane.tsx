@@ -3,8 +3,8 @@
  * Collapses to a thin rail like the sidebar. Every item also has a "+" button, so planning
  * works without dragging (keyboard, touch).
  */
-import { useMemo, useState } from 'react';
-import { amountText, type RecipeSummaryDto, type StockItemDto } from '@snackoverflow/shared';
+import { useEffect, useMemo, useState } from 'react';
+import { amountText, type PlanEntryDto, type RecipeSummaryDto, type StockItemDto } from '@snackoverflow/shared';
 import { dateLabel, toneClasses, toneFor } from '../lib/format';
 import { useRecipes, useStock } from '../lib/queries';
 import { groupStock, type StockGroup } from '../lib/stockGroups';
@@ -46,7 +46,14 @@ function readCollapsed(): boolean {
   }
 }
 
-export function CalendarPane({ servings }: { servings: number }) {
+/** The message on the pane while a planned meal is dragged over it. */
+function removeMessage(e: PlanEntryDto): string {
+  if (e.kind === 'recipe') return `Drop here to take ${e.title} off the calendar. Its ingredients come off the planned list.`;
+  if (e.kind === 'product' || e.kind === 'stock') return `Drop here to take ${e.title} off the calendar. It goes back to being free stock.`;
+  return `Drop here to take ${e.title} off the calendar.`;
+}
+
+export function CalendarPane({ servings, removing, onRemove }: { servings: number; removing: PlanEntryDto | null; onRemove: (entryId: string) => void }) {
   const me = useMe();
   const stock = useStock().data;
   const recipes = useRecipes().data;
@@ -54,6 +61,35 @@ export function CalendarPane({ servings }: { servings: number }) {
   const [q, setQ] = useState('');
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [planning, setPlanning] = useState<PlanTarget | null>(null);
+  const [over, setOver] = useState(false);
+  // While a planned meal is dragged, show the tab it came from.
+  useEffect(() => {
+    if (!removing) return setOver(false);
+    setTab(removing.kind === 'recipe' ? 'recipes' : removing.kind === 'stock' ? 'leftovers' : 'stock');
+  }, [removing]);
+  const dropZone = removing && (
+    <div
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const d = readDrag(e);
+        if (d?.type === 'move') onRemove(d.entryId);
+      }}
+      className={`absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 border-2 border-dashed p-6 text-center text-sm backdrop-blur-[1px] ${
+        over ? 'border-accent bg-accent-soft text-accent-text' : 'border-line bg-card/90 text-muted'
+      }`}
+    >
+      <Icon name="undo" className="size-6" />
+      <p className="font-medium">{removeMessage(removing)}</p>
+    </div>
+  );
   const toggle = () =>
     setCollapsed((c) => {
       try {
@@ -71,6 +107,7 @@ export function CalendarPane({ servings }: { servings: number }) {
   if (collapsed) {
     return (
       <aside aria-label="Food to plan" className="sticky top-0 hidden h-screen w-11 shrink-0 flex-col items-center gap-2 border-l border-line bg-card pt-3 lg:flex">
+        {removing && <div className="absolute inset-0 [&>div]:p-1 [&>div>p]:hidden">{dropZone}</div>}
         <button type="button" onClick={toggle} aria-label="Show stock, recipes and leftovers" title="Stock, recipes and leftovers" className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-card-muted hover:text-ink">
           <Icon name="sidebar" className="size-[18px] -scale-x-100" />
         </button>
@@ -114,6 +151,7 @@ export function CalendarPane({ servings }: { servings: number }) {
 
   return (
     <aside aria-label="Food to plan" className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-l border-line bg-card lg:flex xl:w-80">
+      {dropZone}
       <div className="flex h-14 shrink-0 items-center gap-2 px-3">
         <p className="flex-1 text-sm font-semibold">Drag onto the calendar</p>
         <button type="button" onClick={toggle} aria-label="Hide stock, recipes and leftovers" title="Hide" className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-card-muted hover:text-ink">

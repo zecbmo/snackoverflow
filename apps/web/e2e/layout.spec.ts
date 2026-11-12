@@ -58,4 +58,11 @@ test('drag a recipe onto the calendar, then move it to another day', async ({ pa
   const plan = await (await page.request.get(`/api/plan?from=${today}&to=${tomorrow}`)).json();
   const entries = plan.days.flatMap((d: { entries: { title: string; date: string; slot: string }[] }) => d.entries).filter((e: { title: string }) => e.title === title);
   expect(entries).toEqual([expect.objectContaining({ date: tomorrow, slot: 'dinner' })]);
+
+  // Dragging it back to the pane takes it off the calendar; Undo puts it back.
+  await page.getByRole('cell').getByRole('button', { name: new RegExp(title) }).dragTo(pane);
+  await expect(page.getByText(`Took ${title} off the calendar.`)).toBeVisible();
+  await expect(page.getByRole('cell').getByRole('button', { name: new RegExp(title) })).toHaveCount(0);
+  await page.getByRole('status').filter({ hasText: `Took ${title} off the calendar.` }).getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByRole('cell').getByRole('button', { name: new RegExp(title) })).toBeVisible();
 });

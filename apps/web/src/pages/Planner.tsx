@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
 import { PickerMenu } from '../components/Menu';
-import { PageTop, Toolbar } from '../components/Toolbar';
+import { PageTop, Segmented, Toolbar } from '../components/Toolbar';
 import { Button, Card, ErrorNote, Field, IconButton, Select, Sheet, Spinner, TextInput } from '../components/ui';
 import { useIsDesktop } from '../lib/useMedia';
 import { api, errorMessage } from '../lib/api';
@@ -112,6 +112,47 @@ export function PlannerPage() {
   };
 
   const [dropAt, setDropAt] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<PlanEntryDto | null>(null);
+  /** A meal's calories: everything in it that wasn't skipped. */
+  const mealKcal = (entries: PlanEntryDto[]) => entries.filter((e) => e.status !== 'skipped').reduce((n, e) => n + (e.kcal ?? 0), 0);
+  /** Dropped back on the pane: take it off the calendar (its food comes off the planned list too), with Undo. */
+  const remove = async (id: string) => {
+    const entry = plan.data?.days.flatMap((x) => x.entries).find((x) => x.id === id);
+    setDragging(null);
+    if (!entry) return;
+    const refresh = async () => {
+      await qc.invalidateQueries({ queryKey: ['plan'] });
+      await qc.invalidateQueries({ queryKey: ['stock'] });
+    };
+    try {
+      await api.del(`/api/plan/${entry.id}`);
+      await refresh();
+      toast.show(`Took ${entry.title} off the calendar.`, {
+        action: {
+          label: 'Undo',
+          onClick: async () =>
+            void (await api.post('/api/plan', {
+              date: entry.date,
+              slot: entry.slot,
+              kind: entry.kind,
+              servings: entry.servings,
+              people: entry.people.map((p) => ({ userId: p.userId, portions: p.portions })),
+              eaten: entry.status === 'cooked',
+              ...(entry.kind === 'recipe'
+                ? { recipeId: entry.recipeId }
+                : entry.kind === 'product'
+                  ? { productId: entry.productId }
+                  : entry.kind === 'stock'
+                    ? { stockItemId: entry.stockItemId }
+                    : { text: entry.title, kcalPerServing: entry.kcalPerServing }),
+            }),
+            await refresh()),
+        },
+      });
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
   /** Something dropped on a day and meal: plan it, or move the planned meal there. Both can be undone. */
   const drop = async (date: CalendarDate, slot: MealSlot, d: CalendarDrag) => {
     const where = `${SLOT_LABEL[slot].toLowerCase()} on ${dayLabel(date, me.today, true)}`;
@@ -162,9 +203,12 @@ export function PlannerPage() {
       <span aria-hidden className={`mt-1 size-2 shrink-0 rounded-full ${e.status === 'cooked' ? 'bg-fresh-green' : e.status === 'skipped' ? 'bg-transparent' : 'border border-muted'} ${compact ? '' : 'mt-0'}`} />
       <span className={`min-w-0 flex-1 ${compact ? 'line-clamp-2' : 'text-[1.0625rem]'} ${e.status === 'skipped' ? 'text-muted line-through' : ''}`}>{e.title}</span>
       {compact ? (
-        e.kcal !== null && <span className="shrink-0 text-[0.6875rem] text-muted tabular-nums">{e.kcal}</span>
+        <span className="shrink-0 text-right text-[0.6875rem] leading-tight text-muted tabular-nums">
+          {shortAmount(e) && <span className="block font-medium text-ink/70">{shortAmount(e)}</span>}
+          {e.kcal !== null && <span className="block">{e.kcal}</span>}
+        </span>
       ) : (
-        <span className="whitespace-nowrap text-[0.9375rem] text-muted">{[e.detail, e.kcal !== null ? e.kcal : null].filter((x) => x !== null && x !== '').join(' · ')}</span>
+        <span className="whitespace-nowrap text-[0.9375rem] text-muted">{[shortAmount(e), e.detail, e.kcal !== null ? `${e.kcal} kcal` : null].filter((x) => x !== null && x !== '').join(' · ')}</span>
       )}
       <span className="sr-only">{e.status === 'cooked' ? '(done)' : e.status === 'skipped' ? '(skipped)' : '(planned)'}</span>
     </button>
@@ -268,20 +312,37 @@ export function PlannerPage() {
                         }`}
                       >
                         {entries.map((e) => (
-                          <div key={e.id} draggable onDragStart={(ev) => startDrag(ev, { type: 'move', entryId: e.id, title: e.title })} onDragEnd={() => setDropAt(null)} className="cursor-grab active:cursor-grabbing">
+                          <div
+                            key={e.id}
+                            draggable
+                            onDragStart={(ev) => {
+                              startDrag(ev, { type: 'move', entryId: e.id, title: e.title });
+                              setDragging(e);
+                            }}
+                            onDragEnd={() => {
+                              setDropAt(null);
+                              setDragging(null);
+                            }}
+                            className="cursor-grab active:cursor-grabbing"
+                          >
                             {entryButton(e, true)}
                           </div>
                         ))}
-                        <div className={`mt-auto flex items-center gap-0.5 ${entries.length ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : ''}`}>
+                        <div className="mt-auto flex items-center gap-0.5">
                           <button
                             type="button"
                             aria-label={addLabel(day.date, slot)}
                             onClick={() => setAdding({ date: day.date, slot })}
-                            className="inline-flex h-6 flex-1 items-center gap-1 rounded px-1 text-xs text-muted hover:bg-card-muted hover:text-ink"
+                            className={`inline-flex h-6 items-center gap-1 rounded px-1 text-xs text-muted hover:bg-card-muted hover:text-ink ${entries.length ? 'opacity-0 group-hover:opacity-100 focus:opacity-100' : ''}`}
                           >
                             <Icon name="plus" className="size-3.5" /> Add
                           </button>
                           {scanLink(day.date, slot, 'inline-flex size-6 items-center justify-center rounded text-muted hover:bg-card-muted hover:text-ink')}
+                          {mealKcal(entries) > 0 && (
+                            <span className="ml-auto whitespace-nowrap text-[0.6875rem] font-semibold tabular-nums text-ink/70" title={`${SLOT_LABEL[slot]} total`}>
+                              {mealKcal(entries).toLocaleString('en-GB')} kcal
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -305,6 +366,7 @@ export function PlannerPage() {
                     <section key={slot} className="border-b border-line py-1 last:border-b-0">
                       <div className="flex items-center gap-1">
                         <h3 className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted">{SLOT_LABEL[slot]}</h3>
+                        {mealKcal(entries) > 0 && <span className="text-sm font-semibold tabular-nums">{mealKcal(entries).toLocaleString('en-GB')} kcal</span>}
                         {scanLink(day.date, slot, 'inline-flex size-11 items-center justify-center text-accent-text')}
                         <button type="button" aria-label={addLabel(day.date, slot)} onClick={() => setAdding({ date: day.date, slot })} className="inline-flex size-11 items-center justify-center text-accent-text">
                           <Icon name="plus" className="size-5" />
@@ -327,7 +389,7 @@ export function PlannerPage() {
         <PlanWeekSheet open={planningWeek} onClose={() => setPlanningWeek(false)} from={from} to={to} defaultServings={Math.max(1, members.length)} />
         {open && <EntrySheet entry={open} onClose={() => setOpen(null)} />}
       </div>
-      {desktop && <CalendarPane servings={Math.max(1, members.length)} />}
+      {desktop && <CalendarPane servings={Math.max(1, members.length)} removing={dragging} onRemove={(id) => void remove(id)} />}
     </div>
   );
 }
@@ -511,6 +573,82 @@ function AddSheet({ target, members, onClose }: { target: { date: CalendarDate; 
   );
 }
 
+/** True when a planned food was set by weight (a fraction of an item) rather than a count. */
+const byWeight = (e: Pick<PlanEntryDto, 'servings' | 'unitGrams'>) => e.unitGrams !== null && Math.abs(e.servings - Math.round(e.servings)) > 0.001;
+
+/** A short amount for the calendar card: "×2", "150g", or nothing for one of something. */
+function shortAmount(e: PlanEntryDto): string {
+  if (e.kind === 'text') return '';
+  if (byWeight(e)) return amountText(e.servings * e.unitGrams!, { displayUnit: e.displayUnit });
+  return e.servings === 1 ? '' : `×${e.servings}`;
+}
+
+/** "2 servings", "1 item", "150g". */
+function amountWords(e: PlanEntryDto): string {
+  if (e.kind === 'text') return '';
+  if (e.kind === 'recipe') return `${e.servings} ${e.servings === 1 ? 'serving' : 'servings'}`;
+  if (byWeight(e)) return amountText(e.servings * e.unitGrams!, { displayUnit: e.displayUnit });
+  const noun = e.kind === 'stock' ? 'portion' : 'item';
+  return `${e.servings} ${noun}${e.servings === 1 ? '' : 's'}`;
+}
+
+/** How much of it: servings for a recipe; items or a weight for food and leftovers. */
+function AmountEditor({ entry }: { entry: PlanEntryDto }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const canWeigh = entry.kind !== 'recipe' && entry.unitGrams !== null;
+  const unit = entry.displayUnit === 'ml' ? 'ml' : 'g';
+  const [mode, setMode] = useState<'items' | 'weight'>(byWeight(entry) ? 'weight' : 'items');
+  const [value, setValue] = useState(byWeight(entry) ? String(Math.round(entry.servings * entry.unitGrams!)) : String(entry.servings));
+  const number = Number(value);
+  const servings = mode === 'weight' && entry.unitGrams ? number / entry.unitGrams : number;
+  const valid = Number.isFinite(number) && number > 0 && servings <= 100;
+  const save = async () => {
+    try {
+      await api.patch(`/api/plan/${entry.id}`, { servings: Math.round(servings * 1000) / 1000 });
+      await qc.invalidateQueries({ queryKey: ['plan'] });
+      toast.show('Amount changed.');
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
+  const switchMode = (m: 'items' | 'weight') => {
+    if (m === mode || !entry.unitGrams) return;
+    setValue(m === 'weight' ? String(Math.round((Number(value) || 1) * entry.unitGrams)) : String(Math.max(1, Math.round((Number(value) || entry.unitGrams) / entry.unitGrams))));
+    setMode(m);
+  };
+  return (
+    <form
+      className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-card-muted p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) void save();
+      }}
+    >
+      <Field label={entry.kind === 'recipe' ? 'Servings' : mode === 'weight' ? `Amount (${unit})` : entry.kind === 'stock' ? 'Portions' : 'Items'}>
+        {(id) => <TextInput id={id} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} className="w-28" />}
+      </Field>
+      {canWeigh && (
+        <Segmented
+          label="Measure by"
+          value={mode}
+          onChange={switchMode}
+          options={[
+            { value: 'items', label: entry.kind === 'stock' ? 'Portions' : 'Items' },
+            { value: 'weight', label: unit === 'ml' ? 'Volume' : 'Weight' },
+          ]}
+        />
+      )}
+      <Button type="submit" disabled={!valid}>
+        Update
+      </Button>
+      {canWeigh && mode === 'items' && (
+        <p className="w-full text-xs text-muted">One item is {amountText(entry.unitGrams!, { displayUnit: entry.displayUnit })}. For multipacks, set the size of one item on the product.</p>
+      )}
+    </form>
+  );
+}
+
 function EntrySheet({ entry, onClose }: { entry: PlanEntryDto; onClose: () => void }) {
   const me = useMe();
   const qc = useQueryClient();
@@ -536,10 +674,12 @@ function EntrySheet({ entry, onClose }: { entry: PlanEntryDto; onClose: () => vo
   return (
     <Sheet open onClose={onClose} title={entry.title}>
       <p className="mb-4 text-muted">
-        {SLOT_LABEL[entry.slot]} · {entry.servings} {entry.kind === 'recipe' ? 'servings' : entry.kind === 'stock' ? 'portions' : ''}
+        {SLOT_LABEL[entry.slot]}
+        {amountWords(entry) ? ` · ${amountWords(entry)}` : ''}
         {entry.kcal !== null ? ` · ${entry.kcal} kcal` : ''}
         {entry.people.length ? ` · ${entry.people.map((p) => (p.userId === me.user.id ? 'you' : p.name)).join(' + ')}` : ''}
       </p>
+      {!moving && entry.kind !== 'text' && <AmountEditor key={`${entry.id}-${entry.servings}`} entry={entry} />}
       {moving ? (
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">

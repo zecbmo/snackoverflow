@@ -55,6 +55,15 @@ interface Props<T> {
 
 const interactive = 'button, a, input, select, textarea, label, [role="menu"], [role="menuitem"]';
 
+/** A small coloured dot with its meaning as a tooltip (and for screen readers). */
+export function StatusDot({ className, meaning }: { className: string; meaning: string }) {
+  return (
+    <span role="img" aria-label={meaning} title={meaning} className="inline-flex size-4 cursor-help items-center justify-center">
+      <span className={`inline-block size-2 rounded-full ${className}`} />
+    </span>
+  );
+}
+
 export function DataTable<T>(props: Props<T>) {
   const desktop = useIsDesktop();
   const groups: TableGroup<T>[] = props.groups ?? [{ key: '', label: null, rows: props.rows ?? [] }];

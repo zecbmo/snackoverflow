@@ -38,7 +38,7 @@ import { ProductDetailPage } from './pages/ProductDetail';
 import { ProductsPage } from './pages/Products';
 import { ProfilePage } from './pages/Profile';
 import { ScanPage } from './pages/Scan';
-import { SettingsPage } from './pages/Settings';
+import { SettingsPage, ShelfLifePage } from './pages/Settings';
 import { StockPage } from './pages/Stock';
 import { TodayPage } from './pages/Today';
 
@@ -105,6 +105,7 @@ const router = createBrowserRouter([
           { path: '/people', element: <PeoplePage /> },
           { path: '/notifications', element: <NotificationsPage /> },
           { path: '/settings', element: <SettingsPage /> },
+          { path: '/shelf-life', element: <ShelfLifePage /> },
           { path: '/profile', element: <ProfilePage /> },
         ],
       },

@@ -7,12 +7,13 @@ import { NavLink } from 'react-router';
 import { useProducts } from '../lib/queries';
 import { Icon, type IconName } from './Icon';
 
-export const SETTINGS_PATHS = ['/settings', '/products', '/ingredients', '/locations', '/people', '/notifications', '/profile'];
+export const SETTINGS_PATHS = ['/settings', '/shelf-life', '/products', '/ingredients', '/locations', '/people', '/notifications', '/profile'];
 
 export function SettingsShell({ children }: { children: ReactNode }) {
   const unnamed = useProducts('', true).data?.length ?? 0;
   const links: { to: string; label: string; icon: IconName; badge?: string }[] = [
     { to: '/settings', label: 'General', icon: 'sliders' },
+    { to: '/shelf-life', label: 'Shelf life', icon: 'calendar' },
     { to: '/products', label: 'Products & barcodes', icon: 'tag', badge: unnamed ? `${unnamed} new` : undefined },
     { to: '/ingredients', label: 'Ingredients & units', icon: 'leaf' },
     { to: '/locations', label: 'Locations', icon: 'pin' },

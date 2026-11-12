@@ -2,7 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import type { StockItemDto } from '@snackoverflow/shared';
-import { type Column, DataTable } from '../components/DataTable';
+import { type Column, DataTable, StatusDot } from '../components/DataTable';
 import { MenuButton, useMe } from '../components/Layout';
 import { SidePanel, usePanelParam } from '../components/SidePanel';
 import { StockItemDetail } from '../components/StockItemDetail';
@@ -11,7 +11,7 @@ import { useToast } from '../components/Toast';
 import { PageTop } from '../components/Toolbar';
 import { Button, EmptyState, Pill, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
-import { amountLabel, dateLabel, toneClasses, toneFor } from '../lib/format';
+import { amountLabel, dateLabel, toneClasses, toneFor, toneMeaning } from '../lib/format';
 import { type CookRow, useCooks, useStock, useStockItem } from '../lib/queries';
 
 export function MealsPage() {
@@ -37,7 +37,7 @@ export function MealsPage() {
 
   const pill = (m: StockItemDto) => <Pill className={toneClasses[toneFor(m, me.today)].pill}>{dateLabel(m.bestBefore, me.today)}</Pill>;
   const columns: Column<StockItemDto>[] = [
-    { key: 'status', header: <span className="sr-only">Freshness</span>, className: 'w-6 pr-0', cell: (m) => <span aria-hidden className={`inline-block size-2 rounded-full ${toneClasses[toneFor(m, me.today)].dot}`} /> },
+    { key: 'status', header: <span className="sr-only">Freshness</span>, className: 'w-6 pr-0', cell: (m) => <StatusDot className={toneClasses[toneFor(m, me.today)].dot} meaning={toneMeaning[toneFor(m, me.today)]} /> },
     { key: 'name', header: 'Meal', primary: true, cell: (m) => m.productName },
     { key: 'where', header: 'Where', cell: (m) => m.locationName },
     { key: 'left', header: 'Left', className: 'whitespace-nowrap', cell: (m) => amountLabel(m) },

@@ -21,7 +21,6 @@ export function SettingsPage() {
         <div className="flex flex-col gap-4 [&>*]:scroll-mt-4">
           <AppearanceCard />
           <HouseholdCard />
-          <ShelfLifeCard />
           <PricesCard />
           <SuggestionsCard />
           {isAdmin && me.features.backups && <BackupsCard />}
@@ -124,6 +123,16 @@ const DAY_FIELDS = [
   ['frozenDays', 'Frozen'],
   ['defrostedDays', 'Defrosted'],
 ] as const;
+
+/** Shelf-life defaults on their own settings page. */
+export function ShelfLifePage() {
+  return (
+    <div className="max-w-4xl">
+      <PageTop title="Shelf life" left={<MenuButton />} />
+      <ShelfLifeCard />
+    </div>
+  );
+}
 
 function ShelfLifeCard() {
   const categories = useShelfLife();

@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { addDays, amountText, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
-import { type Column, DataTable } from '../components/DataTable';
+import { type Column, DataTable, StatusDot } from '../components/DataTable';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { Menu, PickerMenu } from '../components/Menu';
@@ -18,7 +18,7 @@ import { useToast } from '../components/Toast';
 import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
 import { Button, EmptyState, ErrorNote, Pill, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
-import { dateLabel, type Tone, toneClasses, toneFor } from '../lib/format';
+import { dateLabel, type Tone, toneClasses, toneFor, toneMeaning } from '../lib/format';
 import { useEarmarks, useLocations, useShopping, useStock, useStockItem } from '../lib/queries';
 import { groupStock, type StockGroup } from '../lib/stockGroups';
 import { groupRows, matchesSearch, sortRows } from '../lib/table';
@@ -50,7 +50,7 @@ function leftLabel(g: StockGroup): string {
   if (g.packs.some((x) => x.remainingGrams === null)) return '';
   const total = g.packs.reduce((sum, x) => sum + x.remainingGrams!, 0);
   const partial = g.packs.some((x) => x.fractionLeft < 1);
-  return `${partial ? 'about ' : ''}${amountText(total, p)}`;
+  return `${partial ? '~' : ''}${amountText(total, p)}`;
 }
 
 /** Opened, defrosted or frozen; blank for packs as bought. */
@@ -59,6 +59,18 @@ function stateText(g: StockGroup): string {
   if (g.packs.some((x) => x.state === 'defrosted')) return 'Defrosted';
   if (g.first.state === 'frozen') return 'Frozen';
   return '';
+}
+
+/** The state as an icon with its name as a tooltip. */
+function StateIcon({ g }: { g: StockGroup }) {
+  const text = stateText(g);
+  if (!text) return null;
+  const icon = text === 'Opened' ? 'opened' : text === 'Defrosted' ? 'drop' : 'snowflake';
+  return (
+    <span role="img" aria-label={text} title={text} className={`inline-flex ${text === 'Frozen' ? 'text-frozen-text' : 'text-muted'}`}>
+      <Icon name={icon} className="size-4" />
+    </span>
+  );
 }
 
 /** Planned meals against what's in the house: enough, short (and whether it's already on the list). */
@@ -148,13 +160,13 @@ export function StockPage() {
       key: 'status',
       header: <span className="sr-only">Freshness</span>,
       className: 'w-6 pr-0',
-      cell: (g) => <span aria-hidden className={`inline-block size-2 rounded-full ${toneClasses[toneFor(g.first, me.today)].dot}`} />,
+      cell: (g) => <StatusDot className={toneClasses[toneFor(g.first, me.today)].dot} meaning={toneMeaning[toneFor(g.first, me.today)]} />,
     },
     { key: 'name', header: 'Item', primary: true, cell: (g) => g.name, className: 'max-w-[18rem]' },
     { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (g) => g.locationName },
-    { key: 'state', header: 'State', className: 'whitespace-nowrap', cell: stateText },
+    { key: 'state', header: <span title="Opened, frozen or defrosted">State</span>, className: 'w-14', cell: (g) => <StateIcon g={g} /> },
     { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : g.packs.length) },
-    { key: 'left', header: 'Left', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (g) => leftLabel(g) || '–' },
+    { key: 'left', header: <span title="What's left. ~ means an estimate, for opened packs">Amount</span>, align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (g) => leftLabel(g) || '–' },
     { key: 'planned', header: 'Planned', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: plannedCell },
     { key: 'date', header: 'Best before', className: 'whitespace-nowrap', cell: datePill },
   ];
@@ -238,7 +250,7 @@ export function StockPage() {
           selection={{ selected, onChange: setSelected }}
           actions={(g) => <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} />}
           phone={(g) => ({
-            lead: <span aria-hidden className={`h-10 w-1 shrink-0 rounded-full ${toneClasses[toneFor(g.first, me.today)].bar}`} />,
+            lead: <span role="img" aria-label={toneMeaning[toneFor(g.first, me.today)]} title={toneMeaning[toneFor(g.first, me.today)]} className={`h-10 w-1 shrink-0 rounded-full ${toneClasses[toneFor(g.first, me.today)].bar}`} />,
             title: g.name,
             meta: (
               <>

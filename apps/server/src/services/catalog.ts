@@ -134,6 +134,7 @@ export function productDto(p: ProductRow, codes: string[], catalog: Catalog, pri
     learnedFrozenDays: p.learnedFrozenDays,
     source: p.source,
     pricePence,
+    portionGrams: p.portionGrams,
   };
 }
 

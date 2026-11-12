@@ -49,7 +49,7 @@ describe('groupStock', () => {
 
   it('describes a single opened pack', () => {
     const g = groupStock([{ ...base, state: 'opened', fractionLeft: 0.05, remainingGrams: 120 }]);
-    expect(groupSummary(g[0]!)).toBe('Cupboard · opened · about 120g left');
+    expect(groupSummary(g[0]!)).toBe('Cupboard · opened · ~120g');
   });
 });
 

@@ -32,6 +32,7 @@ export function ProductForm({
   const [ingredientId, setIngredientId] = useState(product?.ingredientId ?? '');
   const [categoryId, setCategoryId] = useState(product?.shelfLifeCategoryId ?? '');
   const [codes, setCodes] = useState(product?.barcodes.join(', ') ?? '');
+  const [itemGrams, setItemGrams] = useState(product?.portionGrams != null ? String(product.portionGrams) : '');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -50,6 +51,7 @@ export function ProductForm({
         brand: brand.trim() || null,
         packAmount: amount,
         packUnit: amount === null ? null : packUnit,
+        portionGrams: itemGrams.trim() === '' ? null : Number(itemGrams),
         ingredientId: ingredientId || null,
         ...(showCategory ? { shelfLifeCategoryId: categoryId || null } : {}),
         barcodes: codes
@@ -86,6 +88,9 @@ export function ProductForm({
           )}
         </Field>
       </div>
+      <Field label="One item weighs (g)" hint="For multipacks, so you can plan and eat one bar or yoghurt at a time. Leave empty if an item is the whole pack.">
+        {(id) => <TextInput id={id} inputMode="decimal" value={itemGrams} onChange={(e) => setItemGrams(e.target.value)} placeholder="e.g. 48" />}
+      </Field>
       <Field label="Ingredient" hint="What recipes call it. Leave empty for things like snacks.">
         {(id) => (
           <Select id={id} value={ingredientId} onChange={(e) => setIngredientId(e.target.value)}>

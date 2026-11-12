@@ -7,14 +7,14 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { addDays, formatPence, type PlanEntryDto, type StockItemDto } from '@snackoverflow/shared';
 import { dayName } from '../components/AddToPlanSheet';
-import { type Column, DataTable } from '../components/DataTable';
+import { type Column, DataTable, StatusDot } from '../components/DataTable';
 import { BellButton, MenuButton, useMe } from '../components/Layout';
 import { StockRowActions } from '../components/StockRowActions';
 import { useToast } from '../components/Toast';
 import { PageTop } from '../components/Toolbar';
 import { Button, Card, EmptyState, Pill, Spinner } from '../components/ui';
 import { api } from '../lib/api';
-import { amountLabel, dateLabel, greeting, longToday, minutesLabel, stateLabel, toneClasses, toneFor } from '../lib/format';
+import { amountLabel, dateLabel, greeting, longToday, minutesLabel, stateLabel, toneClasses, toneFor, toneMeaning } from '../lib/format';
 import { useCalories, usePlan, useProducts, useRecipes, useRunningLow, useShopping, useStock, useWasteReport } from '../lib/queries';
 import { changeLine, weightLabel } from './Dashboard';
 import { itemTitle } from './Shopping';
@@ -77,7 +77,7 @@ export function TodayPage() {
       key: 'status',
       header: <span className="sr-only">Freshness</span>,
       className: 'w-6 pr-0',
-      cell: (i) => <span aria-hidden className={`inline-block size-2 rounded-full ${toneClasses[toneFor(i, me.today)].dot}`} />,
+      cell: (i) => <StatusDot className={toneClasses[toneFor(i, me.today)].dot} meaning={toneMeaning[toneFor(i, me.today)]} />,
     },
     { key: 'name', header: 'Item', primary: true, cell: (i) => i.productName },
     { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (i) => `${i.locationName}${i.state !== 'closed' ? ` · ${stateLabel[i.state].toLowerCase()}` : ''}` },

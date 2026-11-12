@@ -118,6 +118,8 @@ export const productInput = z.object({
   packAmount: z.number().positive().max(1_000_000).nullish(),
   packUnit: z.string().trim().max(20).nullish(),
   nutritionPer100g: nutritionInput.nullish(),
+  /** One item of a multipack (a single bar of four), in grams: lets people plan and eat one at a time. */
+  portionGrams: z.number().positive().max(100_000).nullish(),
   barcodes: z.array(z.string().trim().regex(/^[0-9A-Za-z-]{4,64}$/, 'Not a valid barcode')).optional(),
 });
 export const updateProductInput = productInput.partial();

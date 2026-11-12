@@ -233,6 +233,7 @@ export async function catalogRoutes(app: FastifyInstance) {
           ingredientId: input.ingredientId ?? null,
           shelfLifeCategoryId: input.shelfLifeCategoryId ?? null,
           nutritionPer100g: input.nutritionPer100g ?? null,
+          portionGrams: input.portionGrams ?? null,
           source: 'manual',
           ...pack,
         })

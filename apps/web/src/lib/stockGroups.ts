@@ -52,7 +52,7 @@ export function groupSummary(g: StockGroup): string {
   if (g.packs.length === 1) {
     if (p.remainingGrams !== null) {
       const q = formatQuantity(p.remainingGrams, p.displayUnit, measures);
-      parts.push(p.fractionLeft < 1 ? `about ${q} left` : q);
+      parts.push(p.fractionLeft < 1 ? `~${q}` : q);
     }
     return parts.join(' · ');
   }

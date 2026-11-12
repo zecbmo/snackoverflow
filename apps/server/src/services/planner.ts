@@ -71,17 +71,20 @@ function toDto(row: EntryRow, people: { userId: string; portions: number }[], l:
   let title = row.text ?? 'Meal';
   let kcalPerServing: number | null = row.kcalPerServing;
   let detail: string | null = null;
+  let unit: ProductRow | undefined;
   if (row.kind === 'recipe' && row.recipeId) {
     const r = l.recipeKcal.get(row.recipeId);
     title = r?.title ?? 'Deleted recipe';
     kcalPerServing = r?.kcal ?? null;
   } else if (row.kind === 'product' && row.productId) {
     const p = l.productsById.get(row.productId);
+    unit = p;
     title = p?.name ?? 'Unnamed product';
     kcalPerServing = productKcal(p);
   } else if (row.kind === 'stock' && row.stockItemId) {
     const s = l.stockById.get(row.stockItemId);
     const p = s ? l.productsById.get(s.productId) : undefined;
+    unit = p;
     title = p?.name ? `Leftover ${p.name.charAt(0).toLowerCase()}${p.name.slice(1)}` : 'Leftovers';
     kcalPerServing = productKcal(p);
     detail = s ? `From ${s.locationName.toLowerCase()}` : null;
@@ -100,6 +103,8 @@ function toDto(row: EntryRow, people: { userId: string; portions: number }[], l:
     title,
     detail,
     servings: row.servings,
+    unitGrams: unit ? (unit.portionGrams ?? unit.packGrams ?? null) : null,
+    displayUnit: unit?.displayUnit ?? 'g',
     status: row.status,
     source: row.source === 'scan' ? 'scan' : 'plan',
     people: people.map((p) => ({ userId: p.userId, name: names.get(p.userId) ?? 'Someone', portions: p.portions })),
@@ -224,18 +229,32 @@ export async function eatEntry(deps: StockDeps, id: string, fromStock: boolean):
       changed = true;
     }
   } else if (fromStock && row.kind === 'product' && row.productId) {
-    let packsLeft = Math.ceil(row.servings);
+    const [product] = await db.select().from(products).where(eq(products.id, row.productId));
     const packs = orderForUse(
       (await db
         .select()
         .from(stockItems)
         .where(and(eq(stockItems.householdId, auth.household.id), eq(stockItems.productId, row.productId), isNull(stockItems.finishedAt)))).map((p) => ({ ...p })),
     );
-    for (const p of packs) {
-      if (packsLeft <= 0) break;
-      await usePack(d, p.id, { kind: 'all' });
-      packsLeft--;
-      changed = true;
+    // One item is a portion (a bar from a multipack) or the whole pack; take exactly what was planned.
+    const itemGrams = product?.portionGrams ?? product?.packGrams ?? null;
+    if (itemGrams) {
+      let left = itemGrams * row.servings;
+      for (const p of packs) {
+        if (left <= 0.5) break;
+        const take = p.remainingGrams === null ? null : Math.min(p.remainingGrams, left);
+        await usePack(d, p.id, take === null || take >= (p.remainingGrams ?? 0) ? { kind: 'all' } : { kind: 'grams', grams: take });
+        left -= take ?? itemGrams;
+        changed = true;
+      }
+    } else {
+      let packsLeft = Math.ceil(row.servings);
+      for (const p of packs) {
+        if (packsLeft <= 0) break;
+        await usePack(d, p.id, { kind: 'all' });
+        packsLeft--;
+        changed = true;
+      }
     }
   }
   await db.update(mealPlanEntries).set({ status: 'cooked' }).where(eq(mealPlanEntries.id, id));

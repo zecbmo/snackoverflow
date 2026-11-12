@@ -19,6 +19,15 @@ export function toneFor(item: Pick<StockItemDto, 'state' | 'bestBefore'>, today:
   return 'green';
 }
 
+/** What each freshness colour means, for tooltips and screen readers. */
+export const toneMeaning: Record<Tone, string> = {
+  red: 'Use first: past its best-before, or going off today or tomorrow',
+  amber: 'Going off this week (in 2 to 7 days)',
+  green: 'Fine: more than a week left',
+  blue: 'Frozen',
+  grey: 'No best-before date',
+};
+
 export const toneClasses: Record<Tone, { bar: string; pill: string; dot: string }> = {
   red: { bar: 'bg-fresh-red', pill: 'bg-fresh-red-soft text-fresh-red-text', dot: 'bg-fresh-red' },
   amber: { bar: 'bg-fresh-amber', pill: 'bg-fresh-amber-soft text-fresh-amber-text', dot: 'bg-fresh-amber' },
@@ -35,7 +44,7 @@ export function longDate(d: CalendarDate | null): string {
   return d ? formatShortDate(d) : 'no date';
 }
 
-/** "about 120g left", "400g", "2.27L", or "¾ left" when the size isn't known. */
+/** "~120g", "400g", "2.27L", or "¾ left" when the size isn't known. "~" means an estimate (an opened pack). */
 export function amountLabel(item: StockItemDto): string {
   if (item.isMeal && item.remainingGrams !== null && item.gramsPerCount) {
     const n = Math.round((item.remainingGrams / item.gramsPerCount) * 2) / 2;
@@ -44,7 +53,7 @@ export function amountLabel(item: StockItemDto): string {
   const measures = { densityGPerMl: item.densityGPerMl, gramsPerCount: item.gramsPerCount };
   if (item.remainingGrams !== null) {
     const q = formatQuantity(item.remainingGrams, item.displayUnit, measures);
-    return item.fractionLeft < 1 ? `about ${q} left` : q;
+    return item.fractionLeft < 1 ? `~${q}` : q;
   }
   if (item.fractionLeft >= 1) return '1 pack';
   return `${fractionWord(item.fractionLeft)} left`;

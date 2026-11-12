@@ -97,6 +97,8 @@ export interface ProductDto {
   source: 'off' | 'manual' | 'scan' | 'receipt';
   /** Latest known price of one pack, in pence; null when pricing is off or unknown. */
   pricePence: number | null;
+  /** One item of a multipack, in grams (null: an item is the whole pack). */
+  portionGrams: number | null;
 }
 
 export interface StockItemDto {
@@ -348,6 +350,10 @@ export interface PlanEntryDto {
   /** "From fridge", "Scanned", "Missing 1"… */
   detail: string | null;
   servings: number;
+  /** For food and leftovers: grams in one item (servings counts items), so amounts can be shown and set by weight. */
+  unitGrams: number | null;
+  /** How the food is measured, for showing a weight: 'ml' for liquids. */
+  displayUnit: 'g' | 'ml' | 'count';
   status: 'planned' | 'cooked' | 'skipped';
   source: 'plan' | 'scan';
   people: { userId: string; name: string; portions: number }[];

@@ -1,5 +1,6 @@
 /** The buttons on every stock row: Use, Freeze (or Defrost), Move and Bin, plus a "⋯" menu for the rest. */
 import type { StockItemDto } from '@snackoverflow/shared';
+import { Icon } from './Icon';
 import { Menu, type MenuEntry } from './Menu';
 import { useStockActions } from './StockActions';
 import { Button } from './ui';
@@ -50,8 +51,8 @@ export function StockRowActions({
           Move
         </Button>
       )}
-      <Button size={size} variant="danger" aria-label={`Bin ${name}`} onClick={() => void actions.discard(item)}>
-        Bin
+      <Button size={size} variant="danger" aria-label={`Bin ${name}`} title="Bin it" onClick={() => void actions.discard(item)} className="px-2 lg:px-1.5">
+        <Icon name="trash" className="size-4" />
       </Button>
       {more.length > 0 && <Menu label={`More for ${name}`} items={more} />}
     </>

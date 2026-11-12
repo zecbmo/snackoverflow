@@ -10,6 +10,7 @@ import type {
   LocationDto,
   PlanDto,
   PlanEntryDto,
+  ProductDto,
   RecipeDto,
   RunningLowDto,
   ScanAddResult,
@@ -105,6 +106,23 @@ describe('planner', () => {
     const r = await api.post<EatResultDto>('/api/scan/eat', { barcode: '3001' });
     expect(r.entry).toMatchObject({ slot: 'breakfast', kcal: 234 });
     expect(r.change).toBeNull();
+  });
+
+  it('plans food by the item or by weight, and eats exactly that much', async () => {
+    // A four-bar multipack: one item is one bar.
+    const multipack = await api.post<ProductDto>('/api/products', { name: 'Snickers 4 pack', packAmount: 192, packUnit: 'g', portionGrams: 48, nutritionPer100g: { kcal: 488 } });
+    expect(multipack.portionGrams).toBe(48);
+    await api.post('/api/stock', { productId: multipack.id, locationId: loc.cupboard.id });
+    const bar = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'snack', kind: 'product', productId: multipack.id, servings: 1 });
+    expect(bar).toMatchObject({ unitGrams: 48, kcal: 234 });
+    await api.post(`/api/plan/${bar.id}/eat`, {});
+    expect((await api.get<StockItemDto[]>('/api/stock')).find((s) => s.productId === multipack.id)?.remainingGrams).toBe(144);
+    // Potatoes by weight: 750g of a 2.5kg bag is 0.3 of an item.
+    const spuds = await api.post<ScanAddResult>('/api/scan/add', { barcode: '3002' });
+    const mash = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'dinner', kind: 'product', productId: spuds.product.id, servings: 0.3 });
+    expect(mash.unitGrams).toBe(2500);
+    await api.post(`/api/plan/${mash.id}/eat`, {});
+    expect((await api.get<StockItemDto[]>('/api/stock')).find((s) => s.id === spuds.change.item.id)?.remainingGrams).toBe(1750);
   });
 
   it('plans leftovers and eats them from the fridge', async () => {
