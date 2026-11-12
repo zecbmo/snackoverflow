@@ -7,6 +7,7 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 ## What it does
 
 - **Fast barcode scanning.** Pick a location (fridge, freezer, cupboard) and scan item after item, supermarket-till style. Products are looked up in [Open Food Facts](https://world.openfoodfacts.org/), and unknown barcodes are remembered once you name them.
+- **Receipt import.** Photograph a receipt, share a PDF, or forward an online-order email, and the whole shop is matched to products and added to stock in one go, with prices saved.
 - **Best-before tracking.** Dates are estimated automatically and learned from your edits. Opened, frozen and defrosted items get new dates, and notifications warn you about food going off.
 - **Recipes.** Import from a URL (BBC Good Food, Hello Fresh, blogs), with optional AI clean-up or import through an MCP endpoint. Recipes link to the food you have in.
 - **Meal planning.** Per-person calendars, leftovers and batch cooks, calorie tracking, and suggestions for what to cook from what's in the house.

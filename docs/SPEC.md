@@ -134,11 +134,26 @@ It works out the surplus for every ingredient: what you have, plus what the shop
 - Items on the list count as "coming" in the planner and optimiser.
 - **Put away mode:** after shopping, ticked items can be scanned in (best-before estimated as usual) or added in one tap using the default product.
 
+**Receipts: add a whole shop at once.** Instead of scanning every barcode, the user can hand the app a receipt:
+
+- **Photo:** take a picture of a paper receipt in the app (long receipts in several shots).
+- **Upload or share:** a photo, PDF or screenshot, using the phone's share sheet into the Android app or upload on the web.
+- **Email forward:** forward an online-order confirmation (Tesco, Asda, Sainsbury's, Ocado...) to a mailbox the app checks. Online orders are the most accurate source because they carry full product names, quantities and prices.
+
+How it works:
+
+1. The receipt is read into lines (item text, quantity, price, store, date). Photos and PDFs go through AI vision (optional key) or the MCP endpoint, so it works without a paid API key; email orders are parsed from their text.
+2. Each line is matched to a product: first lines this household has matched before (receipt abbreviations like "TES SEMI SKM MLK 4PT" are learned once and remembered), then the shopping list, then product names, then Open Food Facts search.
+3. A review screen shows every line with its match, quantity, location (from the item's usual location) and estimated best-before. Uncertain matches are highlighted; non-food lines (bags, toiletries) are skipped automatically. The user fixes anything and taps "Add to stock".
+4. Matched items are added to stock in one go, ticked off the shopping list, and their prices are saved (this is the best source of real prices for the optimiser).
+
+Receipt items have no barcode, so if a product was never scanned the app links the barcode later the first time it is scanned. The original receipt image is kept only until it has been reviewed.
+
 **Pricing (optional, off by default).** No UK supermarket has a public price API, and scraping their sites is fragile and against their terms. Prices come from:
 
 - what the user types when scanning (optional field, never required),
 - Open Prices, the crowd-sourced price database run by Open Food Facts,
-- receipt scanning, as a later addition.
+- receipts (see above): the main automatic source.
 
 When prices exist, the list shows an estimated total and the optimiser uses them. When they don't, it falls back to "fewest extra items". Turning pricing off hides it everywhere.
 
@@ -164,7 +179,8 @@ Phone-first, with five tabs (Today, Stock, Scan, Plan, Shop) and Scan as a large
 | Stock | Items grouped by location or sorted by best-before; colour bands for expired, this week, fine; search and filters | Use, Open, Freeze, Defrost, Move, Binned; swipe actions |
 | Scan (centre) | Full-screen camera, location (or meal slot) chip, mode switch (Add / Use / Eat), session counter | Continuous scan, undo, Done summary |
 | Planner | Week grid per person with slots and daily calories | Add, drag to move, Suggest meals, Plan my week, Build list |
-| Shopping | One list grouped by category, estimated total if pricing is on, surplus hints | Tick off, Put away mode, Add item |
+| Shopping | One list grouped by category, estimated total if pricing is on, surplus hints | Tick off, Put away mode, Add item, Add from receipt |
+| Receipt review | Each receipt line with its matched product, quantity, location, best-before and price; uncertain matches highlighted | Fix match, skip line, Add to stock |
 | Recipes (from Planner and Today) | Library with Cook now / Nearly there / Use it up filters | Import URL, Cook, Batch cook, Add to plan |
 | Item detail | Packs with dates and locations, history, product info, shelf-life settings | Edit dates, link to ingredient, merge duplicates |
 | Dashboard (from Today) | Calories per day with 7- and 30-day averages; waste per week/month by item and category (kg, and £ if pricing is on) | Switch person (admins) |
@@ -228,6 +244,7 @@ Each phase ends with a working, deployable app.
 2. **Android app.** Capacitor wrapper with native scanning, phone push notifications, offline queue for scans.
 3. **Recipes and cooking.** URL import, AI clean-up, MCP endpoint, unit conversions, ingredient matching, cook with deductions, leftovers, batch cooks, calories.
 4. **Planner and shopping list.** Per-person week planner, planned-stock warnings, meal-time prompts, build list from plan with pack rounding, running-low tracking, put-away mode.
+   **Receipts:** photo / upload / share and email-forward import, line matching with learned abbreviations, review screen, add to stock, tick off the list, save prices.
 5. **Optimiser and pricing.** Cook now / Nearly there / Use it up, Suggest meals, Plan my week, surplus hints, optional pricing with Open Prices.
 6. **Polish.** Dashboard (calories per day and averages per person, waste and spending stats), design refinements from real use.
 
@@ -241,3 +258,4 @@ Each phase ends with a working, deployable app.
 - **Shelf life:** start from UK food-safety defaults, learn from edits.
 - **Dashboard:** calories per day and averages, plus waste stats.
 - **Planned stock:** planned meals warn rather than lock stock.
+- **Receipts:** photo, upload/share and email-forward import, built with the shopping list in phase 4.
