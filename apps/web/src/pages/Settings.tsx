@@ -18,6 +18,23 @@ export function SettingsPage() {
         <HouseholdCard />
         <ShelfLifeCard />
         {isAdmin && me.features.backups && <BackupsCard />}
+        <Card className="p-5">
+          <h2 className="mb-2 text-lg font-bold">Recipes and assistants</h2>
+          <p className="text-[15px]">
+            <span className="font-semibold">AI clean-up of imported recipes:</span>{' '}
+            {me.features.ai ? 'on. Use "Tidy up with AI" after importing a link.' : 'off. Set AI_API_KEY on the server to turn it on.'}
+          </p>
+          <p className="mt-2 text-[15px]">
+            <span className="font-semibold">Claude and other assistants (MCP):</span>{' '}
+            {me.features.mcp ? (
+              <>
+                on. Connect your assistant to <code className="rounded bg-card-muted px-1">{`${location.origin}/mcp`}</code> with the MCP_TOKEN from the server's settings.
+              </>
+            ) : (
+              'off. Set MCP_TOKEN on the server to let your own assistant add and fix recipes, no API key needed.'
+            )}
+          </p>
+        </Card>
         {isAdmin && (
           <Card className="p-5">
             <h2 className="text-lg font-bold">Your data</h2>

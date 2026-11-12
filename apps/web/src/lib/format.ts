@@ -37,6 +37,10 @@ export function longDate(d: CalendarDate | null): string {
 
 /** "about 120g left", "400g", "2.27L", or "¾ left" when the size isn't known. */
 export function amountLabel(item: StockItemDto): string {
+  if (item.isMeal && item.remainingGrams !== null && item.gramsPerCount) {
+    const n = Math.round((item.remainingGrams / item.gramsPerCount) * 2) / 2;
+    return `${n} ${n === 1 ? 'portion' : 'portions'}`;
+  }
   const measures = { densityGPerMl: item.densityGPerMl, gramsPerCount: item.gramsPerCount };
   if (item.remainingGrams !== null) {
     const q = formatQuantity(item.remainingGrams, item.displayUnit, measures);
@@ -70,4 +74,18 @@ export function greeting(now = new Date()): string {
 export function longToday(today: CalendarDate): string {
   const d = new Date(`${today}T12:00:00Z`);
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
+export function minutesLabel(min: number | null): string | null {
+  if (!min) return null;
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} hr ${m} min` : `${h} hr`;
+}
+
+/** "300g", "1.2kg", or "3" for counted things. */
+export function gramsLabel(g: number | null): string {
+  if (g === null) return '';
+  return g >= 1000 ? `${Number((g / 1000).toFixed(2))}kg` : `${Math.round(g)}g`;
 }

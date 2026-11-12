@@ -1,12 +1,15 @@
 /** React Query hooks for each resource. Keys line up with the server's live-update topics. */
 import { useQuery } from '@tanstack/react-query';
 import type {
+  CookPlanDto,
   DeviceDto,
   IngredientDto,
   LocationDto,
   NotificationListDto,
   NotificationSettingsDto,
   ProductDto,
+  RecipeDto,
+  RecipeSummaryDto,
   SessionDto,
   ShelfLifeCategoryDto,
   StockEventDto,
@@ -31,6 +34,10 @@ export const keys = {
   notifications: ['users', 'notifications'] as const,
   inbox: ['notifications'] as const,
   devices: ['users', 'devices'] as const,
+  recipes: ['recipes'] as const,
+  recipe: (id: string) => ['recipes', id] as const,
+  cookPlan: (id: string, servings: number) => ['stock', 'cook-plan', id, servings] as const,
+  cooks: ['stock', 'cooks'] as const,
 };
 
 export const useSession = () => useQuery({ queryKey: keys.session, queryFn: () => api.get<SessionDto>('/api/session'), retry: false });
@@ -54,3 +61,16 @@ export const useNotificationSettings = () =>
   useQuery({ queryKey: keys.notifications, queryFn: () => api.get<NotificationSettingsDto>('/api/me/notifications') });
 export const useInbox = () => useQuery({ queryKey: keys.inbox, queryFn: () => api.get<NotificationListDto>('/api/notifications') });
 export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api.get<DeviceDto[]>('/api/devices') });
+export const useRecipes = () => useQuery({ queryKey: keys.recipes, queryFn: () => api.get<RecipeSummaryDto[]>('/api/recipes') });
+export const useRecipe = (id: string) => useQuery({ queryKey: keys.recipe(id), queryFn: () => api.get<RecipeDto>(`/api/recipes/${id}`) });
+export const useCookPlan = (id: string, servings: number) =>
+  useQuery({ queryKey: keys.cookPlan(id, servings), queryFn: () => api.get<CookPlanDto>(`/api/recipes/${id}/cook-plan?servings=${servings}`) });
+export interface CookRow {
+  id: string;
+  recipeId: string | null;
+  title: string | null;
+  servings: number;
+  createdAt: string;
+  undoneAt: string | null;
+}
+export const useCooks = () => useQuery({ queryKey: keys.cooks, queryFn: () => api.get<CookRow[]>('/api/cooks') });

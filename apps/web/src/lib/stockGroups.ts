@@ -43,6 +43,12 @@ export function groupSummary(g: StockGroup): string {
   if (g.packs.some((x) => x.state === 'opened')) parts.push('opened');
   else if (g.packs.some((x) => x.state === 'defrosted')) parts.push('defrosted');
   const measures = { densityGPerMl: p.densityGPerMl, gramsPerCount: p.gramsPerCount };
+  if (p.isMeal) {
+    const portions = g.packs.reduce((n, x) => n + (x.remainingGrams !== null && x.gramsPerCount ? x.remainingGrams / x.gramsPerCount : 1), 0);
+    const r = Math.round(portions * 2) / 2;
+    parts.push(`${r} ${r === 1 ? 'portion' : 'portions'}`);
+    return parts.join(' · ');
+  }
   if (g.packs.length === 1) {
     if (p.remainingGrams !== null) {
       const q = formatQuantity(p.remainingGrams, p.displayUnit, measures);

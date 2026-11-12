@@ -25,6 +25,7 @@ const base: StockItemDto = {
   densityGPerMl: null,
   gramsPerCount: null,
   addedAt: '2026-11-01T10:00:00Z',
+  isMeal: false,
   actions: { open: null, freeze: null, defrost: "It isn't frozen." },
 };
 
@@ -62,5 +63,13 @@ describe('format', () => {
 
   it('describes packs of unknown size', () => {
     expect(amountLabel({ ...base, initialGrams: null, remainingGrams: null, fractionLeft: 0.5 })).toBe('about half left');
+  });
+});
+
+describe('meals', () => {
+  it('counts leftovers in portions', () => {
+    const meal = { ...base, isMeal: true, productName: 'Chilli', gramsPerCount: 350, initialGrams: 700, remainingGrams: 700, locationName: 'Fridge' };
+    expect(groupSummary(groupStock([meal])[0]!)).toBe('Fridge · 2 portions');
+    expect(amountLabel({ ...meal, remainingGrams: 350 })).toBe('1 portion');
   });
 });

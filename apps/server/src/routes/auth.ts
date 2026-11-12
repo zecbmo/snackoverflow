@@ -22,6 +22,8 @@ export function features(ctx: AppContext): SessionDto['features'] {
       allowPassword: !(c.OIDC_ISSUER_URL && c.OIDC_CLIENT_ID) || c.OIDC_ALLOW_PASSWORD_LOGIN,
     },
     backups: backupsEnabled(c),
+    ai: Boolean(c.AI_API_KEY),
+    mcp: Boolean(c.MCP_TOKEN),
   };
 }
 

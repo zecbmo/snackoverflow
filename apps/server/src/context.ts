@@ -19,6 +19,8 @@ export interface AppContext {
   mailer: Mailer | null;
   push: PushSender | null;
   now: () => Date;
+  /** Outbound HTTP (recipe import, AI clean-up); tests pass a fake. Defaults to global fetch. */
+  fetch?: typeof fetch;
 }
 
 export interface Auth {

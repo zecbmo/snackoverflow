@@ -176,3 +176,57 @@ export type IngredientInput = z.infer<typeof ingredientInput>;
 export type ProductInput = z.infer<typeof productInput>;
 export type UseAmountInput = z.infer<typeof useAmountInput>;
 export type AdjustStockInput = z.infer<typeof adjustStockInput>;
+
+// --- Recipes and cooking ------------------------------------------------------------
+
+export const recipeIngredientInput = z.object({
+  /** The line as written in the recipe ("2 large Maris Pipers, peeled"). */
+  text: z.string().trim().min(1).max(300),
+  amount: z.number().positive().max(100_000).nullish(),
+  unit: z.string().trim().max(30).nullish(),
+  ingredientId: id.nullish(),
+  productId: id.nullish(),
+  note: z.string().trim().max(200).nullish(),
+  optional: z.boolean().default(false),
+});
+
+export const recipeInput = z.object({
+  title: z.string().trim().min(1, 'Required').max(200),
+  serves: z.number().int().min(1).max(100).default(4),
+  steps: z.array(z.string().trim().min(1).max(4000)).max(100).default([]),
+  imageUrl: z.url().nullish(),
+  sourceUrl: z.url().nullish(),
+  tags: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(30).default([]),
+  prepMinutes: z.number().int().min(0).max(10_000).nullish(),
+  cookMinutes: z.number().int().min(0).max(10_000).nullish(),
+  ingredients: z.array(recipeIngredientInput).max(100).default([]),
+});
+export type RecipeInput = z.infer<typeof recipeInput>;
+export type RecipeIngredientInput = z.infer<typeof recipeIngredientInput>;
+
+export const importRecipeInput = z.object({ url: z.url() });
+
+/** What was really used for one recipe line when cooking. */
+export const cookLineInput = z.object({
+  /** Packs to take from, with grams (or a share of the pack when its size isn't known). */
+  takes: z
+    .array(
+      z.object({
+        stockItemId: id,
+        grams: z.number().positive().max(1_000_000).optional(),
+        fraction: z.number().gt(0).max(1).optional(),
+      }),
+    )
+    .max(20),
+});
+
+export const cookInput = z.object({
+  servings: z.number().positive().max(500),
+  lines: z.array(cookLineInput).max(200).default([]),
+  /** Portions to keep, per location: leftovers, or the whole batch for a batch cook. */
+  leftovers: z
+    .array(z.object({ locationId: id, portions: z.number().int().min(1).max(200) }))
+    .max(10)
+    .default([]),
+});
+export type CookInput = z.infer<typeof cookInput>;

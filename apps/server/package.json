@@ -13,6 +13,7 @@
     "db:migrate": "tsx --env-file-if-exists=../../.env src/migrate.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@fastify/cookie": "^11.1.0",
     "@fastify/static": "^10.1.0",
     "@fastify/websocket": "^11.3.0",

@@ -2,7 +2,7 @@
 
 A self-hosted household food app: scan your shopping in, see what's going off, plan meals around what you already have, and build a cheap shopping list that wastes as little as possible.
 
-> Status: **phase 1 (foundation and stock)** and **phase 2 (Android app)** are built. Recipes, the planner and the shopping list come in later phases (see [the build phases](docs/SPEC.md#build-phases)).
+> Status: phases 1 to 3 are built: **stock**, the **Android app**, and **recipes and cooking**. Recipes, the planner and the shopping list come in later phases (see [the build phases](docs/SPEC.md#build-phases)).
 
 ## What it does today
 
@@ -11,13 +11,14 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 - **Stock.** One row per item with colour bands (going off, this week, fine, frozen). Use all or some, open, freeze, defrost, move or bin anything, with Undo on every change. "Is there still some left?" when the numbers look off.
 - **Notifications.** "Expires tomorrow" reminders with Use / Freeze / Binned buttons, and a Sunday "going off this week" summary. Everything lands in the in-app inbox (the bell), and each person picks extra channels (browser push, email) and quiet hours.
 - **Android app.** Native ML Kit barcode scanning, phone notifications with action buttons, and an offline queue: scans made with no signal are kept and added when you're back online (the web app queues offline scans too). No Firebase: the app checks your server's inbox in the background about every 15 minutes.
+- **Recipes and cooking.** Import recipes from a link (BBC Good Food, Hello Fresh, most blogs), type them in, or let your own Claude add them over MCP. Ingredient lines are matched to your food, with calories per serving. Cook from stock in one go (earliest-expiring first), keep leftovers with the right food-safety dates, or batch cook into fridge and freezer portions. Every cook can be undone.
 - **Household ready.** Several people and phones see the same stock live. Admin and member roles, invite links, and optional sign-in through a self-hosted identity provider (OpenID Connect).
 - **Installable.** A web app you can add to your phone's home screen; works on desktop with a sidebar layout. Dark mode follows your device.
 - **Self-hosted.** Docker Compose (app + PostgreSQL), nightly database backups and a JSON export.
 
 ## Coming next
 
-Recipes and cooking (3), the per-person meal planner, shopping list and receipt import (4), the waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
+The per-person meal planner, shopping list and receipt import (4), the waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Try it on Windows (one click)
 
@@ -54,6 +55,12 @@ Optional features switch on when configured in `.env` and stay hidden otherwise:
 | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`) |
 | Single sign-on | `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`; callback URL is `APP_URL/api/auth/oidc/callback` |
 | Online barcode lookup | on by default; `OFF_ENABLED=false` to turn off |
+
+### Recipes: import, AI clean-up and Claude (MCP)
+
+- **Import from a link:** paste a recipe page's address; most recipe sites embed structured recipe data, which gives an accurate first pass for you to review.
+- **AI clean-up (optional):** set `AI_API_KEY` (Anthropic) to show a "Tidy up" button that cleans messy imports and matches each line to your ingredients. `AI_MODEL` overrides the model. Hidden when no key is set.
+- **Claude via MCP (optional):** set `MCP_TOKEN` to a long random string and add `APP_URL/mcp` as a remote MCP server in your assistant, sending the token as a Bearer token. Claude can then list ingredients and create or fix recipes (for example from a photo of a recipe card) without an API key on the server.
 
 ### Backups
 

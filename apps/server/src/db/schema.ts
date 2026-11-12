@@ -189,6 +189,10 @@ export const products = pgTable(
     learnedClosedDays: integer('learned_closed_days'),
     learnedFrozenDays: integer('learned_frozen_days'),
     source: productSourceEnum('source').notNull().default('manual'),
+    /** Set for cooked meals (leftovers, batch-cook portions): the recipe they came from. */
+    recipeId: uuid('recipe_id'),
+    /** Weight of one portion, for meals counted in portions. */
+    portionGrams: doublePrecision('portion_grams'),
     createdAt: createdAt(),
   },
   (t) => [index('products_household_idx').on(t.householdId), index('products_ingredient_idx').on(t.ingredientId)],
@@ -282,6 +286,8 @@ export const stockEvents = pgTable(
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     /** Link to a meal plan entry (used from phase 4). */
     mealPlanEntryId: uuid('meal_plan_entry_id'),
+    /** The cook this use or leftover belongs to, so a whole cook can be undone. */
+    cookId: uuid('cook_id'),
     createdAt: createdAt(),
     undoneAt: timestamp('undone_at', { withTimezone: true }),
   },
@@ -365,3 +371,60 @@ export const notifications = pgTable(
   },
   (t) => [index('notifications_user_seq_idx').on(t.userId, t.seq)],
 );
+
+export const recipes = pgTable(
+  'recipes',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    serves: integer('serves').notNull().default(4),
+    steps: jsonb('steps').$type<string[]>().notNull().default([]),
+    imageUrl: text('image_url'),
+    sourceUrl: text('source_url'),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    prepMinutes: integer('prep_minutes'),
+    cookMinutes: integer('cook_minutes'),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('recipes_household_idx').on(t.householdId)],
+);
+
+export const recipeIngredients = pgTable(
+  'recipe_ingredients',
+  {
+    id: id(),
+    recipeId: uuid('recipe_id')
+      .notNull()
+      .references(() => recipes.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    /** The line as written. */
+    text: text('text').notNull(),
+    amount: doublePrecision('amount'),
+    unit: text('unit'),
+    ingredientId: uuid('ingredient_id').references(() => ingredients.id, { onDelete: 'set null' }),
+    productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+    note: text('note'),
+    optional: boolean('optional').notNull().default(false),
+    /** The amount in grams, for matching and nutrition; null when it can't be worked out. */
+    grams: doublePrecision('grams'),
+  },
+  (t) => [index('recipe_ingredients_recipe_idx').on(t.recipeId), index('recipe_ingredients_ingredient_idx').on(t.ingredientId)],
+);
+
+/** A recipe cooked (or batch cooked): the uses and leftovers it made share its id, for undo. */
+export const cooks = pgTable('cooks', {
+  id: id(),
+  householdId: uuid('household_id')
+    .notNull()
+    .references(() => households.id, { onDelete: 'cascade' }),
+  recipeId: uuid('recipe_id').references(() => recipes.id, { onDelete: 'set null' }),
+  servings: doublePrecision('servings').notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+  undoneAt: timestamp('undone_at', { withTimezone: true }),
+});

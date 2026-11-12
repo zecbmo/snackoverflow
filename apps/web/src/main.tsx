@@ -12,6 +12,12 @@ import { initNative } from './lib/native';
 import { ApiError } from './lib/api';
 import { InvitePage, LoginPage, SetupPage } from './pages/Auth';
 import { ConnectPage } from './pages/Connect';
+import { CookPage } from './pages/Cook';
+import { MealsPage } from './pages/Meals';
+import { RecipeDetailPage } from './pages/RecipeDetail';
+import { RecipeEditPage, RecipeNewPage } from './pages/RecipeEditor';
+import { RecipeImportPage } from './pages/RecipeImport';
+import { RecipesPage } from './pages/Recipes';
 import { InboxPage } from './pages/Inbox';
 import { isNative } from './lib/platform';
 import { ComingSoonPage } from './pages/ComingSoon';
@@ -53,6 +59,13 @@ const router = createBrowserRouter([
       { path: '/stock', element: <StockPage /> },
       { path: '/stock/:id', element: <ItemDetailPage /> },
       { path: '/inbox', element: <InboxPage /> },
+      { path: '/recipes', element: <RecipesPage /> },
+      { path: '/recipes/new', element: <RecipeNewPage /> },
+      { path: '/recipes/import', element: <RecipeImportPage /> },
+      { path: '/recipes/:id', element: <RecipeDetailPage /> },
+      { path: '/recipes/:id/edit', element: <RecipeEditPage /> },
+      { path: '/recipes/:id/cook', element: <CookPage /> },
+      { path: '/meals', element: <MealsPage /> },
       { path: '/plan', element: <ComingSoonPage title="Planner" phase="Meal planning arrives with the planner update." /> },
       { path: '/shop', element: <ComingSoonPage title="Shopping list" phase="The shopping list arrives with the planner update." /> },
       { path: '/products', element: <ProductsPage /> },

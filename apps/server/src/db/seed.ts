@@ -4,24 +4,27 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   parseCsv,
   parsePackSizes,
   parseShelfLifeCsv,
   parseUnitTable,
+  type Nutrition,
   type ShelfLifeCategorySeed,
   toGrams,
   type UnitTable,
 } from '@snackoverflow/shared';
 import type { Db } from './client';
-import { ingredients, locations, shelfLifeCategories } from './schema';
+import { households, ingredients, locations, shelfLifeCategories } from './schema';
 
 export interface SeedData {
   units: UnitTable;
   categories: ShelfLifeCategorySeed[];
   ingredients: Record<string, string>[];
   packSizes: Record<string, { sizes: string; unit: string }>;
+  /** Typical nutrition per 100g by ingredient key (docs/data/nutrition.csv). */
+  nutrition: Record<string, Nutrition>;
 }
 
 export function loadSeedData(dir: string): SeedData {
@@ -30,7 +33,13 @@ export function loadSeedData(dir: string): SeedData {
   for (const row of parseCsv(read('pack-sizes.csv'))) {
     if (row.ingredient) packSizes[row.ingredient] = { sizes: row.pack_sizes ?? '', unit: row.unit ?? 'g' };
   }
+  const nutrition: SeedData['nutrition'] = {};
+  const num = (v: string | undefined) => (v === undefined || v.trim() === '' ? null : Number(v));
+  for (const row of parseCsv(read('nutrition.csv'))) {
+    if (row.ingredient) nutrition[row.ingredient] = { kcal: num(row.kcal), protein: num(row.protein), carbs: num(row.carbs), fat: num(row.fat) };
+  }
   return {
+    nutrition,
     units: parseUnitTable(read('unit-conversions.csv')),
     categories: parseShelfLifeCsv(read('shelf-life-defaults.csv')),
     ingredients: parseCsv(read('ingredients.csv')),
@@ -102,6 +111,7 @@ export async function seedHousehold(db: Db, householdId: string, seed: SeedData,
         countUnit: r.count_unit || null,
         packSizesGrams: packSizesGrams?.length ? packSizesGrams : null,
         trackRunningLow: r.track_running_low === 'yes',
+        nutritionPer100g: seed.nutrition[r.key as string] ?? null,
       };
     });
   if (rows.length) await db.insert(ingredients).values(rows).onConflictDoNothing();
@@ -118,4 +128,22 @@ export function ingredientAliases(seed: SeedData): Map<string, string[]> {
       .filter((r) => r.key)
       .map((r) => [r.key as string, (r.aliases ?? '').split(';').map((a) => a.trim().toLowerCase()).filter(Boolean)]),
   );
+}
+
+/**
+ * On start-up, bring every household up to date with the seed files: add new
+ * categories and ingredients, and fill in nutrition that was added later.
+ * Nothing the household has edited is overwritten.
+ */
+export async function syncSeedData(db: Db, seed: SeedData): Promise<void> {
+  const all = await db.select({ id: households.id }).from(households);
+  for (const h of all) {
+    await seedHousehold(db, h.id, seed);
+    for (const [key, n] of Object.entries(seed.nutrition)) {
+      await db
+        .update(ingredients)
+        .set({ nutritionPer100g: n })
+        .where(and(eq(ingredients.householdId, h.id), eq(ingredients.key, key), isNull(ingredients.nutritionPer100g)));
+    }
+  }
 }

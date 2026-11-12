@@ -2,7 +2,7 @@ import { buildApp } from './app';
 import { loadConfig } from './config';
 import type { AppContext } from './context';
 import { connect } from './db/client';
-import { loadSeedData } from './db/seed';
+import { loadSeedData, syncSeedData } from './db/seed';
 import { LiveHub } from './live';
 import { createMailer } from './notify/email';
 import { createPushSender } from './notify/push';
@@ -23,12 +23,14 @@ async function main() {
     mailer: createMailer(config),
     push: createPushSender(config),
     now: () => new Date(),
+    fetch: globalThis.fetch,
   };
   const app = await buildApp(ctx, {
     logger: { level: config.isProduction ? 'info' : 'debug' },
     webDist: webDistDir(config.WEB_DIST_DIR),
   });
 
+  await syncSeedData(ctx.db, ctx.seed);
   const admin = await ensureFirstAdmin(ctx);
   if (admin) app.log.info({ email: admin.email }, 'created the first admin from ADMIN_EMAIL');
 

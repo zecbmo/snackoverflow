@@ -23,6 +23,10 @@ export interface FeaturesDto {
   email: boolean;
   oidc: { enabled: boolean; displayName: string; allowPassword: boolean };
   backups: boolean;
+  /** AI recipe clean-up is set up (AI_API_KEY). */
+  ai: boolean;
+  /** The MCP endpoint for assistants is on (MCP_TOKEN); it lives at APP_URL/mcp. */
+  mcp: boolean;
 }
 
 export interface SessionDto {
@@ -107,6 +111,8 @@ export interface StockItemDto {
   densityGPerMl: number | null;
   gramsPerCount: number | null;
   addedAt: string;
+  /** A cooked meal (leftovers or batch-cook portions), counted in portions. */
+  isMeal: boolean;
   /** Which actions make sense right now, with a reason when they don't. */
   actions: {
     open: string | null;
@@ -181,7 +187,7 @@ export interface InviteDto {
 
 /** Messages pushed over the WebSocket so every phone stays in step. */
 export type LiveMessage = { type: 'invalidate'; topics: LiveTopic[] };
-export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household' | 'notifications';
+export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household' | 'notifications' | 'recipes';
 
 export interface NotificationDto {
   id: string;
@@ -210,4 +216,108 @@ export interface DeviceDto {
   lastSeenAt: string;
   createdAt: string;
   current: boolean;
+}
+
+export interface RecipeIngredientDto {
+  id: string;
+  position: number;
+  text: string;
+  amount: number | null;
+  unit: string | null;
+  ingredientId: string | null;
+  ingredientName: string | null;
+  productId: string | null;
+  productName: string | null;
+  note: string | null;
+  optional: boolean;
+  /** Amount in grams, when it can be worked out. */
+  grams: number | null;
+  /** Grams of this ingredient in stock right now (all packs), when known. */
+  inStockGrams: number | null;
+}
+
+export interface RecipeSummaryDto {
+  id: string;
+  title: string;
+  serves: number;
+  imageUrl: string | null;
+  tags: string[];
+  totalMinutes: number | null;
+  kcalPerServing: number | null;
+  ingredientCount: number;
+}
+
+export interface RecipeDto extends RecipeSummaryDto {
+  steps: string[];
+  sourceUrl: string | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  ingredients: RecipeIngredientDto[];
+  nutritionPerServing: Nutrition;
+  /** Share of ingredient lines with known calories (0-1). */
+  nutritionCoverage: number;
+  updatedAt: string;
+}
+
+/** An imported or AI-tidied recipe, not yet saved, for the review screen. */
+export interface RecipeDraftDto {
+  title: string;
+  serves: number;
+  steps: string[];
+  imageUrl: string | null;
+  sourceUrl: string | null;
+  tags: string[];
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  ingredients: (RecipeIngredientInputDraft & { ingredientName: string | null; matchConfidence: 'high' | 'low' | 'none' })[];
+}
+
+export interface RecipeIngredientInputDraft {
+  text: string;
+  amount: number | null;
+  unit: string | null;
+  ingredientId: string | null;
+  productId: string | null;
+  note: string | null;
+  optional: boolean;
+}
+
+/** The cook screen: what each line will take from stock, earliest-expiring first. */
+export interface CookPlanLineDto {
+  recipeIngredientId: string;
+  text: string;
+  ingredientName: string | null;
+  optional: boolean;
+  neededGrams: number | null;
+  takes: {
+    stockItemId: string;
+    productName: string;
+    locationName: string;
+    state: StockState;
+    bestBefore: CalendarDate | null;
+    /** Grams to take, or null when the pack's size isn't known (then `fraction`). */
+    grams: number | null;
+    fraction: number | null;
+    availableGrams: number | null;
+  }[];
+  /** Grams still missing after all stock is used. */
+  shortGrams: number | null;
+}
+
+export interface CookPlanDto {
+  recipeId: string;
+  title: string;
+  serves: number;
+  servings: number;
+  portionGrams: number | null;
+  lines: CookPlanLineDto[];
+}
+
+export interface CookResultDto {
+  cookId: string;
+  /** Closed packs used in part: ask "Is it opened now?". */
+  askOpened: StockItemDto[];
+  /** Packs whose numbers ran out: ask "Is there still some left?". */
+  askStillSome: StockItemDto[];
+  leftovers: StockItemDto[];
 }

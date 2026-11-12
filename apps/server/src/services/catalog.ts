@@ -172,14 +172,15 @@ export function suggestIngredient(
   aliases: Map<string, string[]>,
 ): IngredientRow | null {
   const name = normalise(productName);
+  // Plurals on either side: "Maris Pipers" matches "maris piper", "Chicken Thighs" matches "chicken thigh".
+  const singularName = name.replace(/(\w{3,})s /g, '$1 ');
   let best: { ing: IngredientRow; len: number } | null = null;
   for (const ing of all) {
     const terms = [ing.name, ...(ing.key ? (aliases.get(ing.key) ?? []) : [])];
     for (const term of terms) {
       const t = normalise(term);
-      // Allow a plural "s" on the product name ("Chicken Thighs" vs "chicken thigh").
-      const singular = t.endsWith('s ') ? `${t.slice(0, -2)} ` : null;
-      const hit = name.includes(t) || (singular !== null && name.includes(singular));
+      const singular = t.replace(/(\w{3,})s /g, '$1 ');
+      const hit = name.includes(t) || name.includes(singular) || singularName.includes(singular);
       if (hit && t.length > (best?.len ?? 0)) best = { ing, len: t.length };
     }
   }

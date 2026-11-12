@@ -39,6 +39,8 @@ export interface StockDeps {
   db: Db;
   auth: Auth;
   now: Date;
+  /** Set while cooking, so every use and leftover can be undone together. */
+  cookId?: string;
 }
 
 export function householdToday(auth: Auth, now: Date): CalendarDate {
@@ -68,6 +70,8 @@ export function toStockDto(
 ): StockItemDto {
   const shelfLife = productShelfLife(product, catalog);
   const measures = measuresFor(product.ingredientId, catalog);
+  // Cooked meals are counted in portions.
+  if (product.portionGrams) measures.gramsPerCount = product.portionGrams;
   const open = canOpen(item.state, shelfLife);
   const freeze = canFreeze({ today, state: item.state, bestBefore: item.bestBefore, shelfLife });
   const defrost = canDefrost(item.state);
@@ -93,6 +97,7 @@ export function toStockDto(
     densityGPerMl: measures.densityGPerMl ?? null,
     gramsPerCount: measures.gramsPerCount ?? null,
     addedAt: item.addedAt.toISOString(),
+    isMeal: product.recipeId !== null,
     actions: {
       open: open.ok ? null : open.reason,
       freeze: freeze.ok ? null : freeze.reason,
@@ -157,7 +162,7 @@ export async function firstLocationOfType(db: Db, householdId: string, type: Loc
 }
 
 async function writeEvent(
-  { db, auth, now }: StockDeps,
+  { db, auth, now, cookId }: StockDeps,
   item: StockRow,
   type: StockEventType,
   extra: { grams?: number | null; fraction?: number | null; before?: StockSnapshot | null; from?: string; to?: string },
@@ -176,6 +181,7 @@ async function writeEvent(
       before: extra.before ?? null,
       userId: auth.user.id,
       createdAt: now,
+      cookId: cookId ?? null,
     })
     .returning({ id: stockEvents.id });
   if (!ev) throw new Error('Could not record the stock event');
@@ -196,7 +202,15 @@ async function finishChange(
 /** Add one pack of a product to a location, with an estimated best-before unless one is given. */
 export async function addPack(
   deps: StockDeps,
-  input: { product: ProductRow; locationId: string; bestBefore?: CalendarDate | null; catalog?: Catalog; addedOn?: CalendarDate },
+  input: {
+    product: ProductRow;
+    locationId: string;
+    bestBefore?: CalendarDate | null;
+    catalog?: Catalog;
+    addedOn?: CalendarDate;
+    /** Size of this pack when it differs from the product's usual pack (e.g. 3 portions of leftovers). */
+    grams?: number;
+  },
 ): Promise<StockChangeDto & { estimated: boolean }> {
   const { db, auth, now } = deps;
   // Scans queued offline keep the day they were really scanned.
@@ -211,7 +225,7 @@ export async function addPack(
     learnedFrozenDays: input.product.learnedFrozenDays,
   });
   const given = input.bestBefore !== undefined && input.bestBefore !== null;
-  const grams = input.product.packGrams;
+  const grams = input.grams ?? input.product.packGrams;
   const [item] = await db
     .insert(stockItems)
     .values({

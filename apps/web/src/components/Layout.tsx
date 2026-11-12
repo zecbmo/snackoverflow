@@ -8,7 +8,7 @@ import { configureBackgroundChecks, forgetDevice, requestNotificationPermission 
 import { startQueueSync, syncQueue, useQueuedCount } from '../lib/offlineQueue';
 import { hasServer, isNative } from '../lib/platform';
 import { useToast } from './Toast';
-import { useInbox, useProducts, useSession, useStock } from '../lib/queries';
+import { useInbox, useProducts, useRecipes, useSession, useStock } from '../lib/queries';
 import { Icon, type IconName } from './Icon';
 import { Spinner } from './ui';
 
@@ -36,10 +36,14 @@ interface MenuLink {
 
 function useMenuSections(): { title: string; links: MenuLink[] }[] {
   const unnamed = useProducts('', true).data?.length ?? 0;
+  const recipes = useRecipes().data?.length;
+  const portions = (useStock().data ?? []).filter((s) => s.isMeal).length;
   return [
     {
       title: 'Food',
       links: [
+        { to: '/recipes', label: 'Recipes', badge: recipes ? String(recipes) : undefined },
+        { to: '/meals', label: 'Batch cooks & leftovers', badge: portions ? String(portions) : undefined },
         { to: '/products', label: 'Products & barcodes', badge: unnamed ? `${unnamed} unnamed` : undefined },
         { to: '/ingredients', label: 'Ingredients & units' },
       ],

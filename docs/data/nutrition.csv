@@ -1,0 +1,66 @@
+ingredient,kcal,protein,carbs,fat,source,notes
+potatoes,77,2.0,17.0,0.1,estimate,raw
+sweet_potatoes,86,1.6,20.1,0.1,estimate,raw
+onions,40,1.1,9.3,0.1,estimate,raw
+garlic,149,6.4,33.1,0.5,estimate,raw
+carrots,41,0.9,9.6,0.2,estimate,raw
+parsnips,75,1.2,18.0,0.3,estimate,raw
+red_pepper,31,1.0,6.0,0.3,estimate,raw
+courgettes,17,1.2,3.1,0.3,estimate,raw
+mushrooms,22,3.1,3.3,0.3,estimate,raw
+spinach,23,2.9,3.6,0.4,estimate,raw
+bagged_salad,15,1.4,2.9,0.2,estimate,raw
+tomatoes,18,0.9,3.9,0.2,estimate,raw
+fresh_herbs,23,3.0,3.7,0.6,estimate,raw
+bananas,89,1.1,22.8,0.3,estimate,peeled weight
+apples,52,0.3,13.8,0.2,estimate,raw
+lemons,29,1.1,9.3,0.3,estimate,raw
+avocados,160,2.0,8.5,14.7,estimate,flesh
+berries,45,0.9,10.0,0.3,estimate,mixed strawberries/raspberries/blueberries
+milk,46,3.5,4.7,1.7,estimate,semi-skimmed
+double_cream,445,1.7,2.6,48.0,estimate,
+butter,717,0.9,0.1,81.0,estimate,
+cheddar,403,25.0,1.3,33.0,estimate,
+parmesan,431,38.0,4.1,29.0,estimate,
+mozzarella,254,18.0,2.2,19.0,estimate,
+greek_yogurt,97,9.0,3.9,5.0,estimate,varies a lot by fat level
+eggs,143,12.6,0.7,9.5,estimate,edible part
+bread,247,9.0,46.0,3.2,estimate,white sliced
+chicken_breast,120,22.5,0.0,2.6,estimate,raw skinless
+chicken_thighs,150,19.0,0.0,8.0,estimate,raw skinless boneless
+beef_mince,220,19.0,0.0,16.0,estimate,raw; lean mince is lower
+sausages,290,13.0,9.0,23.0,estimate,raw pork
+bacon,215,16.0,0.0,16.5,estimate,raw back bacon
+ham,107,18.0,1.0,3.5,estimate,
+white_fish,82,18.0,0.0,0.7,estimate,raw cod/haddock
+salmon,208,20.0,0.0,13.0,estimate,raw
+prawns,99,24.0,0.0,0.3,estimate,cooked
+smoked_salmon,117,18.0,0.0,4.3,estimate,
+pasta,359,12.5,72.0,1.5,estimate,dry
+rice,360,7.0,79.0,0.6,estimate,dry
+plain_flour,364,10.0,76.0,1.0,estimate,
+self_raising_flour,354,9.0,75.0,1.2,estimate,
+sugar,400,0.0,100.0,0.0,estimate,
+caster_sugar,400,0.0,100.0,0.0,estimate,
+icing_sugar,398,0.0,99.5,0.0,estimate,
+brown_sugar,380,0.1,98.0,0.0,estimate,
+honey,304,0.3,82.0,0.0,estimate,
+oats,375,11.0,60.0,8.0,estimate,dry
+cereal,380,8.0,80.0,2.0,estimate,cornflakes-style
+lentils,318,24.0,48.0,1.3,estimate,dry red lentils
+salt,0,0.0,0.0,0.0,estimate,
+olive_oil,884,0.0,0.0,100.0,estimate,
+vegetable_oil,884,0.0,0.0,100.0,estimate,
+chopped_tomatoes,22,1.1,3.8,0.2,estimate,tinned
+baked_beans,78,4.7,12.9,0.4,estimate,tinned in tomato sauce
+tinned_tuna,109,25.0,0.0,1.0,estimate,in spring water
+chickpeas,115,7.0,15.0,2.6,estimate,tinned drained
+pasta_sauce,50,1.5,8.0,1.5,estimate,tomato-based
+pesto,450,5.0,5.0,45.0,estimate,green
+ketchup,112,1.2,26.0,0.1,estimate,
+frozen_peas,72,6.0,10.0,0.9,estimate,
+oven_chips,150,2.5,25.0,4.5,estimate,as sold
+ice_cream,207,3.5,24.0,11.0,estimate,vanilla
+crisps,530,6.0,52.0,33.0,estimate,
+biscuits,480,6.0,65.0,22.0,estimate,
+chocolate,535,7.5,57.0,30.0,estimate,milk chocolate
