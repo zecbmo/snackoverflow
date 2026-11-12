@@ -53,6 +53,14 @@ Every workflow is optional and can be undone. The app keeps the numbers right in
 
 Best-before estimate order: what was set last time for this product, then the product's category default, then the ingredient's default. Changing a date teaches the app (always changing a product to 4 days makes 4 days its new default).
 
+**Scan modes**
+
+The scanner has three modes, switched at the top of the camera screen:
+
+- **Add:** puts the item into stock at the chosen location.
+- **Use:** takes the item out of stock (cooking, partial use).
+- **Eat:** logs the item to the current person's meal slot for calorie tracking (e.g. "Snickers → your lunch, 250 kcal") and, if it is in stock, takes it out of stock too.
+
 **Use something**
 
 - From the item (tap, then Use), or scan in "Use" mode.
@@ -94,7 +102,8 @@ Best-before estimate order: what was set last time for this product, then the pr
 **Planner**
 
 - Week view with breakfast, lunch, dinner and snack slots. Plan ahead for a whole week, or add things on the day as you go.
-- A slot can hold a recipe, a product (a Snickers bar), a leftover or batch portion, or free text.
+- A slot holds any number of items: recipes, products (a Snickers bar, a banana, a coffee), leftovers or batch portions, or free text. Each item has its own calories.
+- Food can be logged into a slot by scanning it (Eat mode), searching, or picking from stock.
 - Daily calorie totals come from what is planned or logged.
 - Planned meals don't lock stock. Stock shows what is earmarked ("500g, 100g planned"), and using or removing something that would leave a planned meal short gives a warning.
 
@@ -147,13 +156,13 @@ Push goes to the Android app (Firebase Cloud Messaging) and to browsers (Web Pus
 
 ## Screens
 
-Phone-first, with five tabs and Scan as a large centre button. On desktop the same tabs become a sidebar.
+Phone-first, with five tabs (Today, Stock, Scan, Plan, Shop) and Scan as a large centre button. Everything else (Recipes, Dashboard, Batch cooks, Products, Ingredients, Locations, People, Notifications, Settings) lives in a menu opened from a button at the top left. On desktop and landscape screens there is no bottom bar: everything is in a left sidebar, and the planner shows a full week grid.
 
 | Screen | Main content | Key actions |
 | --- | --- | --- |
 | Today (home) | Today's meals, "use soon" strip (next 3 days), running-low nudges, quick stats | Cooked / skip, Use / Freeze from the strip |
 | Stock | Items grouped by location or sorted by best-before; colour bands for expired, this week, fine; search and filters | Use, Open, Freeze, Defrost, Move, Binned; swipe actions |
-| Scan (centre) | Full-screen camera, location chip, mode switch (Add / Use), session counter | Continuous scan, undo, Done summary |
+| Scan (centre) | Full-screen camera, location (or meal slot) chip, mode switch (Add / Use / Eat), session counter | Continuous scan, undo, Done summary |
 | Planner | Week grid per person with slots and daily calories | Add, drag to move, Suggest meals, Plan my week, Build list |
 | Shopping | One list grouped by category, estimated total if pricing is on, surplus hints | Tick off, Put away mode, Add item |
 | Recipes (from Planner and Today) | Library with Cook now / Nearly there / Use it up filters | Import URL, Cook, Batch cook, Add to plan |
@@ -161,7 +170,7 @@ Phone-first, with five tabs and Scan as a large centre button. On desktop the sa
 | Dashboard (from Today) | Calories per day with 7- and 30-day averages; waste per week/month by item and category (kg, and £ if pricing is on) | Switch person (admins) |
 | Settings | Household, users and roles, locations, notifications, pricing toggle, AI import key, shelf-life defaults, backups | Invite user, export data |
 
-Visual direction: clean, card-based, large touch targets, dark mode, and colour used only for meaning (green fine, amber this week, red expired).
+Visual direction: clean, card-based, large touch targets, dark mode. Warm off-white background, near-black ink, a violet accent (#6B4EFF) for primary actions, Bricolage Grotesque headings and Inter body text. Green, amber and red are reserved for freshness (fine, this week, going off); blue marks frozen items. Mock-ups: see the Snack Overflow design canvas.
 
 ## Architecture and tech stack
 
