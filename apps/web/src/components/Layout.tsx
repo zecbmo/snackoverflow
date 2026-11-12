@@ -10,6 +10,7 @@ import { hasServer, isNative } from '../lib/platform';
 import { useToast } from './Toast';
 import { useInbox, useProducts, useRecipes, useSession, useStock } from '../lib/queries';
 import { Icon, type IconName } from './Icon';
+import { SETTINGS_PATHS } from './SettingsShell';
 import { Spinner } from './ui';
 
 const SessionCtx = createContext<SessionDto | null>(null);
@@ -24,7 +25,7 @@ export function useMe(): SessionDto {
 const tabs: { to: string; label: string; icon: IconName }[] = [
   { to: '/', label: 'Today', icon: 'home' },
   { to: '/stock', label: 'Stock', icon: 'box' },
-  { to: '/plan', label: 'Plan', icon: 'calendar' },
+  { to: '/calendar', label: 'Calendar', icon: 'calendar' },
   { to: '/shop', label: 'Shop', icon: 'cart' },
 ];
 
@@ -33,6 +34,8 @@ interface MenuLink {
   label: string;
   icon: IconName;
   badge?: string;
+  /** Other paths that count as this page (Settings covers products, people…). */
+  also?: string[];
 }
 
 function useMenuSections(): { title: string; links: MenuLink[] }[] {
@@ -46,8 +49,6 @@ function useMenuSections(): { title: string; links: MenuLink[] }[] {
         { to: '/recipes', label: 'Recipes', icon: 'recipe', badge: recipes ? String(recipes) : undefined },
         { to: '/meals', label: 'Batch cooks & leftovers', icon: 'pot', badge: portions ? String(portions) : undefined },
         { to: '/receipts', label: 'Receipts', icon: 'receipt' },
-        { to: '/products', label: 'Products & barcodes', icon: 'tag', badge: unnamed ? `${unnamed} unnamed` : undefined },
-        { to: '/ingredients', label: 'Ingredients & units', icon: 'leaf' },
       ],
     },
     {
@@ -59,12 +60,7 @@ function useMenuSections(): { title: string; links: MenuLink[] }[] {
     },
     {
       title: 'Household',
-      links: [
-        { to: '/locations', label: 'Locations', icon: 'pin' },
-        { to: '/people', label: 'People & roles', icon: 'users' },
-        { to: '/notifications', label: 'Notifications', icon: 'bell' },
-        { to: '/settings', label: 'Settings', icon: 'sliders' },
-      ],
+      links: [{ to: '/settings', label: 'Settings', icon: 'sliders', badge: unnamed ? `${unnamed} unnamed` : undefined, also: SETTINGS_PATHS }],
     },
   ];
 }
@@ -220,16 +216,19 @@ function useSidebarCollapsed(): [boolean, () => void] {
 }
 
 /** A sidebar link: icon and label. Collapsed, just the icon, with the label as a tooltip. */
-function SideLink({ to, label, icon, badge, collapsed, end }: MenuLink & { collapsed: boolean; end?: boolean }) {
+function SideLink({ to, label, icon, badge, collapsed, end, also }: MenuLink & { collapsed: boolean; end?: boolean }) {
+  const { pathname } = useLocation();
+  const alsoActive = also?.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ?? false;
   return (
     <NavLink
       to={to}
       end={end}
-      className={({ isActive }) =>
-        `group relative flex h-8 shrink-0 items-center gap-2.5 rounded-md text-sm ${collapsed ? 'justify-center' : 'px-2.5'} ${
+      className={({ isActive: exact }) => {
+        const isActive = exact || alsoActive;
+        return `group relative flex h-8 shrink-0 items-center gap-2.5 rounded-md text-sm ${collapsed ? 'justify-center' : 'px-2.5'} ${
           isActive ? 'bg-accent-soft font-semibold text-accent-text' : 'text-ink hover:bg-card-muted'
-        }`
-      }
+        }`;
+      }}
     >
       <Icon name={icon} className="size-[18px] shrink-0" />
       <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{label}</span>
@@ -255,7 +254,7 @@ function Sidebar() {
   const main: MenuLink[] = [
     { to: '/', label: 'Today', icon: 'home' },
     { to: '/stock', label: 'Stock', icon: 'box', badge: stockCount !== undefined ? String(stockCount) : undefined },
-    { to: '/plan', label: 'Planner', icon: 'calendar' },
+    { to: '/calendar', label: 'Calendar', icon: 'calendar', also: ['/plan'] },
     { to: '/shop', label: 'Shopping list', icon: 'cart' },
   ];
   return (

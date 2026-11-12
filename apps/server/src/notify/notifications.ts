@@ -289,7 +289,7 @@ async function mealTimePrompts(
         await deliver(ctx, user, channels, 'mealTime', {
           title: `Cooking ${title} ${SLOT_WORDS[entry.slot]}?`,
           body: `${entry.slot.charAt(0).toUpperCase()}${entry.slot.slice(1)} · ${entry.servings} ${entry.servings === 1 ? 'serving' : 'servings'}`,
-          url: `/plan?date=${entry.date}`,
+          url: `/calendar?date=${entry.date}`,
           tag: `meal-${entry.id}`,
           actions: [
             { action: 'cooked', title: 'Cooked it' },

@@ -108,6 +108,7 @@ export function ingredientDto(i: IngredientRow, catalog: Catalog): IngredientDto
     densityGPerMl: i.densityGPerMl,
     gramsPerCount: i.gramsPerCount,
     countUnit: i.countUnit,
+    packUnit: i.packUnit,
     trackRunningLow: i.trackRunningLow,
     shelfLife: ingredientShelfLife(i, catalog),
     overrides: { closedDays: i.closedDays, openedDays: i.openedDays, frozenDays: i.frozenDays, defrostedDays: i.defrostedDays },

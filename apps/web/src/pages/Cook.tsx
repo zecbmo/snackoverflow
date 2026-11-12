@@ -6,22 +6,26 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import type { CookPlanDto, CookResultDto, StockItemDto } from '@snackoverflow/shared';
+import { amountText, type CookPlanDto, type CookResultDto, type StockItemDto } from '@snackoverflow/shared';
 import { BackButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
 import { Button, Card, ErrorNote, PageHeader, Pill, Select, Spinner, TextInput } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
-import { dateLabel, gramsLabel, toneClasses, toneFor } from '../lib/format';
+import { dateLabel, toneClasses, toneFor } from '../lib/format';
 import { useCookPlan, useLocations } from '../lib/queries';
 
 type Take = CookPlanDto['lines'][number]['takes'][number] & { use: boolean; edit: string };
 type Line = Omit<CookPlanDto['lines'][number], 'takes'> & { takes: Take[]; skipped: boolean };
 
+/** Liquids are entered in ml; everything else in grams. */
+const isLiquid = (l: { unit: CookPlanDto['lines'][number]['unit'] }) => l.unit.displayUnit === 'ml';
+const density = (l: { unit: CookPlanDto['lines'][number]['unit'] }) => l.unit.densityGPerMl ?? 1;
+
 function fromPlan(plan: CookPlanDto): Line[] {
   return plan.lines.map((l) => ({
     ...l,
     skipped: false,
-    takes: l.takes.map((t) => ({ ...t, use: true, edit: t.grams !== null ? String(Math.round(t.grams)) : '' })),
+    takes: l.takes.map((t) => ({ ...t, use: true, edit: t.grams !== null ? String(Math.round(isLiquid(l) ? t.grams / density(l) : t.grams)) : '' })),
   }));
 }
 
@@ -83,7 +87,11 @@ export function CookPage() {
           .map((l) => ({
             takes: l.takes
               .filter((t) => t.use)
-              .map((t) => (t.grams !== null ? { stockItemId: t.stockItemId, grams: Math.max(0.1, Number(t.edit) || 0) } : { stockItemId: t.stockItemId, fraction: t.fraction ?? 0.5 }))
+              .map((t) =>
+                t.grams !== null
+                  ? { stockItemId: t.stockItemId, grams: Math.max(0.1, (Number(t.edit) || 0) * (isLiquid(l) ? density(l) : 1)) }
+                  : { stockItemId: t.stockItemId, fraction: t.fraction ?? 0.5 },
+              )
               .filter((t) => !('grams' in t) || (t.grams ?? 0) > 0),
           })),
         leftovers: groups.filter((g) => g.portions > 0),
@@ -140,9 +148,9 @@ export function CookPage() {
                   <div className="flex-1">
                     <p className="font-semibold">{l.text}</p>
                     <p className="text-sm text-muted">
-                      {l.neededGrams !== null ? `Needs ${gramsLabel(l.neededGrams)}` : 'Not tracked'}
+                      {l.neededGrams !== null ? `Needs ${amountText(l.neededGrams, l.unit)}` : 'Not tracked'}
                       {l.ingredientName ? ` · ${l.ingredientName}` : ''}
-                      {!l.skipped && (l.shortGrams ?? 0) > 0 && ` · short by ${gramsLabel(l.shortGrams)}`}
+                      {!l.skipped && (l.shortGrams ?? 0) > 0 && ` · short by ${amountText(l.shortGrams ?? 0, l.unit)}`}
                     </p>
                   </div>
                   {l.takes.length > 0 && (
@@ -170,9 +178,14 @@ export function CookPage() {
                         {t.grams !== null ? (
                           <span className="flex items-center gap-1">
                             <span className="w-20">
-                              <TextInput aria-label={`Grams from ${t.productName}`} inputMode="decimal" value={t.edit} onChange={(e) => setTake(li, ti, { edit: e.target.value })} />
+                              <TextInput
+                                aria-label={`${isLiquid(l) ? 'Millilitres' : 'Grams'} from ${t.productName}`}
+                                inputMode="decimal"
+                                value={t.edit}
+                                onChange={(e) => setTake(li, ti, { edit: e.target.value })}
+                              />
                             </span>
-                            <span className="text-sm text-muted">g</span>
+                            <span className="text-sm text-muted">{isLiquid(l) ? 'ml' : 'g'}</span>
                           </span>
                         ) : (
                           <span className="text-sm text-muted">about half</span>

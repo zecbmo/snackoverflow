@@ -33,6 +33,7 @@ export async function planCook(db: Db, auth: Auth, recipeId: string, servings: n
     .where(and(eq(stockItems.householdId, auth.household.id), isNull(stockItems.finishedAt), isNull(products.recipeId)));
   // Grams already promised to earlier lines, so two lines never take the same food twice.
   const promised = new Map<string, number>();
+  const catalog = await loadCatalog(db, auth.household.id);
 
   const lines: CookPlanLineDto[] = recipe.ingredients.map((line) => {
     const needed = line.grams === null ? null : round(line.grams * factor);
@@ -65,6 +66,10 @@ export async function planCook(db: Db, auth: Auth, recipeId: string, servings: n
       text: line.text,
       ingredientName: line.ingredientName ?? line.productName,
       optional: line.optional,
+      unit: (() => {
+        const ing = line.ingredientId ? catalog.ingredients.get(line.ingredientId) : undefined;
+        return { displayUnit: ing?.packUnit === 'ml' ? ('ml' as const) : ing?.packUnit === 'count' ? ('count' as const) : ('g' as const), densityGPerMl: ing?.densityGPerMl ?? null };
+      })(),
       neededGrams: needed,
       takes,
       shortGrams: needed === null ? null : Math.max(0, left ?? 0),

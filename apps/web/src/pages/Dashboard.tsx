@@ -201,7 +201,7 @@ export function WasteItems({ report, limit }: { report: WasteReportDto; limit?: 
               {report.pricing && i.pence !== null ? ` · ${formatPence(i.pence)}` : ''}
             </p>
           </div>
-          <span className="font-semibold tabular-nums">{weightLabel(i.grams)}</span>
+          <span className="font-semibold tabular-nums">{i.amount}</span>
         </li>
       ))}
     </ul>

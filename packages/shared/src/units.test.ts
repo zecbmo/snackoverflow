@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseCsv } from './csv';
 import {
+  amountText,
   formatPackSize,
   formatQuantity,
   fromGrams,
@@ -80,6 +81,16 @@ describe('units', () => {
     expect(unitKind('tsp', table)).toBe('volume');
     expect(unitKind('each', table)).toBe('count');
     expect(unitKind('bunch', table)).toBeNull();
+  });
+});
+
+describe('amountText', () => {
+  it('says liquids in ml and litres, counted food as a count, the rest by weight', () => {
+    expect(amountText(568, { packUnit: 'ml', densityGPerMl: 1.03 })).toBe('551ml');
+    expect(amountText(2340, { displayUnit: 'ml', densityGPerMl: 1.03 })).toBe('2.27L');
+    expect(amountText(360, { packUnit: 'count', gramsPerCount: 60, countUnit: 'egg' })).toBe('6 eggs');
+    expect(amountText(1200, { packUnit: 'g' })).toBe('1.2kg');
+    expect(amountText(300, null)).toBe('300g');
   });
 });
 

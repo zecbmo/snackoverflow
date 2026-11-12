@@ -5,6 +5,7 @@
  */
 import { and, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import {
+  amountText,
   addDays,
   type CalendarDate,
   type Lot,
@@ -49,6 +50,7 @@ interface Data {
   rules: RankRules;
   meals: MealOption[];
   priceOf?: (ingredientId: string, grams: number) => number | null;
+  amountText: (ingredientId: string, grams: number) => string;
 }
 
 async function gather(db: Db, auth: Auth, now: Date, pricingDefault: boolean): Promise<Data> {
@@ -146,6 +148,7 @@ async function gather(db: Db, auth: Auth, now: Date, pricingDefault: boolean): P
     rules: { recent, excludedTags: settings.excludedTags, maxExtraIngredients: settings.maxExtraIngredients },
     meals: meals.sort((a, b) => b.score - a.score),
     priceOf,
+    amountText: (ingredientId, grams) => amountText(grams, catalog.ingredients.get(ingredientId)),
   };
 }
 
@@ -153,7 +156,7 @@ async function gather(db: Db, auth: Auth, now: Date, pricingDefault: boolean): P
 export async function scoreAllRecipes(db: Db, auth: Auth, now: Date, pricingDefault: boolean): Promise<{ on: CalendarDate; scores: RecipeScore[] }> {
   const d = await gather(db, auth, now, pricingDefault);
   const surplus = surplusLots(d.lots, d.needs);
-  return { on: d.today, scores: d.recipes.map((r) => scoreRecipe(r, surplus, { on: d.today, priceOf: d.priceOf })) };
+  return { on: d.today, scores: d.recipes.map((r) => scoreRecipe(r, surplus, { on: d.today, priceOf: d.priceOf, amountText: d.amountText })) };
 }
 
 /** "Suggest meals": the best recipes for a day, plus leftovers and freezer portions to eat. */
@@ -167,7 +170,7 @@ export async function suggest(
   const d = await gather(db, auth, now, pricingDefault);
   const date = opts.date && opts.date >= d.today ? opts.date : d.today;
   const surplus = surplusLots(d.lots, d.needs);
-  let ranked = rankRecipes(d.recipes, surplus, { on: date, servings: opts.servings, priceOf: d.priceOf }, d.rules);
+  let ranked = rankRecipes(d.recipes, surplus, { on: date, servings: opts.servings, priceOf: d.priceOf, amountText: d.amountText }, d.rules);
   if (opts.ingredientId) ranked = ranked.filter((r) => r.uses.some((u) => u.ingredientId === opts.ingredientId));
   const meals = d.meals.filter((m) => m.frozen || !m.bestBefore || m.bestBefore >= date);
   return { date, recipes: ranked.slice(0, opts.limit ?? 6), meals: opts.ingredientId ? [] : meals.slice(0, 3) };
@@ -212,7 +215,7 @@ export async function proposeWeek(
     const [s] = left.splice(i, 1);
     picks.push({ date: s!.date, slot: s!.slot, kind: 'stock', recipeId: null, stockItemId: m.stockItemId, title: `Leftover ${m.title.toLowerCase()}`, reason: m.reason, missing: [], alternatives: [] });
   }
-  const week = planWeek(d.recipes, d.lots, d.needs, left, { servings: input.servings, priceOf: d.priceOf }, d.rules);
+  const week = planWeek(d.recipes, d.lots, d.needs, left, { servings: input.servings, priceOf: d.priceOf, amountText: d.amountText }, d.rules);
   const frozenMeals = d.meals.filter((x) => x.frozen);
   for (const s of left) {
     const p = week.find((w) => w.date === s.date && w.slot === s.slot);
@@ -244,7 +247,7 @@ export async function surplusHints(db: Db, auth: Auth, now: Date, pricingDefault
   const surplus = surplusLots(d.lots, d.needs);
   const summary = surplusSummary(surplus, d.today).filter((s) => s.grams >= 100);
   return summary.slice(0, 5).map((s) => {
-    const ideas = rankRecipes(d.recipes, surplus, { on: d.today, priceOf: d.priceOf }, d.rules).filter((r) => r.uses.some((u) => u.ingredientId === s.ingredientId));
+    const ideas = rankRecipes(d.recipes, surplus, { on: d.today, priceOf: d.priceOf, amountText: d.amountText }, d.rules).filter((r) => r.uses.some((u) => u.ingredientId === s.ingredientId));
     return {
       ingredientId: s.ingredientId,
       name: d.catalog.ingredients.get(s.ingredientId)?.name ?? 'Food',

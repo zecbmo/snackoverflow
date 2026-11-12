@@ -11,7 +11,7 @@ Starting defaults the app ships with. Every value is a **default the user can ov
 
 ## Safety rules (from UK food-safety guidance — hard-code these, don't make them editable defaults)
 
-- Food can be frozen any time up to midnight on its use-by date. ([FSA](https://www.food.gov.uk/news-updates/campaigns-0/germwatch/science-fsw/freezing))
+- Food can be frozen any time up to midnight on its use-by date. ([FSA](https://www.food.gov.uk/news-updates/campaigns-0/germwatch/science-fsw/freezing)) The app warns when freezing something past its date (or food that doesn't freeze well) but leaves the choice to the household, because best-before dates are often only about quality.
 - Defrosted food must be used within 24 hours and not refrozen; raw food defrosted and then cooked can be frozen again, and reheated only once. ([FSA](https://www.food.gov.uk/news-updates/campaigns-0/germwatch/science-fsw/freezing))
 - Food in the freezer stays safe but loses quality; the FSA suggests eating frozen food within 3–6 months. ([resource.co, reporting FSA](https://resourcemedia.eco/article/how-using-your-freezer-pause-button-could-help-fight-against-food-waste-11217))
 - Leftovers: cool and refrigerate within 2 hours, eat within 2 days or freeze. Rice dishes: 1 day. Reheat only once. ([FSA](https://www.food.gov.uk/research/fy2-wave-9-chapter-6-eating-at-home), [FSA Christmas guidance](https://www.food.gov.uk/print/pdf/node/3381))
@@ -22,7 +22,7 @@ Starting defaults the app ships with. Every value is a **default the user can ov
 
 - **Scan in (closed):** best-before = today + `closed_days`, unless the product has a learned value.
 - **Opened:** best-before = min(current best-before, today + `opened_days`).
-- **Frozen:** best-before = today + `frozen_days` (only offered when `freezable` is `yes`).
+- **Frozen:** best-before = today + `frozen_days`. When `freezable` is `no`, freezing still works after a warning.
 - **Defrosted:** best-before = today + `defrosted_days` (1 for anything perishable).
 - An empty cell means "not applicable"; the app falls back to the closed value or hides the action.
 

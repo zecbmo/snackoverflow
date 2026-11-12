@@ -137,7 +137,8 @@ export function estimateOnAdd(input: {
   return { state: 'closed', bestBefore: null, source: 'none' };
 }
 
-export type ActionCheck = { ok: true } | { ok: false; reason: string };
+/** Allowed (perhaps with a warning to confirm first), or not allowed with the reason. */
+export type ActionCheck = { ok: true; warning?: string } | { ok: false; reason: string };
 
 /** Opening only makes sense for closed packs that have an opened shelf life (or unknown ones). */
 export function canOpen(state: StockState, shelfLife: ShelfLife): ActionCheck {
@@ -160,7 +161,10 @@ export function bestBeforeOnOpen(input: {
   return input.current ? minDate(input.current, opened) : opened;
 }
 
-/** Food can be frozen up to midnight on its date; defrosted food is never refrozen. */
+/**
+ * Defrosted food is never refrozen (a hard rule). Past its date, or food that doesn't freeze well,
+ * is the household's call: allowed, with a warning to confirm first.
+ */
 export function canFreeze(input: {
   today: CalendarDate;
   state: StockState;
@@ -169,10 +173,10 @@ export function canFreeze(input: {
 }): ActionCheck {
   if (input.state === 'frozen') return { ok: false, reason: "It's already frozen." };
   if (input.state === 'defrosted') return { ok: false, reason: 'Defrosted food must not be frozen again.' };
-  if (input.shelfLife.freezable === false) return { ok: false, reason: "This doesn't freeze well." };
   if (input.bestBefore && input.bestBefore < input.today) {
-    return { ok: false, reason: 'Too late to freeze: it is past its date.' };
+    return { ok: true, warning: "It's past its best-before date. Food is safest frozen by its date." };
   }
+  if (input.shelfLife.freezable === false) return { ok: true, warning: "This doesn't usually freeze well." };
   return { ok: true };
 }
 

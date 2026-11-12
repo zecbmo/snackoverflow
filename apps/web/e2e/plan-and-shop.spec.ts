@@ -15,7 +15,7 @@ test('plan a dinner, shop for it and put it away', async ({ page }, info) => {
   await page.request.post(`/api/stock/${added.change.item.id}/use`, { data: { amount: { kind: 'all' } } });
 
   // Plan it for dinner today.
-  await page.goto('/plan');
+  await page.goto('/calendar');
   await page.getByRole('button', { name: /^Add to dinner on Today/ }).click();
   for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'More', exact: true }).click();
   await expect(page.getByText('4 servings')).toBeVisible();

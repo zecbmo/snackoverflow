@@ -6,10 +6,10 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
-import type { EarmarkDto, StockChangeDto, StockItemDto, UseAmountInput } from '@snackoverflow/shared';
+import { amountText, type EarmarkDto, type StockChangeDto, type StockItemDto, type UseAmountInput } from '@snackoverflow/shared';
 import { api, errorMessage } from '../lib/api';
 import { useLocations } from '../lib/queries';
-import { amountLabel, gramsLabel, longDate } from '../lib/format';
+import { amountLabel, longDate } from '../lib/format';
 import { Icon, locationIcon } from './Icon';
 import { useToast } from './Toast';
 import { Button, Field, Sheet, TextInput } from './ui';
@@ -61,6 +61,7 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
   const [moveFor, setMoveFor] = useState<StockItemDto | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [warning, setWarning] = useState<PlanWarning | null>(null);
+  const [freezeCheck, setFreezeCheck] = useState<{ item: StockItemDto; resolve: (go: boolean) => void } | null>(null);
 
   /** Planned meals don't lock stock, but using something they need gets a warning first. */
   const checkPlan = useCallback(
@@ -85,7 +86,7 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
       const choice = await new Promise<'use' | 'cancel' | 'list'>((resolve) =>
         setWarning({
           ingredientId: item.ingredientId!,
-          message: `This leaves ${gramsLabel(leftFor)} for ${meal.title} on ${weekday(meal.date)}, which needs ${gramsLabel(meal.grams)}.`,
+          message: `This leaves ${amountText(leftFor, item)} for ${meal.title} on ${weekday(meal.date)}, which needs ${amountText(meal.grams, item)}.`,
           resolve,
         }),
       );
@@ -158,6 +159,12 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
         await run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/open`), (c) => `Opened. Best before is now ${longDate(c.item.bestBefore)}.`);
       },
       async freeze(item) {
+        // Past its date or not great frozen: the household's call, after a word of warning.
+        if (item.actions.freezeWarning) {
+          const go = await new Promise<boolean>((resolve) => setFreezeCheck({ item, resolve }));
+          setFreezeCheck(null);
+          if (!go) return;
+        }
         await run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/freeze`), () => `${item.productName} is in the freezer.`);
       },
       async defrost(item) {
@@ -187,6 +194,19 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
           void run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/move`, { locationId }), (c) => `Moved to the ${c.item.locationName}.`)
         }
       />
+      <Sheet open={freezeCheck !== null} onClose={() => freezeCheck?.resolve(false)} title={`Freeze the ${freezeCheck?.item.productName ?? ''}?`}>
+        {freezeCheck && (
+          <div className="flex flex-col gap-3">
+            <p>{freezeCheck.item.actions.freezeWarning}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => freezeCheck.resolve(false)}>Cancel</Button>
+              <Button variant="primary" onClick={() => freezeCheck.resolve(true)}>
+                Freeze anyway
+              </Button>
+            </div>
+          </div>
+        )}
+      </Sheet>
       <Sheet open={warning !== null} onClose={() => warning?.resolve('cancel')} title="Planned for a meal">
         {warning && (
           <div className="flex flex-col gap-3">

@@ -119,17 +119,17 @@ describe('freezing', () => {
     expect(canFreeze({ today, state: 'closed', bestBefore: today, shelfLife: cat('raw_poultry') }).ok).toBe(true);
   });
 
-  it('refuses once the date has passed', () => {
+  it('warns, but allows it, once the date has passed', () => {
     const r = canFreeze({ today, state: 'closed', bestBefore: '2026-11-11', shelfLife: cat('raw_poultry') });
-    expect(r).toEqual({ ok: false, reason: 'Too late to freeze: it is past its date.' });
+    expect(r).toEqual({ ok: true, warning: "It's past its best-before date. Food is safest frozen by its date." });
   });
 
   it('never refreezes defrosted food', () => {
     expect(canFreeze({ today, state: 'defrosted', bestBefore: '2026-11-13', shelfLife: cat('raw_poultry') }).ok).toBe(false);
   });
 
-  it('refuses food that does not freeze', () => {
-    expect(canFreeze({ today, state: 'closed', bestBefore: '2026-11-20', shelfLife: cat('eggs') }).ok).toBe(false);
+  it('warns about food that does not freeze well, but leaves it to the household', () => {
+    expect(canFreeze({ today, state: 'closed', bestBefore: '2026-11-20', shelfLife: cat('eggs') })).toEqual({ ok: true, warning: "This doesn't usually freeze well." });
   });
 
   it('lets unknown food be frozen', () => {

@@ -172,12 +172,14 @@ describe('freeze and defrost', () => {
     expect(again.statusCode).toBe(400);
   });
 
-  it('refuses to freeze food past its date', async () => {
+  it('lets people freeze food past its date, with a warning first', async () => {
     const { change } = await scanAdd(CHICKEN, loc.fridge.id);
     t.setNow('2026-11-16T12:00:00Z');
-    const r = await api.raw('POST', `/api/stock/${change.item.id}/freeze`, {});
-    expect(r.statusCode).toBe(400);
-    expect(r.json().error).toMatch(/Too late/);
+    const item = (await api.get<{ item: StockItemDto }>(`/api/stock/${change.item.id}`)).item;
+    expect(item.actions.freeze).toBeNull();
+    expect(item.actions.freezeWarning).toMatch(/past its best-before/);
+    const frozen = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/freeze`, {});
+    expect(frozen.item.state).toBe('frozen');
   });
 
   it('moving into the freezer freezes it', async () => {

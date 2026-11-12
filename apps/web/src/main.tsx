@@ -4,7 +4,7 @@ import './index.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from 'react-router';
 import { AppShell } from './components/Layout';
 import { StockActionsProvider } from './components/StockActions';
 import { TOAST_EVENT, ToastProvider } from './components/Toast';
@@ -26,6 +26,7 @@ import { InboxPage } from './pages/Inbox';
 import { isNative } from './lib/platform';
 import { applyTheme } from './lib/theme';
 import { ComingSoonPage } from './pages/ComingSoon';
+import { SettingsShell } from './components/SettingsShell';
 import { DashboardPage } from './pages/Dashboard';
 import { WastePage } from './pages/Waste';
 import { IngredientsPage } from './pages/Ingredients';
@@ -52,6 +53,12 @@ const queryClient = new QueryClient({
   },
 });
 
+/** /plan was renamed /calendar. */
+function ToCalendar() {
+  const { search } = useLocation();
+  return <Navigate to={`/calendar${search}`} replace />;
+}
+
 const router = createBrowserRouter([
   { path: '/connect', element: <ConnectPage /> },
   { path: '/login', element: <LoginPage /> },
@@ -75,20 +82,32 @@ const router = createBrowserRouter([
       { path: '/recipes/:id/edit', element: <RecipeEditPage /> },
       { path: '/recipes/:id/cook', element: <CookPage /> },
       { path: '/meals', element: <MealsPage /> },
-      { path: '/plan', element: <PlannerPage /> },
+      // Old links (notifications, the Android app) still work.
+      { path: '/plan', element: <ToCalendar /> },
       { path: '/shop', element: <ShoppingPage /> },
       { path: '/dashboard', element: <DashboardPage /> },
       { path: '/waste', element: <WastePage /> },
       { path: '/receipts', element: <ReceiptsPage /> },
       { path: '/receipts/:id', element: <ReceiptReviewPage /> },
-      { path: '/products', element: <ProductsPage /> },
-      { path: '/products/:id', element: <ProductDetailPage /> },
-      { path: '/ingredients', element: <IngredientsPage /> },
-      { path: '/locations', element: <LocationsPage /> },
-      { path: '/people', element: <PeoplePage /> },
-      { path: '/notifications', element: <NotificationsPage /> },
-      { path: '/settings', element: <SettingsPage /> },
-      { path: '/profile', element: <ProfilePage /> },
+      { path: '/calendar', element: <PlannerPage /> },
+      {
+        // Settings and the household's lists share the settings sub-menu.
+        element: (
+          <SettingsShell>
+            <Outlet />
+          </SettingsShell>
+        ),
+        children: [
+          { path: '/products', element: <ProductsPage /> },
+          { path: '/products/:id', element: <ProductDetailPage /> },
+          { path: '/ingredients', element: <IngredientsPage /> },
+          { path: '/locations', element: <LocationsPage /> },
+          { path: '/people', element: <PeoplePage /> },
+          { path: '/notifications', element: <NotificationsPage /> },
+          { path: '/settings', element: <SettingsPage /> },
+          { path: '/profile', element: <ProfilePage /> },
+        ],
+      },
       { path: '*', element: <ComingSoonPage title="Not found" phase="There's nothing here." /> },
     ],
   },

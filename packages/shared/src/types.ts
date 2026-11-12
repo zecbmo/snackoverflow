@@ -69,6 +69,8 @@ export interface IngredientDto {
   densityGPerMl: number | null;
   gramsPerCount: number | null;
   countUnit: string | null;
+  /** How it's sold and measured: 'ml' for liquids, 'count' for eggs, 'g' otherwise (null: not known). */
+  packUnit: string | null;
   trackRunningLow: boolean;
   /** Effective shelf life (own values, then the category). */
   shelfLife: ShelfLife;
@@ -126,6 +128,8 @@ export interface StockItemDto {
     open: string | null;
     freeze: string | null;
     defrost: string | null;
+    /** Freezing is allowed but worth a second thought (past its date, doesn't freeze well). */
+    freezeWarning: string | null;
   };
 }
 
@@ -296,6 +300,8 @@ export interface CookPlanLineDto {
   text: string;
   ingredientName: string | null;
   optional: boolean;
+  /** How the ingredient is measured, so amounts can be shown in ml for liquids. */
+  unit: { displayUnit: 'g' | 'ml' | 'count'; densityGPerMl: number | null };
   neededGrams: number | null;
   takes: {
     stockItemId: string;
@@ -495,7 +501,8 @@ export interface WasteReportDto {
   periods: WastePeriodDto[];
   /** Against the same point in the previous week or month. */
   changePercent: number | null;
-  byItem: { name: string; grams: number; pence: number | null; items: number }[];
+  /** `amount` says it the way the food is measured ("1.2L" for milk). */
+  byItem: { name: string; grams: number; amount: string; pence: number | null; items: number }[];
   byCategory: { name: string; grams: number; pence: number | null }[];
 }
 

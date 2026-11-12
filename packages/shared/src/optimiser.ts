@@ -90,6 +90,8 @@ export interface ScoreOptions {
   servings?: number;
   /** Price of buying the missing grams of an ingredient, when pricing is on. */
   priceOf?: (ingredientId: string, grams: number) => number | null;
+  /** Says an amount the way the ingredient is measured ("400ml" for milk); grams otherwise. */
+  amountText?: (ingredientId: string, grams: number) => string;
 }
 
 /** Points lost per extra item to buy when there are no prices: "fewest extra items". */
@@ -112,11 +114,11 @@ function gramsText(g: number): string {
 }
 
 /** "Uses your 400g spare potatoes and the spinach going off Thursday." */
-export function reasonFor(uses: RecipeScore['uses'], missing: RecipeScore['missing'], on: CalendarDate): string {
+export function reasonFor(uses: RecipeScore['uses'], missing: RecipeScore['missing'], on: CalendarDate, say?: ScoreOptions['amountText']): string {
   const top = [...uses].sort((a, b) => b.grams * b.weight - a.grams * a.weight).slice(0, 2);
   const parts = top.map((u) => {
     const name = u.name.toLowerCase();
-    return u.bestBefore && daysBetween(on, u.bestBefore) <= 6 ? `the ${name} going off ${when(u.bestBefore, on)}` : `your ${gramsText(u.grams)} spare ${name}`;
+    return u.bestBefore && daysBetween(on, u.bestBefore) <= 6 ? `the ${name} going off ${when(u.bestBefore, on)}` : `your ${say ? say(u.ingredientId, u.grams) : gramsText(u.grams)} spare ${name}`;
   });
   const uses_ = parts.length ? `Uses ${parts.join(' and ')}` : '';
   const miss = missing.length ? `needs ${missing.map((m) => m.name.toLowerCase()).join(', ')}` : '';
@@ -174,7 +176,7 @@ export function scoreRecipe(recipe: ScoringRecipe, surplus: Lot[], opts: ScoreOp
     uses,
     extraCostPence,
     score: Math.round((useScore - cost) * 100) / 100,
-    reason: reasonFor(uses, missing, opts.on),
+    reason: reasonFor(uses, missing, opts.on, opts.amountText),
   };
 }
 

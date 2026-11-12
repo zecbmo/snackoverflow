@@ -34,3 +34,28 @@ test('bin several things at once and undo', async ({ page }, info) => {
   await expect(page.getByRole('button', { name: /^Greek Yogurt, / })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Houmous, / })).toBeVisible();
 });
+
+test('drag a recipe onto the calendar, then move it to another day', async ({ page }, info) => {
+  test.skip(info.project.name === 'phone', 'Dragging onto the calendar is desktop only; phones use the + buttons.');
+  await signIn(page);
+  const title = `Drag test stew ${Date.now()}`;
+  await page.request.post('/api/recipes', { data: { title, serves: 2, ingredients: [] } });
+  const { today } = await (await page.request.get('/api/session')).json();
+  await page.goto('/calendar');
+  await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
+
+  const pane = page.getByRole('complementary', { name: 'Food to plan' });
+  await pane.getByRole('button', { name: 'Recipes', exact: true }).click();
+  await pane.getByRole('searchbox').fill(title);
+  const cell = (label: RegExp) => page.getByRole('button', { name: label }).locator('xpath=ancestor::div[@role="cell"]');
+  await pane.getByText(title).dragTo(cell(/^Add to lunch on Today/));
+  await expect(page.getByText(`Planned ${title} for lunch`)).toBeVisible();
+
+  // Move it to tomorrow's dinner by dragging the card.
+  await page.getByRole('cell').getByRole('button', { name: new RegExp(title) }).dragTo(cell(/^Add to dinner on Tomorrow/));
+  await expect(page.getByText(`Moved ${title} to dinner`)).toBeVisible();
+  const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const plan = await (await page.request.get(`/api/plan?from=${today}&to=${tomorrow}`)).json();
+  const entries = plan.days.flatMap((d: { entries: { title: string; date: string; slot: string }[] }) => d.entries).filter((e: { title: string }) => e.title === title);
+  expect(entries).toEqual([expect.objectContaining({ date: tomorrow, slot: 'dinner' })]);
+});

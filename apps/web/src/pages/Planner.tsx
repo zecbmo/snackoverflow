@@ -15,9 +15,10 @@ import { Button, Card, ErrorNote, Field, IconButton, Select, Sheet, Spinner, Tex
 import { useIsDesktop } from '../lib/useMedia';
 import { api, errorMessage } from '../lib/api';
 import { amountLabel } from '../lib/format';
-import { usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
+import { useIngredients, usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
 import { PlanWeekSheet, SuggestSheet } from '../components/OptimiserSheets';
-import { formatQuantity } from '@snackoverflow/shared';
+import { CalendarPane, type CalendarDrag, DRAG_TYPE, readDrag, startDrag } from '../components/CalendarPane';
+import { amountText } from '@snackoverflow/shared';
 
 const SLOT_LABEL: Record<MealSlot, string> = {
   breakfast: 'Breakfast',
@@ -80,6 +81,7 @@ export function PlannerPage() {
   const [planningWeek, setPlanningWeek] = useState(false);
   const surplus = useSurplus().data ?? [];
   const desktop = useIsDesktop();
+  const ingredients = useIngredients().data ?? [];
   const hint = surplus.find((h) => h.ideas > 0) ?? surplus[0];
 
   // Opened from a "Move" notification: show that meal.
@@ -104,6 +106,41 @@ export function PlannerPage() {
       await qc.invalidateQueries({ queryKey: ['shopping'] });
       toast.show(r.added + r.updated ? `Added ${r.added + r.updated} thing${r.added + r.updated === 1 ? '' : 's'} to the list.` : 'Nothing to buy: stock covers this plan.');
       if (r.added + r.updated) navigate('/shop');
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
+
+  const [dropAt, setDropAt] = useState<string | null>(null);
+  /** Something dropped on a day and meal: plan it, or move the planned meal there. Both can be undone. */
+  const drop = async (date: CalendarDate, slot: MealSlot, d: CalendarDrag) => {
+    const where = `${SLOT_LABEL[slot].toLowerCase()} on ${dayLabel(date, me.today, true)}`;
+    const refresh = async () => {
+      await qc.invalidateQueries({ queryKey: ['plan'] });
+      await qc.invalidateQueries({ queryKey: ['stock'] });
+    };
+    try {
+      if (d.type === 'move') {
+        const entry = plan.data?.days.flatMap((x) => x.entries).find((x) => x.id === d.entryId);
+        if (!entry || (entry.date === date && entry.slot === slot)) return;
+        await api.patch(`/api/plan/${entry.id}`, { date, slot });
+        await refresh();
+        toast.show(`Moved ${d.title} to ${where}.`, {
+          action: { label: 'Undo', onClick: async () => void (await api.patch(`/api/plan/${entry.id}`, { date: entry.date, slot: entry.slot }), await refresh()) },
+        });
+      } else {
+        const created = await api.post<PlanEntryDto>('/api/plan', {
+          date,
+          slot,
+          kind: d.kind,
+          servings: d.kind === 'recipe' ? Math.max(1, members.length) : 1,
+          ...(d.kind === 'recipe' ? { recipeId: d.id } : d.kind === 'product' ? { productId: d.id } : { stockItemId: d.id }),
+        });
+        await refresh();
+        toast.show(`Planned ${d.title} for ${where}.`, {
+          action: { label: 'Undo', onClick: async () => void (await api.del(`/api/plan/${created.id}`), await refresh()) },
+        });
+      }
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     }
@@ -140,143 +177,158 @@ export function PlannerPage() {
     ) : null;
 
   return (
-    <>
-      <PageTop
-        title="Planner"
-        subtitle={rangeLabel(from, to)}
-        left={<MenuButton />}
-        actions={
-          <div className="flex items-center gap-1">
-            <IconButton icon="chevronLeft" label="Previous week" onClick={() => setFrom(addDays(from, -7))} />
-            {from !== thisWeek && (
-              <Button size="sm" onClick={() => setFrom(thisWeek)}>
-                This week
-              </Button>
-            )}
-            <IconButton icon="chevronRight" label="Next week" onClick={() => setFrom(addDays(from, 7))} />
-          </div>
-        }
-      />
-      <Toolbar>
-        {people.length > 1 && <PickerMenu label="Calendar" icon="users" value={person} defaultValue="me" onChange={setPerson} options={people} />}
-        <Button size="sm" variant="dark" onClick={() => setSuggesting({ ingredient: null })}>
-          Suggest meals
-        </Button>
-        <Button size="sm" onClick={() => setPlanningWeek(true)}>
-          Plan my week
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => void build()}>
-          <Icon name="cart" className="size-4" /> Build shopping list
-        </Button>
-      </Toolbar>
-      {hint && (
-        <button
-          type="button"
-          onClick={() => setSuggesting({ ingredient: { id: hint.ingredientId, name: hint.name } })}
-          className="mb-3 flex w-full items-center gap-3 rounded-lg border border-accent/30 bg-accent-soft px-3 py-2 text-left text-sm hover:border-accent/60"
-        >
-          <span className="min-w-0 flex-1">
-            <strong className="font-semibold">
-              {formatQuantity(hint.grams)} {hint.name.toLowerCase()} spare after this plan.
-            </strong>{' '}
-            <span className="text-muted">
-              {hint.topIdea ? `${hint.topIdea.title} would use it${hint.topIdea.missing.length ? ` (needs ${hint.topIdea.missing.join(', ').toLowerCase()})` : ''}. ` : ''}
-              {hint.ideas ? `${hint.ideas} idea${hint.ideas === 1 ? '' : 's'}` : 'No recipes use it yet'}
+    <div className="lg:-mr-6 lg:flex lg:items-start">
+      <div className="min-w-0 flex-1 lg:pr-5">
+        <PageTop
+          title="Calendar"
+          subtitle={rangeLabel(from, to)}
+          left={<MenuButton />}
+          actions={
+            <div className="flex items-center gap-1">
+              <IconButton icon="chevronLeft" label="Previous week" onClick={() => setFrom(addDays(from, -7))} />
+              {from !== thisWeek && (
+                <Button size="sm" onClick={() => setFrom(thisWeek)}>
+                  This week
+                </Button>
+              )}
+              <IconButton icon="chevronRight" label="Next week" onClick={() => setFrom(addDays(from, 7))} />
+            </div>
+          }
+        />
+        <Toolbar>
+          {people.length > 1 && <PickerMenu label="Person" icon="users" value={person} defaultValue="me" onChange={setPerson} options={people} />}
+          <Button size="sm" variant="dark" onClick={() => setSuggesting({ ingredient: null })}>
+            Suggest meals
+          </Button>
+          <Button size="sm" onClick={() => setPlanningWeek(true)}>
+            Plan my week
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => void build()}>
+            <Icon name="cart" className="size-4" /> Build shopping list
+          </Button>
+        </Toolbar>
+        {hint && (
+          <button
+            type="button"
+            onClick={() => setSuggesting({ ingredient: { id: hint.ingredientId, name: hint.name } })}
+            className="mb-3 flex w-full items-center gap-3 rounded-lg border border-accent/30 bg-accent-soft px-3 py-2 text-left text-sm hover:border-accent/60"
+          >
+            <span className="min-w-0 flex-1">
+              <strong className="font-semibold">
+                {amountText(hint.grams, ingredients.find((i) => i.id === hint.ingredientId))} {hint.name.toLowerCase()} spare after this plan.
+              </strong>{' '}
+              <span className="text-muted">
+                {hint.topIdea ? `${hint.topIdea.title} would use it${hint.topIdea.missing.length ? ` (needs ${hint.topIdea.missing.join(', ').toLowerCase()})` : ''}. ` : ''}
+                {hint.ideas ? `${hint.ideas} idea${hint.ideas === 1 ? '' : 's'}` : 'No recipes use it yet'}
+              </span>
             </span>
-          </span>
-          <Icon name="chevronRight" className="size-4 shrink-0 text-accent-text" />
-        </button>
-      )}
-      <ErrorNote error={plan.error} />
-      {plan.isPending ? (
-        <Spinner />
-      ) : desktop ? (
-        <div className="overflow-x-auto rounded-lg border border-line bg-card">
-          <div className="grid min-w-[56rem] grid-cols-[6.5rem_repeat(7,minmax(0,1fr))]" role="table" aria-label={`Meals, ${rangeLabel(from, to)}`}>
-            <div role="row" className="contents">
-              <div role="columnheader" className="border-b border-r border-line bg-card-muted/60" />
-              {plan.data?.days.map((day) => (
-                <div
-                  key={day.date}
-                  role="columnheader"
-                  className={`border-b border-r border-line px-2 py-1.5 last:border-r-0 ${day.date === me.today ? 'bg-accent-soft' : 'bg-card-muted/60'}`}
-                >
-                  <p className={`text-sm font-semibold ${day.date === me.today ? 'text-accent-text' : ''}`}>{dayLabel(day.date, me.today)}</p>
-                  <p className="text-xs text-muted tabular-nums">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : '–'}</p>
+            <Icon name="chevronRight" className="size-4 shrink-0 text-accent-text" />
+          </button>
+        )}
+        <ErrorNote error={plan.error} />
+        {plan.isPending ? (
+          <Spinner />
+        ) : desktop ? (
+          <div className="overflow-x-auto rounded-lg border border-line bg-card">
+            <div className="grid min-w-[56rem] grid-cols-[6.5rem_repeat(7,minmax(0,1fr))]" role="table" aria-label={`Meals, ${rangeLabel(from, to)}`}>
+              <div role="row" className="contents">
+                <div role="columnheader" className="border-b border-r border-line bg-card-muted/60" />
+                {plan.data?.days.map((day) => (
+                  <div key={day.date} role="columnheader" className={`border-b border-r border-line px-2 py-1.5 last:border-r-0 ${day.date === me.today ? 'bg-accent-soft' : 'bg-card-muted/60'}`}>
+                    <p className={`text-sm font-semibold ${day.date === me.today ? 'text-accent-text' : ''}`}>{dayLabel(day.date, me.today)}</p>
+                    <p className="text-xs text-muted tabular-nums">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : '–'}</p>
+                  </div>
+                ))}
+              </div>
+              {MEAL_SLOTS.map((slot) => (
+                <div key={slot} role="row" className="contents">
+                  <div role="rowheader" className="border-b border-r border-line px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                    {SLOT_LABEL[slot]}
+                  </div>
+                  {plan.data?.days.map((day) => {
+                    const entries = day.entries.filter((e) => e.slot === slot);
+                    return (
+                      <div
+                        key={day.date}
+                        role="cell"
+                        onDragOver={(ev) => {
+                          if (!ev.dataTransfer.types.includes(DRAG_TYPE)) return;
+                          ev.preventDefault();
+                          setDropAt(`${day.date}|${slot}`);
+                        }}
+                        onDragLeave={() => setDropAt((d) => (d === `${day.date}|${slot}` ? null : d))}
+                        onDrop={(ev) => {
+                          ev.preventDefault();
+                          setDropAt(null);
+                          const d = readDrag(ev);
+                          if (d) void drop(day.date, slot, d);
+                        }}
+                        className={`group flex min-h-20 flex-col gap-1 border-b border-r border-line p-1.5 last:border-r-0 ${
+                          dropAt === `${day.date}|${slot}` ? 'bg-accent-soft outline-2 -outline-offset-2 outline-accent' : day.date === me.today ? 'bg-accent-soft/30' : day.date < me.today ? 'bg-card-muted/30' : ''
+                        }`}
+                      >
+                        {entries.map((e) => (
+                          <div key={e.id} draggable onDragStart={(ev) => startDrag(ev, { type: 'move', entryId: e.id, title: e.title })} onDragEnd={() => setDropAt(null)} className="cursor-grab active:cursor-grabbing">
+                            {entryButton(e, true)}
+                          </div>
+                        ))}
+                        <div className={`mt-auto flex items-center gap-0.5 ${entries.length ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : ''}`}>
+                          <button
+                            type="button"
+                            aria-label={addLabel(day.date, slot)}
+                            onClick={() => setAdding({ date: day.date, slot })}
+                            className="inline-flex h-6 flex-1 items-center gap-1 rounded px-1 text-xs text-muted hover:bg-card-muted hover:text-ink"
+                          >
+                            <Icon name="plus" className="size-3.5" /> Add
+                          </button>
+                          {scanLink(day.date, slot, 'inline-flex size-6 items-center justify-center rounded text-muted hover:bg-card-muted hover:text-ink')}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
-            {MEAL_SLOTS.map((slot) => (
-              <div key={slot} role="row" className="contents">
-                <div role="rowheader" className="border-b border-r border-line px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted">
-                  {SLOT_LABEL[slot]}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {plan.data && !showEarlier && plan.data.days.some((d) => d.date < me.today && d.entries.length === 0) && <Button onClick={() => setShowEarlier(true)}>Show earlier days</Button>}
+            {plan.data?.days.map((day) => (
+              <Card key={day.date} className={`p-3 ${day.date === me.today ? 'border-accent' : ''} ${!showEarlier && day.date < me.today && day.entries.length === 0 ? 'hidden' : ''}`}>
+                <div className="mb-1 flex items-baseline justify-between gap-2 border-b border-line pb-2">
+                  <h2 className="text-lg font-bold">{dayLabel(day.date, me.today)}</h2>
+                  <span className="text-sm font-semibold text-muted">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : ''}</span>
                 </div>
-                {plan.data?.days.map((day) => {
+                {MEAL_SLOTS.map((slot) => {
                   const entries = day.entries.filter((e) => e.slot === slot);
                   return (
-                    <div
-                      key={day.date}
-                      role="cell"
-                      className={`group flex min-h-20 flex-col gap-1 border-b border-r border-line p-1.5 last:border-r-0 ${day.date === me.today ? 'bg-accent-soft/30' : ''} ${day.date < me.today ? 'bg-card-muted/30' : ''}`}
-                    >
-                      {entries.map((e) => (
-                        <div key={e.id}>{entryButton(e, true)}</div>
-                      ))}
-                      <div className={`mt-auto flex items-center gap-0.5 ${entries.length ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : ''}`}>
-                        <button
-                          type="button"
-                          aria-label={addLabel(day.date, slot)}
-                          onClick={() => setAdding({ date: day.date, slot })}
-                          className="inline-flex h-6 flex-1 items-center gap-1 rounded px-1 text-xs text-muted hover:bg-card-muted hover:text-ink"
-                        >
-                          <Icon name="plus" className="size-3.5" /> Add
+                    <section key={slot} className="border-b border-line py-1 last:border-b-0">
+                      <div className="flex items-center gap-1">
+                        <h3 className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted">{SLOT_LABEL[slot]}</h3>
+                        {scanLink(day.date, slot, 'inline-flex size-11 items-center justify-center text-accent-text')}
+                        <button type="button" aria-label={addLabel(day.date, slot)} onClick={() => setAdding({ date: day.date, slot })} className="inline-flex size-11 items-center justify-center text-accent-text">
+                          <Icon name="plus" className="size-5" />
                         </button>
-                        {scanLink(day.date, slot, 'inline-flex size-6 items-center justify-center rounded text-muted hover:bg-card-muted hover:text-ink')}
                       </div>
-                    </div>
+                      <ul>
+                        {entries.map((e) => (
+                          <li key={e.id}>{entryButton(e, false)}</li>
+                        ))}
+                      </ul>
+                    </section>
                   );
                 })}
-              </div>
+              </Card>
             ))}
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {plan.data && !showEarlier && plan.data.days.some((d) => d.date < me.today && d.entries.length === 0) && <Button onClick={() => setShowEarlier(true)}>Show earlier days</Button>}
-          {plan.data?.days.map((day) => (
-            <Card key={day.date} className={`p-3 ${day.date === me.today ? 'border-accent' : ''} ${!showEarlier && day.date < me.today && day.entries.length === 0 ? 'hidden' : ''}`}>
-              <div className="mb-1 flex items-baseline justify-between gap-2 border-b border-line pb-2">
-                <h2 className="text-lg font-bold">{dayLabel(day.date, me.today)}</h2>
-                <span className="text-sm font-semibold text-muted">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : ''}</span>
-              </div>
-              {MEAL_SLOTS.map((slot) => {
-                const entries = day.entries.filter((e) => e.slot === slot);
-                return (
-                  <section key={slot} className="border-b border-line py-1 last:border-b-0">
-                    <div className="flex items-center gap-1">
-                      <h3 className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted">{SLOT_LABEL[slot]}</h3>
-                      {scanLink(day.date, slot, 'inline-flex size-11 items-center justify-center text-accent-text')}
-                      <button type="button" aria-label={addLabel(day.date, slot)} onClick={() => setAdding({ date: day.date, slot })} className="inline-flex size-11 items-center justify-center text-accent-text">
-                        <Icon name="plus" className="size-5" />
-                      </button>
-                    </div>
-                    <ul>
-                      {entries.map((e) => (
-                        <li key={e.id}>{entryButton(e, false)}</li>
-                      ))}
-                    </ul>
-                  </section>
-                );
-              })}
-            </Card>
-          ))}
-        </div>
-      )}
-      {adding && <AddSheet target={adding} members={members} onClose={() => setAdding(null)} />}
-      {suggesting && <SuggestSheet open onClose={() => setSuggesting(null)} defaultDate={firstFreeDinner(plan.data?.days ?? [], me.today)} ingredient={suggesting.ingredient} servings={Math.max(1, members.length)} />}
-      <PlanWeekSheet open={planningWeek} onClose={() => setPlanningWeek(false)} from={from} to={to} defaultServings={Math.max(1, members.length)} />
-      {open && <EntrySheet entry={open} onClose={() => setOpen(null)} />}
-    </>
+        )}
+        {adding && <AddSheet target={adding} members={members} onClose={() => setAdding(null)} />}
+        {suggesting && <SuggestSheet open onClose={() => setSuggesting(null)} defaultDate={firstFreeDinner(plan.data?.days ?? [], me.today)} ingredient={suggesting.ingredient} servings={Math.max(1, members.length)} />}
+        <PlanWeekSheet open={planningWeek} onClose={() => setPlanningWeek(false)} from={from} to={to} defaultServings={Math.max(1, members.length)} />
+        {open && <EntrySheet entry={open} onClose={() => setOpen(null)} />}
+      </div>
+      {desktop && <CalendarPane servings={Math.max(1, members.length)} />}
+    </div>
   );
 }
 

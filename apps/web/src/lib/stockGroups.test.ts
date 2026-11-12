@@ -26,7 +26,7 @@ const base: StockItemDto = {
   gramsPerCount: null,
   addedAt: '2026-11-01T10:00:00Z',
   isMeal: false,
-  actions: { open: null, freeze: null, defrost: "It isn't frozen." },
+  actions: { open: null, freeze: null, defrost: "It isn't frozen.", freezeWarning: null },
 };
 
 describe('groupStock', () => {

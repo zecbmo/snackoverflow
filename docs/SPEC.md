@@ -87,7 +87,7 @@ The scanner has three modes, switched at the top of the camera screen:
 
 - From a recipe, choose Batch cook and a multiplier (e.g. ×3). Ingredients are deducted in one step.
 - Split the portions between locations (2 fridge, 6 freezer). Each group gets its own best-before.
-- Portions show in the planner under "From your freezer", and the optimiser favours them before cooking something new.
+- Portions show in the calendar under "From your freezer", and the optimiser favours them before cooking something new.
 
 ## Recipes, planning and the waste optimiser
 
@@ -150,7 +150,7 @@ How it works:
 3. A review screen shows every line with its match, quantity, location (from the item's usual location) and estimated best-before. Uncertain matches are highlighted; non-food lines (bags, toiletries) are skipped automatically. The user fixes anything and taps "Add to stock".
 4. Matched items are added to stock in one go, ticked off the shopping list, and their prices are saved (this is the best source of real prices for the optimiser).
 
-Receipt items have no barcode, so if a product was never scanned the app links the barcode later the first time it is scanned. The original receipt image is kept only until it has been reviewed.
+Receipt items have no barcode, so if a product was never scanned the app links the barcode later the first time it is scanned. Photos of receipts are kept with the receipt as a compressed JPEG (shrunk to 1600px before upload) so they can be looked at again; uploaded PDFs are dropped once the receipt has been reviewed.
 
 **Pricing (optional, off by default).** No UK supermarket has a public price API, and scraping their sites is fragile and against their terms. Prices come from:
 
@@ -174,17 +174,17 @@ Every notification also lands in an in-app inbox (the bell on Today). The Androi
 
 ## Screens
 
-Phone-first, with five tabs (Today, Stock, Scan, Plan, Shop) and Scan as a large centre button. Everything else (Recipes, Dashboard, Batch cooks, Products, Ingredients, Locations, People, Notifications, Settings) lives in a menu opened from a button at the top left. On desktop and landscape screens there is no bottom bar: everything is in a left sidebar, and the planner shows a full week grid.
+Phones have five tabs (Today, Stock, Scan, Calendar, Shop) with Scan as a large centre button; Recipes, Batch cooks, Receipts, Dashboard, Waste report and Settings are in a menu at the top left. On desktop there is no bottom bar: everything is in a collapsible left sidebar. Products & barcodes, Ingredients & units, Locations, People & roles, Notifications and your profile live under Settings, which has its own sub-menu. The planner is called the **Calendar**, because it shows calories as well as plans (old /plan links still work).
 
 | Screen | Main content | Key actions |
 | --- | --- | --- |
 | Today (home) | Today's meals, "use soon" strip (next 3 days), running-low nudges, quick stats | Cooked / skip, Use / Freeze from the strip |
-| Stock | Items grouped by location or sorted by best-before; colour bands for expired, this week, fine; search and filters | Use, Open, Freeze, Defrost, Move, Binned; swipe actions |
+| Stock | A table with quick filters (All / Fridge / Freezer / Cupboard), search, filter, sort and group; columns Where, State (opened, frozen, defrosted), Packs, Left (ml for liquids), Planned (shown red when there isn't enough for the planned meals, or with the shopping-list mark when it's on the list) and Best before | Use, Freeze or Defrost, Move, Bin on every row; Mark as opened and details in "⋯"; tick rows for bulk actions |
 | Scan (centre) | Full-screen camera, location (or meal slot) chip, mode switch (Add / Use / Eat), session counter | Continuous scan, undo, Done summary |
-| Planner | Week grid per person with slots and daily calories | Add, drag to move, Suggest meals, Plan my week, Build list |
+| Calendar | Week grid per person with meal slots and daily calories, and a right-hand pane of stock, recipes and leftovers | Drag from the pane onto a day and meal, drag a planned meal to move it (both undoable), +Add, Suggest meals, Plan my week, Build list |
 | Shopping | One list grouped by category, estimated total if pricing is on, surplus hints | Tick off, Put away mode, Add item, Add from receipt |
 | Receipt review | Each receipt line with its matched product, quantity, location, best-before and price; uncertain matches highlighted | Fix match, skip line, Add to stock |
-| Recipes (from Planner and Today) | Library with Cook now / Nearly there / Use it up filters | Import URL, Cook, Batch cook, Add to plan |
+| Recipes (from Calendar and Today) | Library with Cook now / Nearly there / Use it up filters | Import URL, Cook, Batch cook, Add to plan |
 | Item detail | Packs with dates and locations, history, product info, shelf-life settings | Edit dates, link to ingredient, merge duplicates |
 | Dashboard (from Today) | Calories per day with 7- and 30-day averages against each person's daily target; waste per week/month by item and category (kg, and £ if pricing is on); spending from receipts when pricing is on | Switch person (admins), 7 / 30 days |
 | Waste report (menu) | What was binned by week or month: a chart of the last 8 weeks or 6 months, by item and by category | Week / month |

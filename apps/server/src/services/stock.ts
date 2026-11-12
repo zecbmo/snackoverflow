@@ -104,6 +104,7 @@ export function toStockDto(
       open: open.ok ? null : open.reason,
       freeze: freeze.ok ? null : freeze.reason,
       defrost: defrost.ok ? null : defrost.reason,
+      freezeWarning: freeze.ok ? (freeze.warning ?? null) : null,
     },
   };
 }

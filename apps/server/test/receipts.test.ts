@@ -112,6 +112,18 @@ describe('receipts', () => {
     });
     expect(r).toMatchObject({ status: 'review', store: 'Aldi', lines: [expect.objectContaining({ ingredientName: 'Potatoes' })] });
     await api.post(`/api/receipts/${id}/confirm`);
+    // The photo stays with the receipt, to look at again.
+    const kept = await api.raw('GET', `/api/receipts/${id}/file`);
+    expect(kept.statusCode).toBe(200);
+    expect((await api.get<ReceiptDto>(`/api/receipts/${id}`)).hasFile).toBe(true);
+  });
+
+  it('drops an uploaded PDF once the receipt has been checked', async () => {
+    await start();
+    const pdf = Buffer.from('%PDF-1.4 fake').toString('base64');
+    const { id } = await api.post<{ id: string }>('/api/receipts/file', { data: pdf, type: 'application/pdf', source: 'upload' });
+    await api.post(`/api/receipts/${id}/lines`, { store: 'Aldi', date: '2026-11-11', lines: [{ text: 'Maris Piper Potatoes 2.5kg', quantity: 1, pricePence: 129 }] });
+    await api.post(`/api/receipts/${id}/confirm`);
     expect((await api.raw('GET', `/api/receipts/${id}/file`)).statusCode).toBe(404);
   });
 

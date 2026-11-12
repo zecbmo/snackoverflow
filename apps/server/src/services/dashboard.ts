@@ -5,6 +5,7 @@
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import {
   addDays,
+  amountText,
   averageKcal,
   type CalendarDate,
   type CalorieStatsDto,
@@ -76,6 +77,11 @@ export async function wasteReport(db: Db, auth: Auth, now: Date, pricing: boolea
       ingredientId: products.ingredientId,
       ingredientName: ingredients.name,
       aisle: ingredients.aisle,
+      displayUnit: products.displayUnit,
+      packUnit: ingredients.packUnit,
+      densityGPerMl: ingredients.densityGPerMl,
+      gramsPerCount: ingredients.gramsPerCount,
+      countUnit: ingredients.countUnit,
     })
     .from(stockEvents)
     .innerJoin(products, eq(products.id, stockEvents.productId))
@@ -115,7 +121,10 @@ export async function wasteReport(db: Db, auth: Auth, now: Date, pricing: boolea
     const map = new Map<string, (typeof valued)[number][]>();
     for (const v of inCurrent) map.set(key(v), [...(map.get(key(v)) ?? []), v]);
     return [...map.entries()]
-      .map(([name, xs]) => ({ name, grams: Math.round(xs.reduce((s, x) => s + x.grams, 0)), pence: sumPence(xs), items: xs.length }))
+      .map(([name, xs]) => {
+        const grams = Math.round(xs.reduce((s, x) => s + x.grams, 0));
+        return { name, grams, amount: amountText(grams, xs[0]), pence: sumPence(xs), items: xs.length };
+      })
       .sort((a, b) => b.grams - a.grams || b.items - a.items);
   };
   return {

@@ -6,7 +6,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { addDays, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
+import { addDays, amountText, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
 import { type Column, DataTable } from '../components/DataTable';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
@@ -15,12 +15,12 @@ import { SidePanel, usePanelParam } from '../components/SidePanel';
 import { StockItemDetail } from '../components/StockItemDetail';
 import { StockRowActions } from '../components/StockRowActions';
 import { useToast } from '../components/Toast';
-import { PageTop, SearchBox, Toolbar } from '../components/Toolbar';
+import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
 import { Button, EmptyState, ErrorNote, Pill, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
-import { dateLabel, gramsLabel, stateLabel, type Tone, toneClasses, toneFor } from '../lib/format';
-import { useEarmarks, useLocations, useStock, useStockItem } from '../lib/queries';
-import { groupStock, groupSummary, type StockGroup } from '../lib/stockGroups';
+import { dateLabel, type Tone, toneClasses, toneFor } from '../lib/format';
+import { useEarmarks, useLocations, useShopping, useStock, useStockItem } from '../lib/queries';
+import { groupStock, type StockGroup } from '../lib/stockGroups';
 import { groupRows, matchesSearch, sortRows } from '../lib/table';
 
 /** Kept for pages not yet on the table (Batch cooks & leftovers). */
@@ -39,13 +39,33 @@ type GroupId = 'none' | 'location' | 'status';
 const STATUS: Record<Tone, string> = { red: 'Use first', amber: 'This week', green: 'Fine', blue: 'Frozen', grey: 'No date' };
 const STATUS_ORDER = [STATUS.red, STATUS.amber, STATUS.green, STATUS.blue, STATUS.grey];
 
-/** "2 packs · 3.4L" without the location (which has its own column). */
-function amountOnly(g: StockGroup): string {
-  return groupSummary(g)
-    .split(' · ')
-    .slice(1)
-    .filter((p) => p !== 'opened' && p !== 'defrosted')
-    .join(' · ');
+/** What's left across the row's packs, in the food's own unit: "3.4L", "about 400g", "2 portions". */
+function leftLabel(g: StockGroup): string {
+  const p = g.first;
+  if (p.isMeal) {
+    const portions = g.packs.reduce((n, x) => n + (x.remainingGrams !== null && x.gramsPerCount ? x.remainingGrams / x.gramsPerCount : 1), 0);
+    const r = Math.round(portions * 2) / 2;
+    return `${r} ${r === 1 ? 'portion' : 'portions'}`;
+  }
+  if (g.packs.some((x) => x.remainingGrams === null)) return '';
+  const total = g.packs.reduce((sum, x) => sum + x.remainingGrams!, 0);
+  const partial = g.packs.some((x) => x.fractionLeft < 1);
+  return `${partial ? 'about ' : ''}${amountText(total, p)}`;
+}
+
+/** Opened, defrosted or frozen; blank for packs as bought. */
+function stateText(g: StockGroup): string {
+  if (g.packs.some((x) => x.state === 'opened')) return 'Opened';
+  if (g.packs.some((x) => x.state === 'defrosted')) return 'Defrosted';
+  if (g.first.state === 'frozen') return 'Frozen';
+  return '';
+}
+
+/** Planned meals against what's in the house: enough, short (and whether it's already on the list). */
+interface PlanStatus {
+  grams: number;
+  short: number;
+  onList: boolean;
 }
 
 export function StockPage() {
@@ -53,7 +73,9 @@ export function StockPage() {
   const stock = useStock();
   const locationsQuery = useLocations().data;
   const locations = useMemo(() => locationsQuery ?? [], [locationsQuery]);
-  const planned = new Map((useEarmarks().data ?? []).map((m) => [m.ingredientId, m.grams]));
+  const earmarks = useEarmarks().data;
+  const shopping = useShopping().data;
+  const [place, setPlace] = useState('all');
   const [filter, setFilter] = useState<FilterId>('all');
   const [sort, setSort] = useState<SortId>('best-before');
   const [group, setGroup] = useState<GroupId>('none');
@@ -65,7 +87,7 @@ export function StockPage() {
   const rows = useMemo(() => {
     const soon = addDays(me.today, 3);
     const items = (stock.data ?? []).filter((i) => {
-      if (filter.startsWith('loc:') && i.locationId !== filter.slice(4)) return false;
+      if (place !== 'all' && i.locationType !== place) return false;
       if (filter === 'opened' && i.state !== 'opened') return false;
       if (filter === 'frozen' && i.state !== 'frozen') return false;
       if (filter === 'soon' && (i.state === 'frozen' || !i.bestBefore || i.bestBefore > soon)) return false;
@@ -76,7 +98,7 @@ export function StockPage() {
     if (sort === 'location') return sortRows(groups, (g) => g.locationName);
     if (sort === 'added') return sortRows(groups, (g) => g.packs.reduce((m, p) => (p.addedAt > m ? p.addedAt : m), ''), 'desc');
     return groups; // The server sends stock in best-before order.
-  }, [stock.data, filter, sort, q, me.today]);
+  }, [stock.data, place, filter, sort, q, me.today]);
 
   const tables = useMemo(() => {
     if (group === 'location') {
@@ -87,7 +109,33 @@ export function StockPage() {
     return undefined;
   }, [rows, group, locations, me.today]);
 
-  const plannedFor = (g: StockGroup) => (g.first.ingredientId ? planned.get(g.first.ingredientId) : undefined);
+  // Planned grams per ingredient against everything in stock for it (all locations), and what's on the list.
+  const planStatus = useMemo(() => {
+    const have = new Map<string, number>();
+    for (const s of stock.data ?? []) if (s.ingredientId && !s.isMeal) have.set(s.ingredientId, (have.get(s.ingredientId) ?? 0) + (s.remainingGrams ?? 0));
+    const listed = new Set((shopping ?? []).filter((i) => !i.checked && i.ingredientId).map((i) => i.ingredientId!));
+    return new Map<string, PlanStatus>(
+      (earmarks ?? []).map((m) => [m.ingredientId, { grams: m.grams, short: Math.max(0, m.grams - (have.get(m.ingredientId) ?? 0)), onList: listed.has(m.ingredientId) }]),
+    );
+  }, [earmarks, shopping, stock.data]);
+  const plannedFor = (g: StockGroup) => (g.first.ingredientId && !g.first.isMeal ? planStatus.get(g.first.ingredientId) : undefined);
+  const plannedCell = (g: StockGroup) => {
+    const p = plannedFor(g);
+    if (!p) return null;
+    const amount = amountText(p.grams, g.first);
+    if (p.short <= 0) return <span className="text-ink">{amount}</span>;
+    if (p.onList)
+      return (
+        <span className="inline-flex items-center gap-1 text-accent-text" title="Not enough in stock, but it's on the shopping list">
+          {amount} <Icon name="cart" className="size-3.5" /> <span className="text-xs">on list</span>
+        </span>
+      );
+    return (
+      <span className="text-danger" title="Not enough in stock for the planned meals">
+        {amount} <span className="text-xs">· short {amountText(p.short, g.first)}</span>
+      </span>
+    );
+  };
   const datePill = (g: StockGroup) => (
     <Pill className={toneClasses[toneFor(g.first, me.today)].pill}>
       {g.first.state === 'frozen' && <Icon name="snowflake" className="size-3" strokeWidth={2.2} />}
@@ -103,28 +151,11 @@ export function StockPage() {
       cell: (g) => <span aria-hidden className={`inline-block size-2 rounded-full ${toneClasses[toneFor(g.first, me.today)].dot}`} />,
     },
     { key: 'name', header: 'Item', primary: true, cell: (g) => g.name, className: 'max-w-[18rem]' },
-    {
-      key: 'where',
-      header: 'Where',
-      className: 'whitespace-nowrap',
-      cell: (g) => (
-        <>
-          {g.locationName}
-          {g.first.state === 'opened' || g.first.state === 'defrosted' ? <span className="text-muted"> · {stateLabel[g.first.state].toLowerCase()}</span> : null}
-        </>
-      ),
-    },
-    {
-      key: 'left',
-      header: 'Left',
-      className: 'whitespace-nowrap',
-      cell: (g) => (
-        <>
-          {amountOnly(g) || '–'}
-          {plannedFor(g) ? <span className="ml-1.5 text-xs text-accent-text">{gramsLabel(plannedFor(g)!)} planned</span> : null}
-        </>
-      ),
-    },
+    { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (g) => g.locationName },
+    { key: 'state', header: 'State', className: 'whitespace-nowrap', cell: stateText },
+    { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : g.packs.length) },
+    { key: 'left', header: 'Left', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (g) => leftLabel(g) || '–' },
+    { key: 'planned', header: 'Planned', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: plannedCell },
     { key: 'date', header: 'Best before', className: 'whitespace-nowrap', cell: datePill },
   ];
 
@@ -137,7 +168,10 @@ export function StockPage() {
     { value: 'soon', label: 'Going off in 3 days' },
     { value: 'opened', label: 'Opened' },
     { value: 'frozen', label: 'Frozen' },
-    ...locations.map((l) => ({ value: `loc:${l.id}`, label: l.name })),
+  ];
+  const places = [
+    { value: 'all', label: 'All' },
+    ...(['fridge', 'freezer', 'cupboard'] as const).filter((t) => locations.some((l) => l.type === t)).map((t) => ({ value: t, label: t === 'fridge' ? 'Fridge' : t === 'freezer' ? 'Freezer' : 'Cupboard' })),
   ];
 
   return (
@@ -156,6 +190,8 @@ export function StockPage() {
         }
       />
       <Toolbar search={<SearchBox value={q} onChange={setQ} placeholder="Search stock" label="Search stock" />}>
+        <Segmented label="Where" value={place} onChange={setPlace} options={places} />
+        <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
         <PickerMenu label="Filter" icon="filter" value={filter} defaultValue="all" options={filterOptions} onChange={setFilter} />
         <PickerMenu
           label="Sort"
@@ -204,19 +240,25 @@ export function StockPage() {
           phone={(g) => ({
             lead: <span aria-hidden className={`h-10 w-1 shrink-0 rounded-full ${toneClasses[toneFor(g.first, me.today)].bar}`} />,
             title: g.name,
-            meta: `${groupSummary(g)}${plannedFor(g) ? ` · ${gramsLabel(plannedFor(g)!)} planned` : ''}`,
+            meta: (
+              <>
+                {[g.locationName, stateText(g).toLowerCase(), g.first.isMeal ? '' : `${g.packs.length} ${g.packs.length === 1 ? 'pack' : 'packs'}`, leftLabel(g)].filter(Boolean).join(' · ')}
+                {plannedFor(g) && <> · {plannedCell(g)} planned</>}
+              </>
+            ),
             badge: datePill(g),
             actions: <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} compact />,
           })}
           empty={
-            <EmptyState title={q || filter !== 'all' ? 'Nothing matches' : 'Nothing in stock yet'}>
-              {q || filter !== 'all' ? (
+            <EmptyState title={q || filter !== 'all' || place !== 'all' ? 'Nothing matches' : 'Nothing in stock yet'}>
+              {q || filter !== 'all' || place !== 'all' ? (
                 <button
                   type="button"
                   className="font-semibold text-accent-text"
                   onClick={() => {
                     setQ('');
                     setFilter('all');
+                    setPlace('all');
                   }}
                 >
                   Clear the search and filter

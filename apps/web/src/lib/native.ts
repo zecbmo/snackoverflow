@@ -116,7 +116,7 @@ async function handleNotificationLink(u: URL, queryClient: QueryClient, navigate
   if (entryId && ['cooked', 'skip', 'move'].includes(actionName)) {
     if (Number.isFinite(id)) void Inbox.dismiss({ id });
     if (actionName === 'cooked' && recipeId) return navigate(`/recipes/${recipeId}/cook?entry=${entryId}`);
-    if (actionName === 'move') return navigate(`/plan?entry=${entryId}`);
+    if (actionName === 'move') return navigate(`/calendar?entry=${entryId}`);
     try {
       await api.patch(`/api/plan/${entryId}`, { status: 'skipped' });
       await queryClient.invalidateQueries({ queryKey: ['plan'] });
@@ -124,7 +124,7 @@ async function handleNotificationLink(u: URL, queryClient: QueryClient, navigate
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Something went wrong.');
     }
-    return navigate('/plan');
+    return navigate('/calendar');
   }
   const action = ACTIONS[actionName];
   const stockItemId = u.searchParams.get('stockItemId');

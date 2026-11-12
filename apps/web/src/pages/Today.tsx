@@ -204,7 +204,7 @@ function WeekDinners() {
   if (!plan) return null;
   return (
     <section aria-labelledby="week-dinners" className="mb-6">
-      <SectionHead id="week-dinners" title="This week's dinners" link={{ to: '/plan', label: 'Open planner' }} />
+      <SectionHead id="week-dinners" title="This week's dinners" link={{ to: '/calendar', label: 'Open calendar' }} />
       <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-7 lg:px-0">
         {plan.days.map((d) => {
           const dinner = d.entries.find((e) => e.slot === 'dinner' && e.status !== 'skipped');
@@ -213,7 +213,7 @@ function WeekDinners() {
           return (
             <li key={d.date} className="w-28 shrink-0 lg:w-auto">
               <Link
-                to={dinner ? `/plan?date=${d.date}` : `/plan?date=${d.date}&add=dinner`}
+                to={dinner ? `/calendar?date=${d.date}` : `/calendar?date=${d.date}&add=dinner`}
                 aria-label={`${dayName(d.date, me.today)}: ${dinner ? dinner.title : 'nothing planned, add a dinner'}`}
                 className={`flex h-full min-h-20 flex-col gap-0.5 rounded-lg border bg-card p-2.5 hover:bg-card-muted ${isToday ? 'border-accent ring-1 ring-accent' : 'border-line'}`}
               >
@@ -299,7 +299,7 @@ function TonightCard({ entry }: { entry: PlanEntryDto }) {
           Cooked it
         </Button>
         <Button onClick={() => void skip()}>Skip</Button>
-        <Button onClick={() => navigate(`/plan?entry=${entry.id}&date=${entry.date}`)}>Move</Button>
+        <Button onClick={() => navigate(`/calendar?entry=${entry.id}&date=${entry.date}`)}>Move</Button>
       </div>
     </section>
   );

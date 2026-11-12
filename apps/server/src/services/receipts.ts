@@ -346,8 +346,14 @@ export async function confirmReceipt(deps: StockDeps, seed: SeedData, receiptId:
       priceCount++;
     }
   }
-  // The original image is kept only until the receipt is reviewed.
-  await db.update(receipts).set({ status: 'done', doneAt: now, file: null }).where(eq(receipts.id, receiptId));
+  // Photos are kept (the app sends them shrunk to a small JPEG) so the receipt can be looked at again;
+  // PDFs, which can be large, are dropped once the receipt is reviewed.
+  const [kept] = await db.select({ fileType: receipts.fileType }).from(receipts).where(eq(receipts.id, receiptId));
+  const keepFile = Boolean(kept?.fileType?.startsWith('image/'));
+  await db
+    .update(receipts)
+    .set({ status: 'done', doneAt: now, ...(keepFile ? {} : { file: null }) })
+    .where(eq(receipts.id, receiptId));
   return { added, ticked, prices: priceCount };
 }
 

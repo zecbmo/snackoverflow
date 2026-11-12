@@ -20,15 +20,15 @@ export const STATUS_LABEL: Record<ReceiptSummaryDto['status'], string> = {
   failed: "Couldn't read",
 };
 
-/** Big photos are slow to send and no easier to read: shrink to 2000px JPEG first. */
+/** Big photos are slow to send and no easier to read: shrink to a 1600px JPEG first. The receipt keeps this compressed copy. */
 async function shrinkImage(file: File): Promise<{ data: string; type: string }> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const url = canvas.toDataURL('image/jpeg', 0.85);
+  const url = canvas.toDataURL('image/jpeg', 0.75);
   return { data: url.slice(url.indexOf(',') + 1), type: 'image/jpeg' };
 }
 

@@ -14,7 +14,7 @@ import {
   type RunningLowDto,
   type ShoppingItemDto,
   formatPackSize,
-  formatQuantity,
+  amountText,
   todayIn,
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
@@ -47,12 +47,7 @@ export async function listShopping(db: Db, auth: Auth, pricing = false): Promise
   const say = (grams: number | null, r: ItemRow): string | null => {
     if (!grams) return null;
     const ing = r.ingredientId ? catalog.ingredients.get(r.ingredientId) : undefined;
-    if (ing?.packUnit === 'ml') return formatQuantity(grams, 'ml', { densityGPerMl: ing.densityGPerMl });
-    if (ing?.packUnit === 'count' && ing.gramsPerCount) {
-      const n = Math.round(grams / ing.gramsPerCount);
-      return `${n} ${ing.countUnit ? `${ing.countUnit}${n === 1 ? '' : 's'}` : ''}`.trim();
-    }
-    return formatQuantity(grams);
+    return amountText(grams, ing);
   };
   const packLabel = (r: ItemRow): string | null => {
     const prod = r.productId ? productsById.get(r.productId) : undefined;

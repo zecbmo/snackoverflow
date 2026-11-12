@@ -179,6 +179,25 @@ export function formatQuantity(
   return `${trimNumber(grams, 0)}g`;
 }
 
+/** What's needed to say an amount the way a food is measured. */
+export interface FoodUnit {
+  displayUnit?: DisplayUnit | null;
+  packUnit?: string | null;
+  densityGPerMl?: number | null;
+  gramsPerCount?: number | null;
+  countUnit?: string | null;
+}
+
+/** Grams said the way the food is measured: "568ml" or "1.2L" for liquids, "6 eggs", otherwise "300g" or "2.5kg". */
+export function amountText(grams: number, food?: FoodUnit | null): string {
+  if (food?.displayUnit === 'ml' || food?.packUnit === 'ml') return formatQuantity(grams, 'ml', { densityGPerMl: food.densityGPerMl ?? undefined });
+  if ((food?.displayUnit === 'count' || food?.packUnit === 'count') && food.gramsPerCount) {
+    const n = Math.round((grams / food.gramsPerCount) * 2) / 2;
+    return food.countUnit ? `${n} ${food.countUnit}${n === 1 ? '' : 's'}` : String(n);
+  }
+  return formatQuantity(grams);
+}
+
 export interface ParsedQuantity {
   amount: number;
   unit: string;

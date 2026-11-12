@@ -8,7 +8,8 @@ import { useToast } from './Toast';
 import { Button, Field, Select, Sheet } from './ui';
 
 export interface PlanTarget {
-  kind: 'recipe' | 'stock';
+  /** A recipe, leftovers already in stock, or a product (food eaten as it comes). */
+  kind: 'recipe' | 'stock' | 'product';
   id: string;
   title: string;
   servings: number;
@@ -42,7 +43,7 @@ function Inner({ target, onClose }: { target: PlanTarget; onClose: () => void })
         slot,
         servings,
         kind: target.kind,
-        ...(target.kind === 'recipe' ? { recipeId: target.id } : { stockItemId: target.id }),
+        ...(target.kind === 'recipe' ? { recipeId: target.id } : target.kind === 'product' ? { productId: target.id } : { stockItemId: target.id }),
       });
       await qc.invalidateQueries({ queryKey: ['plan'] });
       await qc.invalidateQueries({ queryKey: ['stock'] });
@@ -81,7 +82,7 @@ function Inner({ target, onClose }: { target: PlanTarget; onClose: () => void })
           </Field>
         </div>
         <div className="flex items-center justify-between gap-3" role="group" aria-label="Servings">
-          <span className="font-medium">{target.kind === 'recipe' ? 'Servings' : 'Portions'}</span>
+          <span className="font-medium">{target.kind === 'recipe' ? 'Servings' : target.kind === 'product' ? 'Packs' : 'Portions'}</span>
           <div className="flex items-center gap-2">
             <button type="button" aria-label="Fewer" disabled={servings <= 1} onClick={() => setServings(servings - 1)} className="inline-flex size-11 items-center justify-center rounded-full border border-line text-xl disabled:opacity-40">
               −

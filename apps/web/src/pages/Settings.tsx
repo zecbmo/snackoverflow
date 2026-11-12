@@ -4,7 +4,6 @@ import type { BackupDto, HouseholdSettings, ShelfLifeCategoryDto } from '@snacko
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
-import { Link } from 'react-router';
 import { PageTop, Segmented } from '../components/Toolbar';
 import { Button, Card, ErrorNote, Field, Select, Spinner, TextInput, Toggle } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
@@ -12,42 +11,13 @@ import { keys, useShelfLife } from '../lib/queries';
 import { PALETTES, type PaletteId } from '../lib/palettes';
 import { getPalette, getTheme, setPalette, setTheme, type Theme } from '../lib/theme';
 
-const SECTIONS = [
-  ['appearance', 'Appearance'],
-  ['household', 'Household'],
-  ['shelf-life', 'Shelf life'],
-  ['prices', 'Prices'],
-  ['suggestions', 'Meal suggestions'],
-  ['backups', 'Backups'],
-  ['assistants', 'Recipes and assistants'],
-  ['data', 'Your data'],
-] as const;
-
 export function SettingsPage() {
   const me = useMe();
   const isAdmin = me.user.role === 'admin';
-  const shown = SECTIONS.filter(([id]) => (id === 'backups' ? isAdmin && me.features.backups : id === 'data' ? isAdmin : true));
   return (
     <>
-      <PageTop title="Settings" left={<MenuButton />} />
-      <div className="lg:grid lg:grid-cols-[12rem_minmax(0,46rem)] lg:items-start lg:gap-8">
-        <nav aria-label="Settings sections" className="sticky top-4 hidden flex-col gap-0.5 lg:flex">
-          {shown.map(([id, label]) => (
-            <a key={id} href={`#${id}`} className="rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-card-muted hover:text-ink">
-              {label}
-            </a>
-          ))}
-          <hr className="my-2 border-line" />
-          <Link to="/profile" className="rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-card-muted hover:text-ink">
-            Your profile and phones
-          </Link>
-          <Link to="/notifications" className="rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-card-muted hover:text-ink">
-            Notifications
-          </Link>
-          <Link to="/people" className="rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-card-muted hover:text-ink">
-            People and roles
-          </Link>
-        </nav>
+      <PageTop title="General settings" left={<MenuButton />} />
+      <div className="max-w-3xl">
         <div className="flex flex-col gap-4 [&>*]:scroll-mt-4">
           <AppearanceCard />
           <HouseholdCard />
@@ -162,7 +132,7 @@ function ShelfLifeCard() {
       <h2 className="font-bold">Shelf-life defaults</h2>
       <p className="mb-1 mt-1 text-muted">Days each kind of food keeps. Blank means it doesn't apply. Products learn their own dates as you correct them.</p>
       <p className="mb-4 text-sm text-muted">
-        Food-safety rules are fixed: opening never extends a date, food is frozen by its date, and defrosted food is never refrozen.
+        Food-safety rules are fixed: opening never extends a date and defrosted food is never refrozen. Freezing food past its date is allowed after a warning.
       </p>
       {categories.isPending ? (
         <Spinner />

@@ -127,8 +127,9 @@ export function ReceiptReviewPage() {
         )}
 
         {r.status === 'done' && (
-          <Card className="p-5">
+          <Card className="flex flex-col gap-3 p-4">
             <p>This receipt has been added to stock.</p>
+            {r.hasFile && <ReceiptImage id={id} />}
           </Card>
         )}
 

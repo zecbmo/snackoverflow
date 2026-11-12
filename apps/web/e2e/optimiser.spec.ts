@@ -30,7 +30,7 @@ test('use up food that is going off', async ({ page }, info) => {
   await expect(page.getByText('Uses salmon (tomorrow)').first()).toBeVisible();
 
   // Planner: "Suggest meals" offers it, and one tap plans it.
-  await page.goto('/plan');
+  await page.goto('/calendar');
   await page.getByRole('button', { name: 'Suggest meals' }).click();
   const sheet = page.getByRole('dialog', { name: 'Suggest meals' });
   await sheet.getByLabel('Day').selectOption(today);
