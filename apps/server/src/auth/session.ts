@@ -1,7 +1,7 @@
 import { and, eq, gt } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth, AppContext } from '../context';
-import { households, sessions, users } from '../db/schema';
+import { devices, households, sessions, users } from '../db/schema';
 import { forbidden, unauthorized } from '../http';
 import { hashToken, newToken } from './crypto';
 
@@ -28,8 +28,47 @@ export async function destroySession(ctx: AppContext, req: FastifyRequest, reply
   reply.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
-/** Resolve the signed-in user from the session cookie (or null). */
+/** A phone's device token: "Authorization: Bearer ..." (or ?token= for the WebSocket, which can't send headers). */
+function deviceToken(req: FastifyRequest): string | null {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) return header.slice(7).trim() || null;
+  if (req.url.startsWith('/api/live')) {
+    const q = (req.query as Record<string, unknown> | undefined)?.token;
+    if (typeof q === 'string' && q) return q;
+  }
+  return null;
+}
+
+/** Create a device token for a phone. The raw token is returned once and never stored. */
+export async function createDevice(ctx: AppContext, userId: string, input: { name: string; platform: string }) {
+  const token = newToken();
+  const [d] = await ctx.db
+    .insert(devices)
+    .values({ userId, tokenHash: hashToken(token), name: input.name, platform: input.platform, lastSeenAt: ctx.now() })
+    .returning();
+  return { id: d!.id, token };
+}
+
+async function loadDeviceAuth(ctx: AppContext, token: string): Promise<Auth | null> {
+  const [row] = await ctx.db
+    .select({ device: devices, user: users, household: households })
+    .from(devices)
+    .innerJoin(users, eq(users.id, devices.userId))
+    .innerJoin(households, eq(households.id, users.householdId))
+    .where(eq(devices.tokenHash, hashToken(token)))
+    .limit(1);
+  if (!row) return null;
+  const now = ctx.now();
+  if (now.getTime() - row.device.lastSeenAt.getTime() > 10 * 60_000) {
+    await ctx.db.update(devices).set({ lastSeenAt: now }).where(eq(devices.id, row.device.id));
+  }
+  return { user: row.user, household: row.household, deviceId: row.device.id };
+}
+
+/** Resolve the signed-in user from a device token or the session cookie (or null). */
 export async function loadAuth(ctx: AppContext, req: FastifyRequest): Promise<Auth | null> {
+  const bearer = deviceToken(req);
+  if (bearer) return loadDeviceAuth(ctx, bearer);
   const token = req.cookies[SESSION_COOKIE];
   if (!token) return null;
   const now = ctx.now();

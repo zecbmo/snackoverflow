@@ -17,7 +17,7 @@ export function startScheduler(ctx: AppContext, log: Logger): () => void {
     const now = ctx.now();
     try {
       const stats = await runNotifications(ctx, now);
-      if (stats.push || stats.email) log.info(stats, 'notifications sent');
+      if (stats.app || stats.push || stats.email) log.info(stats, 'notifications sent');
     } catch (err) {
       log.error({ err }, 'notification run failed');
     }

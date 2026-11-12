@@ -13,10 +13,10 @@ import {
 } from '@snackoverflow/shared';
 import { hashPassword, hashToken, newToken, verifyPassword } from '../auth/crypto';
 import { requireAdmin, requireAuth } from '../auth/session';
-import { households, invites, pushSubscriptions, sessions, users } from '../db/schema';
+import { devices, households, invites, pushSubscriptions, sessions, users } from '../db/schema';
 import { badRequest, conflict, notFound, parse } from '../http';
 import { escapeHtml } from '../notify/email';
-import { prefsOf, pushToUser } from '../notify/notifications';
+import { deliver, prefsOf } from '../notify/notifications';
 import { getUserByEmail, householdDto, userDto } from '../services/household';
 
 const INVITE_DAYS = 7;
@@ -153,11 +153,14 @@ export async function peopleRoutes(app: FastifyInstance) {
     if (Object.keys(patch).length === 0) return userDto(auth.user);
     const [u] = await ctx.db.update(users).set(patch).where(eq(users.id, auth.user.id)).returning();
     if (input.newPassword) {
-      // Sign out other devices after a password change.
-      const current = req.cookies.so_session;
+      // Sign out other browsers and phones after a password change.
+      const current = auth.deviceId ? undefined : req.cookies.so_session;
       await ctx.db
         .delete(sessions)
         .where(and(eq(sessions.userId, auth.user.id), ne(sessions.tokenHash, current ? hashToken(current) : '')));
+      await ctx.db
+        .delete(devices)
+        .where(and(eq(devices.userId, auth.user.id), ne(devices.id, auth.deviceId ?? '00000000-0000-0000-0000-000000000000')));
     }
     ctx.live.publish(auth.household.id, 'users');
     return userDto(u!);
@@ -166,7 +169,7 @@ export async function peopleRoutes(app: FastifyInstance) {
   // --- Notifications ----------------------------------------------------------------
   const settings = async (userId: string, prefs = DEFAULT_NOTIFICATION_PREFS): Promise<NotificationSettingsDto> => {
     const [row] = await ctx.db.select({ n: count() }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
-    return { prefs, available: { push: Boolean(ctx.push), email: Boolean(ctx.mailer) }, pushSubscribed: row?.n ?? 0 };
+    return { prefs, available: { app: true, push: Boolean(ctx.push), email: Boolean(ctx.mailer) }, pushSubscribed: row?.n ?? 0 };
   };
 
   app.get('/api/me/notifications', async (req) => {
@@ -213,12 +216,13 @@ export async function peopleRoutes(app: FastifyInstance) {
 
   app.post('/api/me/notifications/test', async (req) => {
     const auth = requireAuth(req);
-    const pushed = await pushToUser(ctx, auth.user.id, {
+    const sent = await deliver(ctx, auth.user, ['app', 'push'], 'test', {
       title: 'Snack Overflow',
       body: 'Notifications are working.',
       url: '/',
       tag: 'test',
     });
+    const pushed = sent.push;
     let emailed = false;
     if (ctx.mailer) {
       try {

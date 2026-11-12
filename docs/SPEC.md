@@ -167,7 +167,7 @@ When prices exist, the list shows an estimated total and the optimiser uses them
 | Running low | When estimated | Push |
 | Shopping list changed by someone else | Off | Push |
 
-Push goes to the Android app (Firebase Cloud Messaging) and to browsers (Web Push). Email uses a configurable SMTP server.
+Every notification also lands in an in-app inbox (the bell on Today). The Android app checks that inbox in the background, about every 15 minutes, and shows it as a normal phone notification, with no Firebase or Google push service involved; while the app is open it updates instantly over the live connection. Browsers get Web Push. Email uses a configurable SMTP server. Channels per notification type: phone app / in-app, Web Push, email.
 
 ## Screens
 
@@ -190,12 +190,12 @@ Visual direction: clean, card-based, large touch targets, dark mode. Warm off-wh
 
 ## Architecture and tech stack
 
-One Docker Compose stack runs everything. The Android app wraps the same web UI and adds native scanning, phone push and an offline queue.
+One Docker Compose stack runs everything. The Android app wraps the same web UI and adds native scanning, phone notifications (from the app's inbox, no Firebase) and an offline queue.
 
 ```mermaid
 flowchart LR
   subgraph Clients
-    A[Android app - Capacitor<br/>scan, push, offline queue]
+    A[Android app - Capacitor<br/>scan, notifications, offline queue]
     W[Web app - PWA<br/>phones, tablets, desktop]
     M[Claude via MCP<br/>recipe import and fixes]
   end
@@ -207,7 +207,7 @@ flowchart LR
   subgraph External
     O[Open Food Facts<br/>barcodes and nutrition]
     R[Recipe sites + AI<br/>import and clean-up]
-    P[Push<br/>FCM, Web Push]
+    P[Push<br/>Web Push]
     E[Email<br/>SMTP]
   end
   A --> S
@@ -219,6 +219,7 @@ flowchart LR
   S --> R
   J --> P
   J --> E
+  A -. checks inbox .-> S
 ```
 
 | Layer | Choice | Why |
@@ -227,7 +228,7 @@ flowchart LR
 | Web UI | React + Vite, installable PWA, Tailwind CSS | Fast, polished mobile UI that can be installed from the browser |
 | Server | Node.js with Fastify, REST API with live updates over WebSockets | Light, quick, easy to run in Docker |
 | Database | PostgreSQL with Drizzle ORM | Reliable, good for the matching queries, simple migrations |
-| Android app | Capacitor wrapper around the web UI | Reuses all screens; adds native ML Kit barcode scanning, push and local storage |
+| Android app | Capacitor wrapper around the web UI | Reuses all screens; adds native ML Kit barcode scanning, background notification checks and local storage. Signs in with a per-device token |
 | Browser scanning | Built-in BarcodeDetector with a ZXing fallback | Works on the web too, not just the app |
 | Offline | Queue of actions stored on the phone, synced on reconnect | Covers patchy signal; assumes online normally |
 | Auth | Built-in email and password, or sign-in through a self-hosted identity provider (e.g. Pocket ID, Authentik, Authelia) over OpenID Connect; admin and member roles; invite links | User management built in |
@@ -242,7 +243,7 @@ Each phase ends with a working, deployable app.
 
 1. **Foundation and stock.** Docker stack, users and household, locations, ingredients and products, Open Food Facts lookup, scan in/out, stock screen, open / freeze / defrost / discard, best-before estimates and learning, expiry notifications (web push and email), backups.
    The scanner's **Eat** mode logs food to a meal slot, so it ships with the planner in phase 4; phase 1 has Add and Use. The Plan and Shop tabs show a "coming soon" note until then.
-2. **Android app.** Capacitor wrapper with native scanning, phone push notifications, offline queue for scans.
+2. **Android app.** Capacitor wrapper with native scanning, phone notifications (background check of the in-app inbox, no Firebase), offline queue for scans (also in the web app).
 3. **Recipes and cooking.** URL import, AI clean-up, MCP endpoint, unit conversions, ingredient matching, cook with deductions, leftovers, batch cooks, calories.
 4. **Planner and shopping list.** Per-person week planner, planned-stock warnings, meal-time prompts, build list from plan with pack rounding, running-low tracking, put-away mode.
    **Receipts:** photo / upload / share and email-forward import, line matching with learned abbreviations, review screen, add to stock, tick off the list, save prices.

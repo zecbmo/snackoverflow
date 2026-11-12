@@ -12,7 +12,8 @@ import { useMe } from '../components/Layout';
 import { useStockActions } from '../components/StockActions';
 import { useToast } from '../components/Toast';
 import { Button, Field, Select, Sheet, TextInput } from '../components/ui';
-import { api, errorMessage } from '../lib/api';
+import { api, errorMessage, isOffline } from '../lib/api';
+import { enqueueScan, type QueuedScan, removeQueued } from '../lib/offlineQueue';
 import { longDate } from '../lib/format';
 import { useIngredients, useLocations } from '../lib/queries';
 import { beep, useBarcodeScanner } from '../scanner/useBarcodeScanner';
@@ -25,6 +26,8 @@ interface Entry {
   mode: Mode;
   add?: ScanAddResult;
   use?: ScanUseResult;
+  /** Saved on the phone with no signal; sent when back online. */
+  queued?: QueuedScan;
   error?: string;
   undone?: boolean;
 }
@@ -94,9 +97,17 @@ export function ScanPage() {
         }
         void qc.invalidateQueries({ queryKey: ['stock'] });
       } catch (e) {
-        beep('warn');
-        setFlash({ kind: 'miss', n: key });
-        setEntries((all) => [{ key, barcode: code, mode, error: errorMessage(e) }, ...all]);
+        if (isOffline(e)) {
+          // No signal: keep the scan and send it later, like a till that keeps working offline.
+          const queued = enqueueScan({ mode, barcode: code, locationId: (mode === 'add' ? addLocationId : useLocation) ?? undefined });
+          beep('ok');
+          setFlash({ kind: 'ok', n: key });
+          setEntries((all) => [{ key, barcode: code, mode, queued }, ...all]);
+        } else {
+          beep('warn');
+          setFlash({ kind: 'miss', n: key });
+          setEntries((all) => [{ key, barcode: code, mode, error: errorMessage(e) }, ...all]);
+        }
       } finally {
         busy.current = false;
         last.current = { code, at: Date.now() };
@@ -115,6 +126,12 @@ export function ScanPage() {
   }, [flash]);
 
   const undo = async (entry: Entry) => {
+    if (entry.queued) {
+      removeQueued(entry.queued.id);
+      update(entry.key, { undone: true });
+      toast.show('Removed.');
+      return;
+    }
     const eventId = entry.add?.change.eventId ?? (entry.use?.status === 'used' ? entry.use.change.eventId : null);
     if (!eventId) return;
     try {
@@ -284,6 +301,10 @@ export function ScanPage() {
                     </span>
                     <Icon name="chevronRight" className="size-5 text-muted" />
                   </Link>
+                ) : e.queued ? (
+                  <p className="py-3">
+                    <span className="font-semibold">Barcode {e.barcode}</span> <span className="text-muted">will sync when you're online</span>
+                  </p>
                 ) : (
                   <p className="py-3">
                     <span className="font-semibold">{name}</span> <span className="text-muted">wasn't in stock</span>
@@ -315,7 +336,12 @@ function ResultCard({ entry, onUndo, onDate, onName, onSome }: { entry: Entry; o
   let detail: string;
   let primary: { text: string; onClick: () => void } | null = null;
   let canUndo = true;
-  if (entry.error) {
+  if (entry.queued) {
+    label = 'Saved offline';
+    labelClass = 'text-accent-text';
+    title = `Barcode ${entry.barcode}`;
+    detail = `No signal. We'll ${entry.mode === 'add' ? 'add' : 'use'} it as soon as you're back online.`;
+  } else if (entry.error) {
     label = "Couldn't save that";
     labelClass = 'text-danger';
     title = entry.barcode;

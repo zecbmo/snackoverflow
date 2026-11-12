@@ -3,6 +3,7 @@
  * BarcodeDetector where available and falls back to ZXing (loaded on demand).
  */
 import { useEffect, useRef, useState } from 'react';
+import { isNative } from '../lib/platform';
 
 export type ScannerStatus = 'starting' | 'running' | 'denied' | 'unavailable' | 'error';
 
@@ -38,7 +39,49 @@ export function useBarcodeScanner(onDetect: (code: string) => void, enabled = tr
     let timer: ReturnType<typeof setTimeout> | undefined;
     let zxingStop: (() => void) | undefined;
 
+    let nativeStop: (() => Promise<void>) | undefined;
+
+    /** Android app: ML Kit scans from a native camera view behind the (transparent) web view. */
+    const startNative = async () => {
+      try {
+        const { BarcodeScanner, BarcodeFormat } = await import('@capacitor-mlkit/barcode-scanning');
+        const perm = await BarcodeScanner.requestPermissions();
+        if (perm.camera !== 'granted' && perm.camera !== 'limited') {
+          setStatus('denied');
+          return;
+        }
+        if (stopped) return;
+        document.documentElement.classList.add('native-scanning');
+        const listener = await BarcodeScanner.addListener('barcodesScanned', (e) => {
+          const first = e.barcodes[0]?.rawValue;
+          if (first) handler.current(first);
+        });
+        await BarcodeScanner.startScan({
+          formats: [
+            BarcodeFormat.Ean13,
+            BarcodeFormat.Ean8,
+            BarcodeFormat.UpcA,
+            BarcodeFormat.UpcE,
+            BarcodeFormat.Code128,
+            BarcodeFormat.Code39,
+            BarcodeFormat.Itf,
+          ],
+        });
+        nativeStop = async () => {
+          document.documentElement.classList.remove('native-scanning');
+          await listener.remove();
+          await BarcodeScanner.stopScan();
+        };
+        if (stopped) await nativeStop();
+        else setStatus('running');
+      } catch {
+        document.documentElement.classList.remove('native-scanning');
+        setStatus('error');
+      }
+    };
+
     const start = async () => {
+      if (isNative()) return startNative();
       if (!navigator.mediaDevices?.getUserMedia) {
         setStatus('unavailable');
         return;
@@ -111,6 +154,7 @@ export function useBarcodeScanner(onDetect: (code: string) => void, enabled = tr
       stopped = true;
       clearTimeout(timer);
       zxingStop?.();
+      void nativeStop?.();
       stream?.getTracks().forEach((t) => t.stop());
     };
   }, [enabled]);

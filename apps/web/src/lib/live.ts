@@ -1,6 +1,7 @@
 /** Live updates: the server says which topics changed and we refetch them, so every phone stays in step. */
 import type { QueryClient } from '@tanstack/react-query';
 import type { LiveMessage } from '@snackoverflow/shared';
+import { deviceToken, serverUrl } from './platform';
 
 export function connectLive(queryClient: QueryClient): () => void {
   let socket: WebSocket | null = null;
@@ -10,8 +11,9 @@ export function connectLive(queryClient: QueryClient): () => void {
 
   const open = () => {
     if (stopped) return;
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    socket = new WebSocket(`${proto}//${location.host}/api/live`);
+    const base = serverUrl() || `${location.protocol}//${location.host}`;
+    const token = deviceToken();
+    socket = new WebSocket(`${base.replace(/^http/, 'ws')}/api/live${token ? `?token=${encodeURIComponent(token)}` : ''}`);
     socket.onopen = () => {
       retry = 1000;
       // We may have missed changes while disconnected.

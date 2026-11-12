@@ -71,7 +71,7 @@ describe('weekly summary', () => {
     await add('1003', '2026-12-30');
     t.setNow('2026-11-15T10:05:00Z'); // Sunday
     const stats = await runNotifications(t.ctx);
-    expect(stats).toEqual({ push: 1, email: 1 });
+    expect(stats).toEqual({ app: 1, push: 1, email: 1 });
     const email = t.mailer.sent[0]!;
     expect(email.subject).toBe('2 things go off this week');
     expect(email.text).toContain('Chicken thighs: 17 Nov');

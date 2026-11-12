@@ -18,7 +18,7 @@ import {
   wallClockIn,
 } from '@snackoverflow/shared';
 import type { AppContext } from '../context';
-import { households, locations, notificationLog, products, pushSubscriptions, stockItems, users } from '../db/schema';
+import { households, locations, notificationLog, notifications, products, pushSubscriptions, stockItems, users } from '../db/schema';
 import { escapeHtml } from './email';
 import type { PushPayload } from './push';
 
@@ -161,14 +161,59 @@ function weeklySummary(items: DueItem[], today: string, appUrl: string) {
 }
 
 export interface NotificationRunStats {
+  app: number;
   push: number;
   email: number;
 }
 
+function add(total: NotificationRunStats, more: NotificationRunStats) {
+  total.app += more.app;
+  total.push += more.push;
+  total.email += more.email;
+}
+
+/**
+ * Send one notification to a person on the channels they picked:
+ * app = the in-app inbox (the bell, and the Android app checks it), push = Web Push, email.
+ */
+export async function deliver(
+  ctx: AppContext,
+  user: { id: string; email: string; householdId: string },
+  channels: Channel[],
+  type: string,
+  payload: PushPayload,
+  email?: { subject: string; text: string; html?: string },
+): Promise<NotificationRunStats> {
+  const stats: NotificationRunStats = { app: 0, push: 0, email: 0 };
+  if (channels.includes('app')) {
+    await ctx.db.insert(notifications).values({
+      userId: user.id,
+      type,
+      title: payload.title,
+      body: payload.body,
+      url: payload.url ?? null,
+      actions: payload.actions ?? null,
+      data: payload.data ?? null,
+      createdAt: ctx.now(),
+    });
+    ctx.live.publish(user.householdId, 'notifications');
+    stats.app++;
+  }
+  if (channels.includes('push')) stats.push += await pushToUser(ctx, user.id, payload);
+  if (channels.includes('email') && email && ctx.mailer) {
+    try {
+      await ctx.mailer.send({ to: user.email, ...email });
+      stats.email++;
+    } catch {
+      // Email is optional; a failure must not stop the rest.
+    }
+  }
+  return stats;
+}
+
 /** One scheduler tick: send anything that is due and not yet sent. */
 export async function runNotifications(ctx: AppContext, now: Date = ctx.now()): Promise<NotificationRunStats> {
-  const stats: NotificationRunStats = { push: 0, email: 0 };
-  if (!ctx.push && !ctx.mailer) return stats;
+  const stats: NotificationRunStats = { app: 0, push: 0, email: 0 };
   const allHouseholds = await ctx.db.select().from(households);
   for (const h of allHouseholds) {
     const clock = wallClockIn(h.timeZone, now);
@@ -191,20 +236,10 @@ export async function runNotifications(ctx: AppContext, now: Date = ctx.now()): 
             : await itemsDue(ctx, h.id, clock.date, addDays(clock.date, 7));
         if (items.length > 0) {
           if (type === 'expiresTomorrow') {
-            if (channels.includes('push')) {
-              for (const p of expiresTomorrowPushes(items)) stats.push += await pushToUser(ctx, user.id, p);
-            }
+            for (const p of expiresTomorrowPushes(items)) add(stats, await deliver(ctx, user, channels, type, p));
           } else {
             const msg = weeklySummary(items, clock.date, ctx.config.APP_URL.replace(/\/$/, ''));
-            if (channels.includes('push')) stats.push += await pushToUser(ctx, user.id, msg.push);
-            if (channels.includes('email') && ctx.mailer) {
-              try {
-                await ctx.mailer.send({ to: user.email, ...msg.email });
-                stats.email++;
-              } catch {
-                // Email is optional; a failure must not stop the rest.
-              }
-            }
+            add(stats, await deliver(ctx, user, channels, type, msg.push, msg.email));
           }
         }
         await markSent(ctx, user.id, type, key);

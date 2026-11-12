@@ -20,7 +20,10 @@ export const displayUnit = z.enum(['g', 'ml', 'count']);
 
 // --- Auth and users -----------------------------------------------------------
 
-export const loginInput = z.object({ email, password: z.string().min(1) });
+/** A phone signing in gets its own token instead of a cookie. */
+export const deviceInput = z.object({ name: z.string().trim().min(1).max(80), platform: z.enum(['android', 'web']).default('android') });
+export const loginInput = z.object({ email, password: z.string().min(1), device: deviceInput.optional() });
+export const appCodeInput = z.object({ code: z.string().min(16).max(200), device: deviceInput });
 export const setupInput = z.object({ householdName: name, name, email, password });
 export const acceptInviteInput = z.object({ name, email, password });
 export const createInviteInput = z.object({ email: email.nullish(), role: z.enum(ROLES).default('member') });
@@ -136,13 +139,16 @@ export const addStockInput = z.object({
 export const scanInput = z.object({
   barcode: z.string().trim().regex(/^[0-9A-Za-z-]{4,64}$/, 'Not a valid barcode'),
   locationId: id.optional(),
+  /** When the scan really happened, for scans queued offline and synced later. */
+  scannedAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 // --- Notifications ----------------------------------------------------------------
 
 export const NOTIFICATION_TYPES = ['weeklySummary', 'expiresTomorrow'] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-export const CHANNELS = ['push', 'email'] as const;
+/** app = the in-app inbox (the bell) and the Android app's notifications. */
+export const CHANNELS = ['app', 'push', 'email'] as const;
 export type Channel = (typeof CHANNELS)[number];
 
 const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM');
@@ -155,7 +161,7 @@ export const notificationPrefsInput = z.object({
 export type NotificationPrefs = z.infer<typeof notificationPrefsInput>;
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
-  channels: { weeklySummary: ['push', 'email'], expiresTomorrow: ['push'] },
+  channels: { weeklySummary: ['app', 'push', 'email'], expiresTomorrow: ['app', 'push'] },
   quietStart: '22:00',
   quietEnd: '07:00',
 };

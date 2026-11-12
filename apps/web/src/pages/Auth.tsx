@@ -1,8 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Card, ErrorNote, Field, Spinner, TextInput } from '../components/ui';
 import { api } from '../lib/api';
+import { nativePasswordLogin, startNativeSso } from '../lib/native';
+import { hasServer, isNative, serverUrl } from '../lib/platform';
 
 interface AuthStatus {
   needsSetup: boolean;
@@ -55,23 +57,53 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const next = params.get('next') ?? '/';
   const { submit, error, busy } = useSubmit(
-    () => api.post('/api/auth/login', { email, password }),
+    () => (isNative() ? nativePasswordLogin(email, password) : api.post('/api/auth/login', { email, password })),
     () => {
       void qc.invalidateQueries();
       navigate(next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true });
     },
   );
+  if (!hasServer()) return <Navigate to="/connect" replace />;
   if (status.isPending) return <Spinner />;
+  if (status.error) {
+    return (
+      <AuthFrame title="Can't connect">
+        <ErrorNote error={status.error} />
+        {isNative() && (
+          <Link to="/connect" className="mt-4 inline-flex min-h-11 items-center font-semibold text-accent-text">
+            Change the server address
+          </Link>
+        )}
+      </AuthFrame>
+    );
+  }
   if (status.data?.needsSetup) return <Navigate to="/setup" replace />;
   const oidc = status.data?.oidc;
   return (
-    <AuthFrame title="Sign in">
+    <AuthFrame
+      title="Sign in"
+      intro={
+        isNative() ? (
+          <span>
+            {serverUrl().replace(/^https?:\/\//, '')} ·{' '}
+            <Link to="/connect" className="font-semibold text-accent-text">
+              Change
+            </Link>
+          </span>
+        ) : undefined
+      }
+    >
       {params.get('error') && <ErrorNote error={params.get('error')} />}
-      {oidc?.enabled && (
-        <a href="/api/auth/oidc/start" className="mb-4 flex min-h-12 items-center justify-center rounded-xl bg-accent font-semibold text-accent-ink">
-          Continue with {oidc.displayName}
-        </a>
-      )}
+      {oidc?.enabled &&
+        (isNative() ? (
+          <Button variant="primary" size="lg" className="mb-4 w-full" onClick={startNativeSso}>
+            Continue with {oidc.displayName}
+          </Button>
+        ) : (
+          <a href="/api/auth/oidc/start" className="mb-4 flex min-h-12 items-center justify-center rounded-xl bg-accent font-semibold text-accent-ink">
+            Continue with {oidc.displayName}
+          </a>
+        ))}
       {(!oidc || oidc.allowPassword) && (
         <form onSubmit={submit} className="flex flex-col gap-4">
           <Field label="Email">{(id) => <TextInput id={id} type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
@@ -95,12 +127,16 @@ export function SetupPage() {
   const [form, setForm] = useState({ householdName: '', name: '', email: '', password: '' });
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
   const { submit, error, busy } = useSubmit(
-    () => api.post('/api/auth/setup', form),
+    async () => {
+      await api.post('/api/auth/setup', form);
+      if (isNative()) await nativePasswordLogin(form.email, form.password);
+    },
     () => {
       void qc.invalidateQueries();
       navigate('/', { replace: true });
     },
   );
+  if (!hasServer()) return <Navigate to="/connect" replace />;
   if (status.isPending) return <Spinner />;
   if (status.data && !status.data.needsSetup) return <Navigate to="/login" replace />;
   return (

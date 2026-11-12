@@ -1,12 +1,12 @@
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import * as oidc from 'openid-client';
-import { acceptInviteInput, loginInput, setupInput, type SessionDto, todayIn } from '@snackoverflow/shared';
-import { hashPassword, hashToken, verifyPassword } from '../auth/crypto';
-import { createSession, destroySession, LoginLimiter, requireAuth } from '../auth/session';
+import { acceptInviteInput, appCodeInput, loginInput, setupInput, type SessionDto, todayIn } from '@snackoverflow/shared';
+import { hashPassword, hashToken, newToken, verifyPassword } from '../auth/crypto';
+import { createDevice, createSession, destroySession, LoginLimiter, requireAuth } from '../auth/session';
 import { backupsEnabled } from '../backup';
 import type { AppContext, Auth } from '../context';
-import { households, invites, users } from '../db/schema';
+import { appLoginCodes, devices, households, invites, users } from '../db/schema';
 import { conflict, forbidden, HttpError, notFound, parse, unauthorized } from '../http';
 import { createFirstAdmin, getUserByEmail, householdDto, theHousehold, userCount, userDto } from '../services/household';
 
@@ -45,6 +45,8 @@ async function findInvite(ctx: AppContext, token: string) {
 }
 
 const OIDC_COOKIE = 'so_oidc';
+/** Deep-link scheme the Android app registers. */
+export const APP_SCHEME = 'snackoverflow';
 
 export async function authRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
@@ -86,13 +88,34 @@ export async function authRoutes(app: FastifyInstance) {
       throw unauthorized("That email and password don't match.");
     }
     limiter.reset(key);
+    if (input.device) {
+      // Phones get a device token instead of a cookie.
+      const { token } = await createDevice(ctx, user.id, input.device);
+      return { ok: true, token };
+    }
     await createSession(ctx, reply, user.id);
     return { ok: true };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
+    if (req.auth?.deviceId) {
+      await ctx.db.delete(devices).where(eq(devices.id, req.auth.deviceId));
+      return { ok: true };
+    }
     await destroySession(ctx, req, reply);
     return { ok: true };
+  });
+
+  /** The app swaps the one-time code from a single sign-on login for its device token. */
+  app.post('/api/auth/app-code', async (req) => {
+    const input = parse(appCodeInput, req.body);
+    const [row] = await ctx.db
+      .delete(appLoginCodes)
+      .where(eq(appLoginCodes.codeHash, hashToken(input.code)))
+      .returning();
+    if (!row || row.expiresAt < ctx.now()) throw unauthorized('That sign-in link has expired. Please try again.');
+    const { token } = await createDevice(ctx, row.userId, input.device);
+    return { ok: true, token };
   });
 
   app.get('/api/session', async (req) => sessionDto(ctx, requireAuth(req)));
@@ -131,7 +154,7 @@ export async function authRoutes(app: FastifyInstance) {
   // --- Single sign-on (OpenID Connect) ---------------------------------------
   const redirectUri = () => `${ctx.config.APP_URL.replace(/\/$/, '')}/api/auth/oidc/callback`;
 
-  app.get<{ Querystring: { invite?: string } }>('/api/auth/oidc/start', async (req, reply) => {
+  app.get<{ Querystring: { invite?: string; app?: string } }>('/api/auth/oidc/start', async (req, reply) => {
     const config = await getOidc();
     const verifier = oidc.randomPKCECodeVerifier();
     const state = oidc.randomState();
@@ -142,7 +165,7 @@ export async function authRoutes(app: FastifyInstance) {
       code_challenge_method: 'S256',
       state,
     });
-    reply.setCookie(OIDC_COOKIE, JSON.stringify({ verifier, state, invite: req.query.invite ?? null }), {
+    reply.setCookie(OIDC_COOKIE, JSON.stringify({ verifier, state, invite: req.query.invite ?? null, app: req.query.app === '1' }), {
       path: '/api/auth/oidc',
       httpOnly: true,
       sameSite: 'lax',
@@ -159,7 +182,7 @@ export async function authRoutes(app: FastifyInstance) {
     const unsigned = raw ? req.unsignCookie(raw) : null;
     reply.clearCookie(OIDC_COOKIE, { path: '/api/auth/oidc' });
     if (!unsigned?.valid || !unsigned.value) return fail('Sign-in timed out. Please try again.');
-    const saved = JSON.parse(unsigned.value) as { verifier: string; state: string; invite: string | null };
+    const saved = JSON.parse(unsigned.value) as { verifier: string; state: string; invite: string | null; app?: boolean };
     let claims: oidc.IDToken | undefined;
     try {
       const config = await getOidc();
@@ -198,6 +221,12 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
     if (!user) return fail("You don't have an account here yet. Ask an admin for an invite.");
+    if (saved.app) {
+      // Hand the login back to the Android app with a short-lived one-time code.
+      const code = newToken();
+      await ctx.db.insert(appLoginCodes).values({ codeHash: hashToken(code), userId: user.id, expiresAt: new Date(ctx.now().getTime() + 120_000) });
+      return reply.redirect(`${APP_SCHEME}://auth?code=${encodeURIComponent(code)}`);
+    }
     await createSession(ctx, reply, user.id);
     return reply.redirect('/');
   });

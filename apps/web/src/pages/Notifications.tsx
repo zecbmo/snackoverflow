@@ -9,11 +9,11 @@ import { currentSubscription, pushSupported, subscribePush, unsubscribePush } fr
 import { keys, useNotificationSettings } from '../lib/queries';
 
 const TYPES: { type: NotificationType; title: string; when: string; channels: Channel[] }[] = [
-  { type: 'expiresTomorrow', title: 'Expires tomorrow', when: 'Daily at 9am, with Use, Freeze and Binned buttons', channels: ['push'] },
-  { type: 'weeklySummary', title: 'Going off this week', when: 'Sundays at 10am', channels: ['push', 'email'] },
+  { type: 'expiresTomorrow', title: 'Expires tomorrow', when: 'Daily at 9am, with Use, Freeze and Binned buttons', channels: ['app', 'push'] },
+  { type: 'weeklySummary', title: 'Going off this week', when: 'Sundays at 10am', channels: ['app', 'push', 'email'] },
 ];
 
-const channelName: Record<Channel, string> = { push: 'Push', email: 'Email' };
+const channelName: Record<Channel, string> = { app: 'In the app', push: 'Browser push', email: 'Email' };
 
 export function NotificationsPage() {
   const settings = useNotificationSettings();

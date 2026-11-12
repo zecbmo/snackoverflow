@@ -13,3 +13,4 @@ data
 pgdata
 *.log
 .claude
+apps/android/android

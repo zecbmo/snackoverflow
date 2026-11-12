@@ -8,14 +8,15 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @snackoverflow/server --filter @snackoverflow/web dev",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @snackoverflow/shared --filter @snackoverflow/server --filter @snackoverflow/web -r build",
     "test": "pnpm -r test",
     "test:e2e": "pnpm --filter @snackoverflow/web test:e2e",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "db:generate": "pnpm --filter @snackoverflow/server db:generate",
     "db:migrate": "pnpm --filter @snackoverflow/server db:migrate",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "android": "pnpm --filter @snackoverflow/android build"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

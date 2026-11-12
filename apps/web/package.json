@@ -12,6 +12,9 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.2.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.6.0",
     "@fontsource-variable/bricolage-grotesque": "^5.2.0",
     "@fontsource-variable/inter": "^5.2.0",
     "@snackoverflow/shared": "workspace:*",

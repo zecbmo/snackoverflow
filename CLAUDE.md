@@ -81,6 +81,7 @@ A change is done when:
 | New migration after editing `apps/server/src/db/schema.ts` | `pnpm db:generate` (commit the files in `apps/server/drizzle`) |
 | Apply migrations | `pnpm db:migrate` (the server also applies them on start) |
 | Docker | `docker compose up -d --build` |
+| Android APK | `pnpm android` (finds the JDK and SDK itself; no Android Studio needed) |
 | Local test stack (Windows) | `start-test-env.bat` / `stop-test-env.bat` (port 3080, project `snackoverflow-test`, settings in `.env.test`) |
 
 Notes:
@@ -88,4 +89,5 @@ Notes:
 - API tests (`apps/server/test`) run on PGlite (in-memory Postgres) with fake Open Food Facts, push and email; use `makeTestApp()` and `setupAdmin()` from `test/helpers.ts`.
 - The Playwright web server (`apps/server/test/e2e-server.ts`) is the real app on PGlite serving the built web app.
 - Every stock change goes through `apps/server/src/services/stock.ts`, which writes the stock event used for undo.
+- The Android app (`apps/android`) bundles `apps/web/dist` and talks to the server with a per-device Bearer token (`lib/platform.ts`, `lib/native.ts`). Phone notifications come from the app's own Inbox plugin and `InboxWorker.java` polling `/api/notifications`; there is no Firebase. To test on the emulator, debug builds expose the WebView to Chrome DevTools (`adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`).
 - Food-safety rules live in `packages/shared/src/shelfLife.ts`; day counts come from the seed CSVs.

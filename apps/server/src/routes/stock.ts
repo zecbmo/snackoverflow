@@ -156,7 +156,8 @@ export async function stockRoutes(app: FastifyInstance) {
     const locationId = input.locationId ?? auth.user.lastLocationId ?? (await firstLocation(auth.household.id));
     if (!locationId) throw badRequest('Add a location first.');
     const resolved = await resolveBarcode(ctx, auth, input.barcode);
-    const added = await change(req, (d) => addPack(d, { product: resolved.product, locationId }));
+    const addedOn = scannedOn(input.scannedAt, auth.household.timeZone);
+    const added = await change(req, (d) => addPack(d, { product: resolved.product, locationId, addedOn }));
     if (auth.user.lastLocationId !== locationId) {
       await ctx.db.update(users).set({ lastLocationId: locationId }).where(eq(users.id, auth.user.id));
     }
@@ -177,6 +178,15 @@ export async function stockRoutes(app: FastifyInstance) {
     const used = await change(req, (d) => usePack(d, first.id, { kind: 'all' }));
     return { status: 'used', product: dto, change: used, packsLeft: packs.length - 1 };
   });
+
+  /** The day an offline-queued scan happened (up to two weeks back; never in the future). */
+  function scannedOn(scannedAt: string | undefined, timeZone: string): string | undefined {
+    if (!scannedAt) return undefined;
+    const at = new Date(scannedAt).getTime();
+    const now = ctx.now().getTime();
+    if (!Number.isFinite(at) || at > now || now - at > 14 * 86_400_000) return undefined;
+    return todayIn(timeZone, new Date(at));
+  }
 
   async function firstLocation(householdId: string): Promise<string | null> {
     const [l] = await ctx.db

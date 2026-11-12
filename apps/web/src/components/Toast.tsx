@@ -1,5 +1,7 @@
 /** Short confirmations at the bottom of the screen, with an optional Undo. */
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+
+export const TOAST_EVENT = 'so-toast';
 
 interface ToastAction {
   label: string;
@@ -32,6 +34,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [dismiss],
   );
   const value = useMemo(() => ({ show }), [show]);
+  // Code outside React (e.g. the Android app's notification buttons) raises toasts with this event.
+  useEffect(() => {
+    const onToast = (e: Event) => show(String((e as CustomEvent).detail));
+    window.addEventListener(TOAST_EVENT, onToast);
+    return () => window.removeEventListener(TOAST_EVENT, onToast);
+  }, [show]);
   return (
     <Ctx.Provider value={value}>
       {children}

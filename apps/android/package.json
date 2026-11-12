@@ -1,0 +1,19 @@
+{
+  "name": "@snackoverflow/android",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "sync": "pnpm --filter @snackoverflow/web build && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.2.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0"
+  }
+}

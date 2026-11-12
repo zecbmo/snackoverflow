@@ -1,8 +1,10 @@
 /** React Query hooks for each resource. Keys line up with the server's live-update topics. */
 import { useQuery } from '@tanstack/react-query';
 import type {
+  DeviceDto,
   IngredientDto,
   LocationDto,
+  NotificationListDto,
   NotificationSettingsDto,
   ProductDto,
   SessionDto,
@@ -27,6 +29,8 @@ export const keys = {
   shelfLife: ['ingredients', 'shelf-life'] as const,
   users: ['users'] as const,
   notifications: ['users', 'notifications'] as const,
+  inbox: ['notifications'] as const,
+  devices: ['users', 'devices'] as const,
 };
 
 export const useSession = () => useQuery({ queryKey: keys.session, queryFn: () => api.get<SessionDto>('/api/session'), retry: false });
@@ -48,3 +52,5 @@ export const useShelfLife = () => useQuery({ queryKey: keys.shelfLife, queryFn: 
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: () => api.get<UserDto[]>('/api/users') });
 export const useNotificationSettings = () =>
   useQuery({ queryKey: keys.notifications, queryFn: () => api.get<NotificationSettingsDto>('/api/me/notifications') });
+export const useInbox = () => useQuery({ queryKey: keys.inbox, queryFn: () => api.get<NotificationListDto>('/api/notifications') });
+export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api.get<DeviceDto[]>('/api/devices') });

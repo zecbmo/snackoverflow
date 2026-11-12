@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { addDays, formatQuantity } from '@snackoverflow/shared';
-import { MenuButton, useMe } from '../components/Layout';
+import { BellButton, MenuButton, useMe } from '../components/Layout';
 import { useStockActions } from '../components/StockActions';
 import { Button, Card, EmptyState, PageHeader, Pill, Spinner } from '../components/ui';
 import { amountLabel, dateLabel, greeting, longToday, stateLabel, toneClasses, toneFor } from '../lib/format';
@@ -20,7 +20,7 @@ export function TodayPage() {
 
   return (
     <>
-      <PageHeader title={greeting()} subtitle={longToday(me.today)} left={<MenuButton />} />
+      <PageHeader title={greeting()} subtitle={longToday(me.today)} left={<MenuButton />} right={<BellButton />} />
 
       <section aria-labelledby="use-soon" className="mb-6">
         <div className="mb-3 flex items-baseline justify-between">

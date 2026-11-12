@@ -196,10 +196,11 @@ async function finishChange(
 /** Add one pack of a product to a location, with an estimated best-before unless one is given. */
 export async function addPack(
   deps: StockDeps,
-  input: { product: ProductRow; locationId: string; bestBefore?: CalendarDate | null; catalog?: Catalog },
+  input: { product: ProductRow; locationId: string; bestBefore?: CalendarDate | null; catalog?: Catalog; addedOn?: CalendarDate },
 ): Promise<StockChangeDto & { estimated: boolean }> {
   const { db, auth, now } = deps;
-  const today = householdToday(auth, now);
+  // Scans queued offline keep the day they were really scanned.
+  const today = input.addedOn ?? householdToday(auth, now);
   const location = await loadLocation(db, auth, input.locationId);
   const catalog = input.catalog ?? (await loadCatalog(db, auth.household.id));
   const estimate = estimateOnAdd({

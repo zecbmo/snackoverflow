@@ -9,6 +9,7 @@ import type { AppContext } from './context';
 import { HttpError } from './http';
 import { authRoutes } from './routes/auth';
 import { catalogRoutes } from './routes/catalog';
+import { inboxRoutes } from './routes/inbox';
 import { peopleRoutes } from './routes/people';
 import { stockRoutes } from './routes/stock';
 
@@ -63,6 +64,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   await app.register(peopleRoutes);
   await app.register(catalogRoutes);
   await app.register(stockRoutes);
+  await app.register(inboxRoutes);
 
   const webDist = opts.webDist && existsSync(join(opts.webDist, 'index.html')) ? opts.webDist : null;
   if (webDist) {

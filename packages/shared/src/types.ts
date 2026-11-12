@@ -181,4 +181,33 @@ export interface InviteDto {
 
 /** Messages pushed over the WebSocket so every phone stays in step. */
 export type LiveMessage = { type: 'invalidate'; topics: LiveTopic[] };
-export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household';
+export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household' | 'notifications';
+
+export interface NotificationDto {
+  id: string;
+  seq: number;
+  type: string;
+  title: string;
+  body: string;
+  url: string | null;
+  actions: { action: string; title: string }[];
+  data: Record<string, unknown>;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface NotificationListDto {
+  items: NotificationDto[];
+  unread: number;
+  /** The highest seq seen; ask for `after` this next time. */
+  cursor: number;
+}
+
+export interface DeviceDto {
+  id: string;
+  name: string;
+  platform: string;
+  lastSeenAt: string;
+  createdAt: string;
+  current: boolean;
+}

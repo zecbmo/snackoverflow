@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { BackButton, useMe } from '../components/Layout';
+import { BackButton, signOut as signOutEverywhere, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
 import { Button, Card, ErrorNote, Field, PageHeader, TextInput } from '../components/ui';
 import { api } from '../lib/api';
-import { keys } from '../lib/queries';
+import { keys, useDevices } from '../lib/queries';
 
 export function ProfilePage() {
   const me = useMe();
@@ -44,11 +44,7 @@ export function ProfilePage() {
     }
   };
 
-  const signOut = async () => {
-    await api.post('/api/auth/logout').catch(() => {});
-    qc.clear();
-    navigate('/login');
-  };
+  const signOut = () => signOutEverywhere(navigate, () => qc.clear());
 
   return (
     <>
@@ -81,10 +77,52 @@ export function ProfilePage() {
             </Button>
           </form>
         </Card>
+        <DevicesCard />
         <Button variant="danger" size="lg" onClick={() => void signOut()}>
           Sign out
         </Button>
       </div>
     </>
+  );
+}
+
+/** Phones signed in with the Android app; sign out a lost one from here. */
+function DevicesCard() {
+  const devices = useDevices().data ?? [];
+  const qc = useQueryClient();
+  const toast = useToast();
+  if (devices.length === 0) return null;
+  const remove = async (id: string, name: string) => {
+    try {
+      await api.del(`/api/devices/${id}`);
+      await qc.invalidateQueries({ queryKey: keys.devices });
+      toast.show(`Signed ${name} out.`);
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'Something went wrong.', { tone: 'error' });
+    }
+  };
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 text-lg font-bold">Phones</h2>
+      <p className="mb-3 text-muted">Phones signed in with the Snack Overflow app.</p>
+      <ul className="flex flex-col divide-y divide-line">
+        {devices.map((d) => (
+          <li key={d.id} className="flex items-center gap-3 py-2">
+            <span className="flex-1">
+              <span className="block font-medium">
+                {d.name}
+                {d.current ? ' (this phone)' : ''}
+              </span>
+              <span className="block text-sm text-muted">Last used {new Date(d.lastSeenAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+            </span>
+            {!d.current && (
+              <Button size="sm" variant="danger" onClick={() => void remove(d.id, d.name)}>
+                Sign out
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }

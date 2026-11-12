@@ -8,6 +8,13 @@
       "when": 1794496097645,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794504317434,
+      "tag": "0001_inbox_and_devices",
+      "breakpoints": true
     }
   ]
 }

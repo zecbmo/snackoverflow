@@ -7,9 +7,13 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { AppShell } from './components/Layout';
 import { StockActionsProvider } from './components/StockActions';
-import { ToastProvider } from './components/Toast';
+import { TOAST_EVENT, ToastProvider } from './components/Toast';
+import { initNative } from './lib/native';
 import { ApiError } from './lib/api';
 import { InvitePage, LoginPage, SetupPage } from './pages/Auth';
+import { ConnectPage } from './pages/Connect';
+import { InboxPage } from './pages/Inbox';
+import { isNative } from './lib/platform';
 import { ComingSoonPage } from './pages/ComingSoon';
 import { IngredientsPage } from './pages/Ingredients';
 import { ItemDetailPage } from './pages/ItemDetail';
@@ -34,6 +38,7 @@ const queryClient = new QueryClient({
 });
 
 const router = createBrowserRouter([
+  { path: '/connect', element: <ConnectPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/setup', element: <SetupPage /> },
   { path: '/invite/:token', element: <InvitePage /> },
@@ -47,6 +52,7 @@ const router = createBrowserRouter([
       { path: '/', element: <TodayPage /> },
       { path: '/stock', element: <StockPage /> },
       { path: '/stock/:id', element: <ItemDetailPage /> },
+      { path: '/inbox', element: <InboxPage /> },
       { path: '/plan', element: <ComingSoonPage title="Planner" phase="Meal planning arrives with the planner update." /> },
       { path: '/shop', element: <ComingSoonPage title="Shopping list" phase="The shopping list arrives with the planner update." /> },
       { path: '/products', element: <ProductsPage /> },
@@ -74,7 +80,15 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// Android app: sign-in links and notification taps/buttons (no-op in the browser).
+void initNative(
+  queryClient,
+  (to) => void router.navigate(to),
+  (msg) => window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: msg })),
+);
+
+// The Android app bundles its files, so it doesn't need the service worker.
+if ('serviceWorker' in navigator && import.meta.env.PROD && !isNative()) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js');
   });

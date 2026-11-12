@@ -24,6 +24,8 @@ export interface AppContext {
 export interface Auth {
   user: UserRow;
   household: HouseholdRow;
+  /** Set when signed in with a phone's device token rather than a browser cookie. */
+  deviceId?: string | null;
 }
 
 declare module 'fastify' {

@@ -316,3 +316,52 @@ export const notificationLog = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.type, t.key] })],
 );
+
+/** Signed-in phones (the Android app). Each has its own long-lived token, sent as a Bearer header. */
+export const devices = pgTable(
+  'devices',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** sha256 of the token; the raw token only ever lives on the phone. */
+    tokenHash: text('token_hash').notNull().unique(),
+    name: text('name').notNull(),
+    platform: text('platform').notNull().default('android'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('devices_user_idx').on(t.userId)],
+);
+
+/** One-time codes that hand a single sign-on login from the phone's browser back to the app. */
+export const appLoginCodes = pgTable('app_login_codes', {
+  codeHash: text('code_hash').primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+});
+
+/** In-app notification inbox (the bell). The Android app checks it in the background. */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: id(),
+    /** Strictly increasing, so phones can ask for "everything after N". */
+    seq: bigserial('seq', { mode: 'number' }).notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    url: text('url'),
+    actions: jsonb('actions').$type<{ action: string; title: string }[]>(),
+    data: jsonb('data').$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (t) => [index('notifications_user_seq_idx').on(t.userId, t.seq)],
+);

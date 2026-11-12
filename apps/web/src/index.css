@@ -166,3 +166,11 @@ h3,
     animation: none;
   }
 }
+
+/* Android app: the native camera preview sits behind the web view while scanning. */
+html.native-scanning,
+html.native-scanning body,
+html.native-scanning #root,
+html.native-scanning .bg-scan {
+  background: transparent !important;
+}

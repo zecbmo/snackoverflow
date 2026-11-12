@@ -4,7 +4,11 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react
 import type { SessionDto } from '@snackoverflow/shared';
 import { api, ApiError } from '../lib/api';
 import { connectLive } from '../lib/live';
-import { useProducts, useSession, useStock } from '../lib/queries';
+import { configureBackgroundChecks, forgetDevice, requestNotificationPermission } from '../lib/native';
+import { startQueueSync, syncQueue, useQueuedCount } from '../lib/offlineQueue';
+import { hasServer, isNative } from '../lib/platform';
+import { useToast } from './Toast';
+import { useInbox, useProducts, useSession, useStock } from '../lib/queries';
 import { Icon, type IconName } from './Icon';
 import { Spinner } from './ui';
 
@@ -52,10 +56,49 @@ function useMenuSections(): { title: string; links: MenuLink[] }[] {
   ];
 }
 
-async function signOut(navigate: ReturnType<typeof useNavigate>, clear: () => void) {
+export async function signOut(navigate: ReturnType<typeof useNavigate>, clear: () => void) {
   await api.post('/api/auth/logout').catch(() => {});
+  await forgetDevice();
   clear();
   navigate('/login');
+}
+
+/** The bell: notifications inbox, with a dot when something is unread. */
+export function BellButton() {
+  const unread = useInbox().data?.unread ?? 0;
+  return (
+    <Link
+      to="/inbox"
+      aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
+      className="relative inline-flex size-14 shrink-0 items-center justify-center rounded-full border border-line bg-card"
+    >
+      <Icon name="bell" />
+      {unread > 0 && <span aria-hidden className="absolute right-3.5 top-3.5 size-2.5 rounded-full bg-accent ring-2 ring-card" />}
+    </Link>
+  );
+}
+
+/** Scans saved while offline, waiting to be sent. */
+function OfflineBanner() {
+  const count = useQueuedCount();
+  const toast = useToast();
+  if (count === 0) return null;
+  return (
+    <div role="status" className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-card-muted px-4 py-2">
+      <p className="flex-1 text-[15px]">
+        {count === 1 ? '1 scan is' : `${count} scans are`} waiting to sync. They'll go as soon as you're back online.
+      </p>
+      <button
+        type="button"
+        className="min-h-11 font-semibold text-accent-text"
+        onClick={() =>
+          void syncQueue().then((r) => toast.show(r.synced ? `Synced ${r.synced} scan${r.synced === 1 ? '' : 's'}.` : 'Still offline. Will try again soon.'))
+        }
+      >
+        Sync now
+      </button>
+    </div>
+  );
 }
 
 function Avatar({ name }: { name: string }) {
@@ -235,17 +278,44 @@ export function BackButton({ to }: { to?: string }) {
 
 /** Signed-in app: loads the session, keeps live updates connected, and lays out navigation. */
 export function AppShell({ bare = false }: { bare?: boolean }) {
+  const serverSet = hasServer();
   const session = useSession();
   const qc = useQueryClient();
+  const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   const signedIn = Boolean(session.data);
   useEffect(() => (signedIn ? connectLive(qc) : undefined), [signedIn, qc]);
+  useEffect(
+    () =>
+      signedIn
+        ? startQueueSync((r) => {
+            void qc.invalidateQueries({ queryKey: ['stock'] });
+            toast.show(`Synced ${r.synced} scan${r.synced === 1 ? '' : 's'} made offline.${r.dropped ? ` ${r.dropped} couldn't be added.` : ''}`);
+          })
+        : undefined,
+    [signedIn, qc, toast],
+  );
+  useEffect(() => {
+    if (signedIn && isNative()) void requestNotificationPermission().then(configureBackgroundChecks);
+  }, [signedIn]);
 
+  if (!serverSet) return <Navigate to="/connect" replace />;
   if (session.isPending) return <Spinner />;
   if (session.error) {
     if (session.error instanceof ApiError && session.error.status === 401) {
+      if (isNative()) void forgetDevice();
       return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+    }
+    if (session.error instanceof ApiError && session.error.status === 0 && isNative()) {
+      return (
+        <div className="mx-auto max-w-md p-6 text-center">
+          <p className="mb-4">{session.error.message}</p>
+          <Link to="/connect" className="font-semibold text-accent-text">
+            Check the server address
+          </Link>
+        </div>
+      );
     }
     return <p className="p-6 text-center">{session.error.message}</p>;
   }
@@ -257,7 +327,8 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
         ) : (
           <div className="flex min-h-screen">
             <Sidebar />
-            <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-32 sm:px-6 lg:px-10 lg:pb-12">
+            <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-32 pt-[env(safe-area-inset-top)] sm:px-6 lg:px-10 lg:pb-12">
+              <OfflineBanner />
               <Outlet />
             </main>
             <BottomBar />
