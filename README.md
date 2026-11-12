@@ -18,6 +18,10 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 
 Android app (phase 2), recipes and cooking (3), the per-person meal planner, shopping list and receipt import (4), the waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
 
+## Try it on Windows (one click)
+
+With Docker Desktop installed, double-click **`start-test-env.bat`**. It builds and starts a separate test copy on <http://localhost:3080>, opens your browser and shows the admin login (stored in the git-ignored `.env.test`). **`stop-test-env.bat`** stops it and keeps the data; `scripts	est-env.ps1 reset` wipes it, and `scripts	est-env.ps1 logs` follows the logs. Phones on the same Wi-Fi can open the address it prints, but they only allow the camera over HTTPS, so type barcodes there.
+
 ## Run it with Docker
 
 ```sh

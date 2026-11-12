@@ -81,6 +81,7 @@ A change is done when:
 | New migration after editing `apps/server/src/db/schema.ts` | `pnpm db:generate` (commit the files in `apps/server/drizzle`) |
 | Apply migrations | `pnpm db:migrate` (the server also applies them on start) |
 | Docker | `docker compose up -d --build` |
+| Local test stack (Windows) | `start-test-env.bat` / `stop-test-env.bat` (port 3080, project `snackoverflow-test`, settings in `.env.test`) |
 
 Notes:
 

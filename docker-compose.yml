@@ -23,7 +23,8 @@ services:
     image: snackoverflow:latest
     restart: unless-stopped
     env_file:
-      - path: .env
+      # The test launcher points this at .env.test.
+      - path: ${APP_ENV_FILE:-.env}
         required: false
     environment:
       # Inside the container the app always listens on 3000; PORT picks the host port.
