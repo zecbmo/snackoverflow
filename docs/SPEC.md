@@ -131,7 +131,7 @@ It works out the surplus for every ingredient: what you have, plus what the shop
 
 **Shopping list.** Planning and shopping are separate steps: make a plan, then tap "Build list from plan". There is one shared list, grouped by category (veg, dairy, tins...), and the user decides which shop to visit.
 
-- Plan items: what the plan needs, minus stock, minus what is already on the list, rounded up to whole packs.
+- Plan items: what the plan needs, minus stock, minus what is already on the list, rounded up to whole packs. The list shows both: **Needed** (what the meals are short by, e.g. 20g of tomatoes) and **To buy** (whole packs), plus the spare.
 - Running low: staples like salt or oil are flagged "track running low". The app estimates when they will run out from usage rate, and adds them or sends a reminder. One tap marks anything as running low.
 - Manual items, free text allowed.
 - Items on the list count as "coming" in the planner and optimiser.
@@ -179,7 +179,7 @@ Phones have five tabs (Today, Stock, Scan, Calendar, Shop) with Scan as a large 
 | Screen | Main content | Key actions |
 | --- | --- | --- |
 | Today (home) | Today's meals, "use soon" strip (next 3 days), running-low nudges, quick stats | Cooked / skip, Use / Freeze from the strip |
-| Stock | A table with quick filters (All / Fridge / Freezer / Cupboard), search, filter, sort and group; columns Where, State (an icon: opened, frozen, defrosted), Packs, Amount (ml for liquids; ~ marks an estimate for opened packs), Planned (shown red when there isn't enough for the planned meals, or with the shopping-list mark when it's on the list) and Best before | Use, Freeze or Defrost, Move, Bin on every row; Mark as opened and details in "⋯"; tick rows for bulk actions |
+| Stock | A table with quick filters (All / Fridge / Freezer / Cupboard) and quick grouping (None / Location / Freshness), search, filter (including batch cooks and leftovers), sort, and a Columns picker to show or hide columns; columns Where, State (an icon: opened, frozen, defrosted), Packs, Amount (ml for liquids; ~ marks an estimate for opened packs), Planned (shown red when there isn't enough for the planned meals, or with the shopping-list mark when it's on the list) and Best before | Use, Freeze or Defrost and Bin on every row; Move, Mark as opened and details in "⋯"; tick rows for bulk actions; the side panel adds Add to shopping list, and the table narrows beside it |
 | Scan (centre) | Full-screen camera, location (or meal slot) chip, mode switch (Add / Use / Eat), session counter | Continuous scan, undo, Done summary |
 | Calendar | Week grid per person with meal slots, each meal's calorie total and the day's total, and a right-hand pane of stock, recipes and leftovers | Drag from the pane onto a day and meal, drag a planned meal to move it, or back onto the pane to take it off (its food comes off the planned list); all undoable. Set the amount of a planned food by the item (one bar of a multipack, using the product's "one item weighs") or by weight (150g of chicken); eating it takes exactly that from stock. +Add, Suggest meals, Plan my week, Build list |
 | Shopping | One list grouped by category, estimated total if pricing is on, surplus hints | Tick off, Put away mode, Add item, Add from receipt |

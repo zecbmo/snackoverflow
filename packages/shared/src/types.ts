@@ -397,6 +397,8 @@ export interface ShoppingItemDto {
   surplusGrams: number | null;
   /** The spare amount, said the same way. */
   surplusLabel: string | null;
+  /** For plan items: how much the planned meals are short by ("20g", "300ml"), before rounding up to packs. */
+  needLabel: string | null;
   reason: 'plan' | 'running-low' | 'manual';
   /** Estimated cost of this line in pence; null when pricing is off or unknown. */
   pricePence: number | null;

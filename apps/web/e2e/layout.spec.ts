@@ -66,3 +66,25 @@ test('drag a recipe onto the calendar, then move it to another day', async ({ pa
   await page.getByRole('status').filter({ hasText: `Took ${title} off the calendar.` }).getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByRole('cell').getByRole('button', { name: new RegExp(title) })).toBeVisible();
 });
+
+test('choose stock columns, and add an item to the shopping list from its panel', async ({ page }, info) => {
+  test.skip(info.project.name === 'phone', 'Columns and the side-by-side panel are desktop features.');
+  await signIn(page);
+  await page.request.post('/api/scan/add', { data: { barcode: '5000000000079' } });
+  await page.goto('/stock');
+  const table = page.getByRole('table', { name: 'Stock' });
+  await expect(table.getByRole('columnheader', { name: 'Where' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show columns' }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Where' }).click();
+  await page.keyboard.press('Escape');
+  await expect(table.getByRole('columnheader', { name: 'Where' })).toHaveCount(0);
+  await page.reload();
+  await expect(table.getByRole('columnheader', { name: 'Where' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Greek Yogurt, / }).first().click();
+  const panel = page.getByRole('dialog', { name: 'Greek Yogurt' });
+  await panel.getByRole('button', { name: 'Add to shopping list' }).click();
+  await expect(page.getByText('Added Greek Yogurt to the shopping list.')).toBeVisible();
+  const list = await (await page.request.get('/api/shopping')).json();
+  expect(list.some((i: { text: string }) => /Greek Yogurt/i.test(i.text))).toBe(true);
+});

@@ -172,6 +172,13 @@ h3 {
   animation: slide-up 0.2s ease-out;
 }
 
+/* With a side panel open on desktop, the page makes room for it so the table stays fully visible. */
+@media (min-width: 1024px) {
+  html.has-side-panel main {
+    padding-right: calc(min(30rem, 100vw - 4rem) + 1.5rem);
+  }
+}
+
 /* Side panels: up from the bottom on phones, in from the right on desktop. */
 @keyframes panel-in-right {
   from {

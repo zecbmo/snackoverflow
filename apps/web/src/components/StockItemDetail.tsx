@@ -108,6 +108,26 @@ function AmountSheet({ item, open, onClose }: { item: StockItemDto; open: boolea
   );
 }
 
+/** Puts this product on the shopping list (one more pack). */
+function AddToListButton({ item }: { item: StockItemDto }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const add = async () => {
+    try {
+      await api.post('/api/shopping', { productId: item.productId, packs: 1 });
+      await qc.invalidateQueries({ queryKey: ['shopping'] });
+      toast.show(`Added ${item.productName} to the shopping list.`);
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
+  return (
+    <Button size="sm" variant="ghost" onClick={() => void add()}>
+      <Icon name="cart" className="size-4" /> Add to shopping list
+    </Button>
+  );
+}
+
 /** The detail itself. `onOpenPack` switches the side panel to another pack; without it, packs are links. */
 export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: string; onOpenPack?: (id: string) => void; showActions?: boolean }) {
   const me = useMe();
@@ -166,11 +186,10 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
         )}
       </dl>
 
-      {showActions && !gone && (
-        <div className="flex flex-wrap items-center gap-2">
-          <StockRowActions item={item} name={item.productName} size="sm" />
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {showActions && !gone && <StockRowActions item={item} name={item.productName} size="sm" />}
+        <AddToListButton item={item} />
+      </div>
 
       {siblings.length > 0 && (
         <section>

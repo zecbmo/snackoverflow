@@ -21,9 +21,9 @@ export function PageTop({ title, subtitle, left, actions }: { title: string; sub
 
 export function Toolbar({ children, search }: { children?: ReactNode; search?: ReactNode }) {
   return (
-    <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-1 lg:border-b lg:border-line lg:pb-2">
-      {search && <div className="lg:order-last lg:ml-auto lg:w-64">{search}</div>}
-      {children && <div className="no-scrollbar -mx-4 flex items-center gap-1 overflow-x-auto px-4 lg:mx-0 lg:overflow-visible lg:px-0">{children}</div>}
+    <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-1 lg:border-b lg:border-line lg:pb-2">
+      {search && <div className="lg:order-last lg:ml-auto lg:w-72">{search}</div>}
+      {children && <div className="no-scrollbar -mx-4 flex items-center gap-1 overflow-x-auto px-4 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">{children}</div>}
     </div>
   );
 }

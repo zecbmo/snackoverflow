@@ -274,7 +274,7 @@ export function PlannerPage() {
           <Spinner />
         ) : desktop ? (
           <div className="overflow-x-auto rounded-lg border border-line bg-card">
-            <div className="grid min-w-[56rem] grid-cols-[6.5rem_repeat(7,minmax(0,1fr))]" role="table" aria-label={`Meals, ${rangeLabel(from, to)}`}>
+            <div className="grid min-h-[calc(100vh-12rem)] min-w-[56rem] grid-cols-[6.5rem_repeat(7,minmax(0,1fr))] grid-rows-[auto_repeat(4,minmax(8rem,1fr))]" role="table" aria-label={`Meals, ${rangeLabel(from, to)}`}>
               <div role="row" className="contents">
                 <div role="columnheader" className="border-b border-r border-line bg-card-muted/60" />
                 {plan.data?.days.map((day) => (
@@ -307,7 +307,7 @@ export function PlannerPage() {
                           const d = readDrag(ev);
                           if (d) void drop(day.date, slot, d);
                         }}
-                        className={`group flex min-h-20 flex-col gap-1 border-b border-r border-line p-1.5 last:border-r-0 ${
+                        className={`group flex min-h-32 flex-col gap-1 border-b border-r border-line p-1.5 last:border-r-0 ${
                           dropAt === `${day.date}|${slot}` ? 'bg-accent-soft outline-2 -outline-offset-2 outline-accent' : day.date === me.today ? 'bg-accent-soft/30' : day.date < me.today ? 'bg-card-muted/30' : ''
                         }`}
                       >

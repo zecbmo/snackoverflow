@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { addDays, amountText, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
-import { type Column, DataTable, StatusDot } from '../components/DataTable';
+import { type Column, ColumnsMenu, DataTable, StatusDot, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { Menu, PickerMenu } from '../components/Menu';
@@ -93,6 +93,7 @@ export function StockPage() {
   const [group, setGroup] = useState<GroupId>('none');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [hiddenColumns, toggleColumn] = useHiddenColumns('stock');
   const [openId, openPanel, closePanel] = usePanelParam();
   const navigate = useNavigate();
 
@@ -103,6 +104,7 @@ export function StockPage() {
       if (filter === 'opened' && i.state !== 'opened') return false;
       if (filter === 'frozen' && i.state !== 'frozen') return false;
       if (filter === 'soon' && (i.state === 'frozen' || !i.bestBefore || i.bestBefore > soon)) return false;
+      if (filter === 'meals' && !i.isMeal) return false;
       return !q || matchesSearch(`${i.productName} ${i.brand ?? ''} ${i.locationName}`, q);
     });
     const groups = groupStock(items);
@@ -159,14 +161,15 @@ export function StockPage() {
     {
       key: 'status',
       header: <span className="sr-only">Freshness</span>,
+      hideable: false,
       className: 'w-6 pr-0',
       cell: (g) => <StatusDot className={toneClasses[toneFor(g.first, me.today)].dot} meaning={toneMeaning[toneFor(g.first, me.today)]} />,
     },
     { key: 'name', header: 'Item', primary: true, cell: (g) => g.name, className: 'max-w-[18rem]' },
     { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (g) => g.locationName },
-    { key: 'state', header: <span title="Opened, frozen or defrosted">State</span>, className: 'w-14', cell: (g) => <StateIcon g={g} /> },
+    { key: 'state', label: 'State', header: <span title="Opened, frozen or defrosted">State</span>, className: 'w-14', cell: (g) => <StateIcon g={g} /> },
     { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : g.packs.length) },
-    { key: 'left', header: <span title="What's left. ~ means an estimate, for opened packs">Amount</span>, align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (g) => leftLabel(g) || '–' },
+    { key: 'left', label: 'Amount', header: <span title="What's left. ~ means an estimate, for opened packs">Amount</span>, align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (g) => leftLabel(g) || '–' },
     { key: 'planned', header: 'Planned', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: plannedCell },
     { key: 'date', header: 'Best before', className: 'whitespace-nowrap', cell: datePill },
   ];
@@ -180,6 +183,7 @@ export function StockPage() {
     { value: 'soon', label: 'Going off in 3 days' },
     { value: 'opened', label: 'Opened' },
     { value: 'frozen', label: 'Frozen' },
+    { value: 'meals', label: 'Batch cooks & leftovers' },
   ];
   const places = [
     { value: 'all', label: 'All' },
@@ -201,7 +205,16 @@ export function StockPage() {
           </Link>
         }
       />
-      <Toolbar search={<SearchBox value={q} onChange={setQ} placeholder="Search stock" label="Search stock" />}>
+      <Toolbar
+        search={
+          <div className="flex items-center gap-1.5">
+            <div className="min-w-0 flex-1">
+              <SearchBox value={q} onChange={setQ} placeholder="Search stock" label="Search stock" />
+            </div>
+            <ColumnsMenu columns={columns} hidden={hiddenColumns} onToggle={toggleColumn} />
+          </div>
+        }
+      >
         <Segmented label="Where" value={place} onChange={setPlace} options={places} />
         <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
         <PickerMenu label="Filter" icon="filter" value={filter} defaultValue="all" options={filterOptions} onChange={setFilter} />
@@ -218,14 +231,14 @@ export function StockPage() {
             { value: 'added', label: 'Recently added' },
           ]}
         />
-        <PickerMenu
-          label="Group"
-          icon="group"
+        <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
+        <span className="hidden text-sm text-muted lg:inline">Group</span>
+        <Segmented
+          label="Group by"
           value={group}
-          defaultValue="none"
           onChange={setGroup}
           options={[
-            { value: 'none', label: 'No grouping' },
+            { value: 'none', label: 'None' },
             { value: 'location', label: 'Location' },
             { value: 'status', label: 'Freshness' },
           ]}
@@ -244,6 +257,7 @@ export function StockPage() {
           rows={tables ? undefined : rows}
           groups={tables}
           rowKey={(g) => g.key}
+          hidden={hiddenColumns}
           onOpen={openGroup}
           openLabel={(g) => `${g.name}, ${g.locationName}`}
           activeKey={activeKey}

@@ -67,6 +67,7 @@ export async function listShopping(db: Db, auth: Auth, pricing = false): Promise
       packLabel: packLabel(r),
       surplusGrams: r.surplusGrams,
       surplusLabel: say(r.surplusGrams, r),
+      needLabel: r.reason === 'plan' ? say(r.grams, r) : null,
       reason: r.reason,
       pricePence: latest && byIngredient ? estimateItemPence(r, latest, byIngredient) : null,
       forMeals: r.forMeals,

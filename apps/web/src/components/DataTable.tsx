@@ -6,6 +6,7 @@
 import { type ReactNode, useState } from 'react';
 import { useIsDesktop } from '../lib/useMedia';
 import { Icon } from './Icon';
+import { Menu } from './Menu';
 
 export interface Column<T> {
   key: string;
@@ -16,6 +17,58 @@ export interface Column<T> {
   align?: 'left' | 'right';
   /** Extra classes for the cells (width, colour). */
   className?: string;
+  /** Its name in the Columns menu (defaults to the header when that's text). */
+  label?: string;
+  /** False for columns that must always show (the name, the freshness dot). */
+  hideable?: boolean;
+}
+
+/** Which columns someone has hidden in a table, remembered per device. */
+export function useHiddenColumns(table: string, defaults: string[] = []): [Set<string>, (key: string) => void] {
+  const storageKey = `so-columns-${table}`;
+  const [hidden, setHidden] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch {
+      // Nothing remembered.
+    }
+    return new Set(defaults);
+  });
+  const toggle = (key: string) =>
+    setHidden((h) => {
+      const n = new Set(h);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify([...n]));
+      } catch {
+        // Not remembered.
+      }
+      return n;
+    });
+  return [hidden, toggle];
+}
+
+/** The "Columns" button beside the search box: tick which columns show. */
+export function ColumnsMenu<T>({ columns, hidden, onToggle }: { columns: Column<T>[]; hidden: Set<string>; onToggle: (key: string) => void }) {
+  const choices = columns.filter((c) => c.hideable !== false && !c.primary);
+  return (
+    <Menu
+      label="Show columns"
+      items={[
+        { heading: 'Show columns' },
+        ...choices.map((c) => ({ label: c.label ?? (typeof c.header === 'string' ? c.header : c.key), checked: !hidden.has(c.key), keepOpen: true, onSelect: () => onToggle(c.key) })),
+      ]}
+      triggerClassName="hidden size-8 shrink-0 items-center justify-center rounded-md border border-line bg-card text-muted hover:bg-card-muted hover:text-ink lg:inline-flex"
+      trigger={
+        <>
+          <Icon name="columns" className="size-4" />
+          <span className="sr-only">Show columns</span>
+        </>
+      }
+    />
+  );
 }
 
 export interface PhoneRow {
@@ -41,6 +94,8 @@ interface Props<T> {
   /** Grouped rows; takes the place of `rows`. */
   groups?: TableGroup<T>[];
   rowKey: (row: T) => string;
+  /** Column keys to leave out (from the Columns menu). */
+  hidden?: Set<string>;
   onOpen?: (row: T) => void;
   /** Accessible name of the open button, e.g. "Semi Skimmed Milk, details". */
   openLabel?: (row: T) => string;
@@ -69,7 +124,8 @@ export function DataTable<T>(props: Props<T>) {
   const groups: TableGroup<T>[] = props.groups ?? [{ key: '', label: null, rows: props.rows ?? [] }];
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   if (total === 0 && props.empty) return <>{props.empty}</>;
-  return desktop ? <Desktop {...props} groups={groups} /> : <Phone {...props} groups={groups} />;
+  const columns = props.hidden ? props.columns.filter((c) => !props.hidden!.has(c.key)) : props.columns;
+  return desktop ? <Desktop {...props} columns={columns} groups={groups} /> : <Phone {...props} groups={groups} />;
 }
 
 function useCollapsed() {

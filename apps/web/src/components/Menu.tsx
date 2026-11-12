@@ -16,6 +16,8 @@ export interface MenuItem {
   disabled?: boolean;
   /** For pickers: shows a tick and uses menuitemradio. */
   checked?: boolean;
+  /** A tick box that stays open for several choices (menuitemcheckbox), like showing columns. */
+  keepOpen?: boolean;
 }
 
 export type MenuEntry = MenuItem | { heading: string } | 'divider';
@@ -157,13 +159,13 @@ export function Menu({
                 <button
                   key={i}
                   type="button"
-                  role={checkable ? 'menuitemradio' : 'menuitem'}
+                  role={checkable ? (item.keepOpen ? 'menuitemcheckbox' : 'menuitemradio') : 'menuitem'}
                   aria-checked={checkable ? item.checked : undefined}
                   aria-disabled={item.disabled || undefined}
                   tabIndex={-1}
                   onClick={() => {
                     if (item.disabled) return;
-                    close();
+                    if (!item.keepOpen) close();
                     item.onSelect();
                   }}
                   className={`flex min-h-10 w-full items-center gap-2 rounded-md px-2.5 text-left text-[0.9375rem] outline-none focus:bg-card-muted lg:min-h-8 lg:text-sm ${

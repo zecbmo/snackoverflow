@@ -7,15 +7,16 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { addDays, formatPence, type ShoppingItemDto } from '@snackoverflow/shared';
 import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
-import { type Column, DataTable } from '../components/DataTable';
+import { type Column, ColumnsMenu, DataTable, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { SuggestSheet } from '../components/OptimiserSheets';
 import { useToast } from '../components/Toast';
-import { PageTop, Toolbar } from '../components/Toolbar';
+import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
 import { Button, EmptyState, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useIngredients, useRunningLow, useShopping, useSurplus, useUsers } from '../lib/queries';
+import { matchesSearch } from '../lib/table';
 
 /** "Potatoes, 2.5kg bag", "Red peppers × 3", "Milk × 2". */
 export function itemTitle(i: ShoppingItemDto): string {
@@ -23,6 +24,14 @@ export function itemTitle(i: ShoppingItemDto): string {
     return i.packs > 1 ? `${i.text}, ${i.packs} × ${i.packLabel}` : `${i.text}, ${i.packLabel}`;
   }
   return i.packs > 1 ? `${i.text} × ${i.packs}` : i.text;
+}
+
+/** What it's for: the planned meals, "Running low", or who added it. */
+function forText(i: ShoppingItemDto): string {
+  if (i.reason === 'plan' && i.forMeals) return i.forMeals;
+  if (i.reason === 'running-low') return 'Running low';
+  if (i.reason === 'manual' && i.addedByName) return `Added by ${i.addedByName}`;
+  return '';
 }
 
 function itemDetail(i: ShoppingItemDto): string {
@@ -43,6 +52,10 @@ export function ShoppingPage() {
   const [putting, setPutting] = useState<{ added: number; needsScan: ShoppingItemDto[] } | null>(null);
   // Ticks not saved yet win over whatever the server last said, so a refresh can't flip them back.
   const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [q, setQ] = useState('');
+  const [show, setShow] = useState<'to-get' | 'got' | 'all'>('all');
+  const [group, setGroup] = useState<'aisle' | 'none'>('aisle');
+  const [hiddenColumns, toggleColumn] = useHiddenColumns('shopping', ['aisle']);
   const items = useMemo(() => (list.data ?? []).map((i) => (i.id in pending ? { ...i, checked: pending[i.id]! } : i)), [list.data, pending]);
   const toGet = items.filter((i) => !i.checked);
   const pricing = me.household.settings.pricingEnabled;
@@ -100,14 +113,32 @@ export function ShoppingPage() {
   };
 
   const columns: Column<ShoppingItemDto>[] = [
-    { key: 'got', header: <span className="sr-only">Got it</span>, className: 'w-8 pr-0', cell: (i) => <GotBox item={i} onTick={tick} /> },
-    { key: 'item', header: 'Item', cell: (i) => <span className={`font-semibold ${i.checked ? 'text-muted line-through' : 'text-ink'}`}>{itemTitle(i)}</span> },
-    { key: 'for', header: 'For', cell: (i) => itemDetail(i) },
+    { key: 'got', header: <span className="sr-only">Got it</span>, hideable: false, className: 'w-8 pr-0', cell: (i) => <GotBox item={i} onTick={tick} /> },
+    { key: 'item', header: 'Item', hideable: false, cell: (i) => <span className={`font-semibold ${i.checked ? 'text-muted line-through' : 'text-ink'}`}>{i.text}</span> },
+    { key: 'aisle', header: 'Aisle', cell: (i) => i.aisle },
+    {
+      key: 'need',
+      label: 'Needed',
+      header: <span title="How much the planned meals are short by">Needed</span>,
+      align: 'right',
+      className: 'whitespace-nowrap tabular-nums',
+      cell: (i) => (i.needLabel ? <span className="text-ink">{i.needLabel}</span> : ''),
+    },
+    {
+      key: 'buy',
+      label: 'To buy',
+      header: <span title="Whole packs, as the shops sell them">To buy</span>,
+      className: 'whitespace-nowrap',
+      cell: (i) => (i.packLabel ? `${i.packs} × ${i.packLabel}` : i.packs > 1 ? `× ${i.packs}` : '1'),
+    },
+    { key: 'spare', label: 'Spare', header: <span title="Left over after the planned meals">Spare</span>, align: 'right', className: 'whitespace-nowrap tabular-nums text-muted', cell: (i) => (i.surplusGrams && i.surplusGrams >= 50 && i.surplusLabel ? i.surplusLabel : '') },
+    { key: 'for', header: 'For', className: 'max-w-[18rem] truncate', cell: (i) => forText(i) },
   ];
   if (pricing) {
     columns.push({ key: 'price', header: 'Price', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (i) => (i.pricePence !== null ? formatPence(i.pricePence) : '') });
   }
-  const groups = aisles.map((a) => ({ key: a, label: a, rows: items.filter((i) => i.aisle === a) }));
+  const shown = items.filter((i) => (show === 'all' || (show === 'got' ? i.checked : !i.checked)) && (!q || matchesSearch(`${i.text} ${i.forMeals ?? ''} ${i.aisle}`, q)));
+  const groups = group === 'aisle' ? aisles.map((a) => ({ key: a, label: a, rows: shown.filter((i) => i.aisle === a) })).filter((g) => g.rows.length) : undefined;
   const putAwayButton =
     ticked.length > 0 ? (
       <Button variant="primary" onClick={() => void putAway()}>
@@ -133,7 +164,38 @@ export function ShoppingPage() {
         left={<MenuButton />}
         actions={putAwayButton && <div className="hidden lg:block">{putAwayButton}</div>}
       />
-      <Toolbar>
+      <Toolbar
+        search={
+          <div className="flex items-center gap-1.5">
+            <div className="min-w-0 flex-1">
+              <SearchBox value={q} onChange={setQ} placeholder="Search the list" label="Search the list" />
+            </div>
+            <ColumnsMenu columns={columns} hidden={hiddenColumns} onToggle={toggleColumn} />
+          </div>
+        }
+      >
+        <Segmented
+          label="Show"
+          value={show}
+          onChange={setShow}
+          options={[
+            { value: 'to-get', label: 'To get' },
+            { value: 'got', label: 'Got' },
+            { value: 'all', label: 'All' },
+          ]}
+        />
+        <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
+        <span className="hidden text-sm text-muted lg:inline">Group</span>
+        <Segmented
+          label="Group by"
+          value={group}
+          onChange={setGroup}
+          options={[
+            { value: 'aisle', label: 'Aisle' },
+            { value: 'none', label: 'None' },
+          ]}
+        />
+        <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
         <Button size="sm" variant="ghost" onClick={() => void build()}>
           <Icon name="calendar" className="size-4" /> Update from plan
         </Button>
@@ -195,7 +257,9 @@ export function ShoppingPage() {
           <DataTable
             label="Shopping list"
             columns={columns}
+            rows={groups ? undefined : shown}
             groups={groups}
+            hidden={hiddenColumns}
             rowKey={(i) => i.id}
             actions={removeButton}
             phone={(i) => ({

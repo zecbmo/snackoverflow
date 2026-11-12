@@ -59,6 +59,13 @@ export function SidePanel({
   const titleId = useId();
   const returnTo = useRef<HTMLElement | null>(null);
 
+  // While it's open, the page beside it narrows (see .has-side-panel in index.css) instead of being covered.
+  useEffect(() => {
+    if (!open) return;
+    document.documentElement.classList.add('has-side-panel');
+    return () => document.documentElement.classList.remove('has-side-panel');
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     returnTo.current = document.activeElement as HTMLElement | null;
