@@ -58,7 +58,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   const c = parsed.data;
   const isProduction = c.NODE_ENV === 'production';
-  if (isProduction && c.SESSION_SECRET === 'dev-only-session-secret-change-me') {
+  const placeholders = ['dev-only-session-secret-change-me', 'change-me-to-a-long-random-string'];
+  if (isProduction && placeholders.includes(c.SESSION_SECRET)) {
     throw new Error('Set SESSION_SECRET to a long random string in production.');
   }
   return { ...c, isProduction, secureCookies: c.APP_URL.startsWith('https://') };

@@ -12,9 +12,9 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 COPY . .
+# The server build bundles every npm dependency, so the runtime image needs no node_modules.
 RUN pnpm --filter @snackoverflow/web build \
- && pnpm --filter @snackoverflow/server build \
- && pnpm --filter @snackoverflow/server deploy --prod --legacy /out
+ && pnpm --filter @snackoverflow/server build
 
 FROM node:24-alpine
 # pg_dump for backups; must be at least the Postgres server's major version.
@@ -24,8 +24,6 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
     BACKUP_DIR=/backups
-COPY --from=build /out/node_modules ./node_modules
-COPY --from=build /out/package.json ./package.json
 COPY --from=build /repo/apps/server/dist ./dist
 COPY --from=build /repo/apps/server/drizzle ./drizzle
 COPY --from=build /repo/apps/web/dist ./public

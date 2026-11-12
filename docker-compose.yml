@@ -28,6 +28,7 @@ services:
     environment:
       # Inside the container the app always listens on 3000; PORT picks the host port.
       PORT: 3000
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env (openssl rand -hex 32)}
       DATABASE_URL: postgres://${POSTGRES_USER:-snackoverflow}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-snackoverflow}
       BACKUP_DIR: /backups
     ports:
