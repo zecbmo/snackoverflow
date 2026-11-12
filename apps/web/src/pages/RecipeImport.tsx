@@ -71,7 +71,7 @@ export function RecipeImportPage() {
           initial={draft}
           extraActions={(current) => (
             <Card className="flex flex-wrap items-center gap-3 p-4">
-              <p className="flex-1 text-[15px]">Check each ingredient is matched to the right thing. Highlighted lines need a look.</p>
+              <p className="flex-1 text-[0.9375rem]">Check each ingredient is matched to the right thing. Highlighted lines need a look.</p>
               {aiEnabled && (
                 <Button variant="outline" disabled={busy} onClick={() => void tidy(current)}>
                   {busy ? 'Tidying…' : 'Tidy up with AI'}

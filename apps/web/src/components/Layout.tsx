@@ -97,7 +97,7 @@ function OfflineBanner() {
   if (count === 0) return null;
   return (
     <div role="status" className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-card-muted px-4 py-2">
-      <p className="flex-1 text-[15px]">
+      <p className="flex-1 text-[0.9375rem]">
         {count === 1 ? '1 scan is' : `${count} scans are`} waiting to sync. They'll go as soon as you're back online.
       </p>
       <button
@@ -115,7 +115,7 @@ function OfflineBanner() {
 
 function Avatar({ name }: { name: string }) {
   return (
-    <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-ink font-semibold text-bg">
+    <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-strong font-semibold text-strong-ink">
       {name.charAt(0).toUpperCase()}
     </span>
   );
@@ -161,7 +161,7 @@ function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div key={s.title} className="mb-3">
             <p className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</p>
             {s.links.map((l) => (
-              <Link key={l.to} to={l.to} className="flex min-h-12 items-center justify-between rounded-xl px-2 text-[17px] hover:bg-card-muted">
+              <Link key={l.to} to={l.to} className="flex min-h-12 items-center justify-between rounded-xl px-2 text-[1.0625rem] hover:bg-card-muted">
                 <span>{l.label}</span>
                 {l.badge && <span className="text-sm font-semibold text-muted">{l.badge}</span>}
               </Link>
@@ -171,7 +171,7 @@ function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
         <button
           type="button"
           onClick={() => void signOut(navigate, () => qc.clear())}
-          className="mt-auto flex min-h-12 items-center px-2 text-left text-[17px] font-semibold text-danger"
+          className="mt-auto flex min-h-12 items-center px-2 text-left text-[1.0625rem] font-semibold text-danger"
         >
           Sign out
         </button>
@@ -185,7 +185,7 @@ function Sidebar() {
   const sections = useMenuSections();
   const stockCount = useStock().data?.length;
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex min-h-11 items-center justify-between rounded-xl px-3 text-[15px] ${isActive ? 'bg-card-muted font-semibold' : 'hover:bg-card-muted'}`;
+    `flex min-h-11 items-center justify-between rounded-xl px-3 text-[0.9375rem] ${isActive ? 'bg-card-muted font-semibold' : 'hover:bg-card-muted'}`;
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line bg-card p-4 lg:flex">
       <div className="mb-4 flex items-center gap-3 px-1">
@@ -227,7 +227,7 @@ function Sidebar() {
 }
 
 function BottomBar() {
-  const item = 'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[13px]';
+  const item = 'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[0.8125rem]';
   const cls = ({ isActive }: { isActive: boolean }) => `${item} ${isActive ? 'font-semibold text-ink' : 'text-muted'}`;
   return (
     <nav aria-label="Main" className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card lg:hidden">
@@ -343,7 +343,7 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
         ) : (
           <div className="flex min-h-screen">
             <Sidebar />
-            <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-32 pt-[env(safe-area-inset-top)] sm:px-6 lg:px-10 lg:pb-12">
+            <main className="mx-auto w-full max-w-5xl flex-1 lg:max-w-7xl px-4 pb-32 pt-[env(safe-area-inset-top)] sm:px-6 lg:px-10 lg:pb-12">
               <OfflineBanner />
               <Outlet />
             </main>

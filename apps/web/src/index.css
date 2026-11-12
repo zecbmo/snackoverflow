@@ -1,21 +1,27 @@
 @import 'tailwindcss';
 
 /*
- * Visual direction (docs/design/README.md): warm off-white background, near-black
+ * Visual direction (docs/design/README.md): soft off-white background, near-black
  * ink, violet accent for primary actions. Green, amber and red are only for
  * freshness; blue only for frozen.
  */
 :root {
-  --bg: #f6f5f1;
+  /* Light. Neutrals lean slightly cool so they sit with the violet accent. */
+  --bg: #f5f5f8;
   --card: #ffffff;
-  --card-muted: #f1efea;
-  --ink: #1a1c1a;
-  --muted: #62655f;
-  --line: #e6e3dc;
+  --card-muted: #eeeef3;
+  --ink: #16161d;
+  --muted: #5c5e6e;
+  --line: #e2e2ea;
   --accent: #6b4eff;
   --accent-ink: #ffffff;
-  --accent-soft: #f0edff;
+  --accent-soft: #efecff;
   --accent-text: #5236e0;
+  /* Strong neutral fill: selected chips and secondary buttons. */
+  --strong: #1f1f29;
+  --strong-ink: #ffffff;
+  /* Tonight's meal card. */
+  --hero: #1f1f29;
   --danger: #b42318;
   --red: #c0392b;
   --red-soft: #fde4e1;
@@ -31,22 +37,26 @@
   --blue-text: #1f4fae;
   --scan-bg: #161816;
   /* Chart bars for days still being logged. */
-  --chart-pending: #c9c5bc;
+  --chart-pending: #c6c6d0;
   color-scheme: light;
 }
 
+/* Dark: follows the device unless someone picks Light or Dark in Settings (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #121311;
-    --card: #1c1d1b;
-    --card-muted: #252724;
-    --ink: #f2f1ec;
-    --muted: #a8aba4;
-    --line: #2f312e;
+  :root:not([data-theme='light']) {
+    --bg: #101014;
+    --card: #191920;
+    --card-muted: #23232c;
+    --ink: #ececf1;
+    --muted: #a2a4b3;
+    --line: #2c2c37;
     --accent: #7c63ff;
     --accent-ink: #ffffff;
-    --accent-soft: #2a2450;
+    --accent-soft: #272147;
     --accent-text: #b4a6ff;
+    --strong: #3a3a48;
+    --strong-ink: #ffffff;
+    --hero: #23232c;
     --danger: #ff8a80;
     --red: #e5594b;
     --red-soft: #3d1e1b;
@@ -60,8 +70,48 @@
     --blue: #5b8ef0;
     --blue-soft: #18284a;
     --blue-text: #a8c4ff;
-    --chart-pending: #4a4d47;
+    --chart-pending: #4a4a57;
     color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #101014;
+  --card: #191920;
+  --card-muted: #23232c;
+  --ink: #ececf1;
+  --muted: #a2a4b3;
+  --line: #2c2c37;
+  --accent: #7c63ff;
+  --accent-ink: #ffffff;
+  --accent-soft: #272147;
+  --accent-text: #b4a6ff;
+  --strong: #3a3a48;
+  --strong-ink: #ffffff;
+  --hero: #23232c;
+  --danger: #ff8a80;
+  --red: #e5594b;
+  --red-soft: #3d1e1b;
+  --red-text: #ffaaa1;
+  --amber: #e5a52e;
+  --amber-soft: #3a2c12;
+  --amber-text: #f3c977;
+  --green: #47b06d;
+  --green-soft: #18321f;
+  --green-text: #8fd9a8;
+  --blue: #5b8ef0;
+  --blue-soft: #18284a;
+  --blue-text: #a8c4ff;
+  --chart-pending: #4a4a57;
+  color-scheme: dark;
+}
+
+/*
+ * Density: phones keep big touch targets. With a mouse on a wide screen everything
+ * (type, buttons, spacing: all in rem) steps down a size.
+ */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  html {
+    font-size: 14px;
   }
 }
 
@@ -90,6 +140,9 @@
   --color-frozen-soft: var(--blue-soft);
   --color-frozen-text: var(--blue-text);
   --color-scan: var(--scan-bg);
+  --color-strong: var(--strong);
+  --color-strong-ink: var(--strong-ink);
+  --color-hero: var(--hero);
   --color-chart-pending: var(--chart-pending);
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Bricolage Grotesque Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;

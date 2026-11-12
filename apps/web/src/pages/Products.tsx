@@ -25,7 +25,7 @@ export function ProductsPage() {
   const navigate = useNavigate();
 
   const chip = (active: boolean) =>
-    `min-h-11 rounded-full border px-4 text-[15px] font-semibold ${active ? 'border-ink bg-ink text-bg' : 'border-line bg-card text-ink'}`;
+    `min-h-11 rounded-full border px-4 text-[0.9375rem] font-semibold ${active ? 'border-strong bg-strong text-strong-ink' : 'border-line bg-card text-ink'}`;
 
   return (
     <>

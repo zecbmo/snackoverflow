@@ -49,10 +49,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role={t.tone === 'error' ? 'alert' : 'status'}
             className={`animate-slide-up pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl px-4 py-3 shadow-lg ${
-              t.tone === 'error' ? 'bg-fresh-red-text text-white' : 'bg-ink text-bg'
+              t.tone === 'error' ? 'bg-fresh-red-text text-white' : 'bg-strong text-strong-ink'
             }`}
           >
-            <p className="flex-1 text-[15px]">{t.message}</p>
+            <p className="flex-1 text-[0.9375rem]">{t.message}</p>
             {t.action && (
               <button
                 type="button"

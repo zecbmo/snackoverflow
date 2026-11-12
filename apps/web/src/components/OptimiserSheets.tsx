@@ -198,7 +198,7 @@ export function PlanWeekSheet({ open, onClose, from, to, defaultServings }: { op
             <legend className="mb-2 text-sm font-medium">Which meals</legend>
             <div className="flex flex-wrap gap-2">
               {(['breakfast', 'lunch', 'dinner'] as const).map((s) => (
-                <label key={s} className={`flex min-h-11 items-center rounded-full border px-4 capitalize ${slots.has(s) ? 'border-ink bg-ink text-bg' : 'border-line'}`}>
+                <label key={s} className={`flex min-h-11 items-center rounded-full border px-4 capitalize ${slots.has(s) ? 'border-strong bg-strong text-strong-ink' : 'border-line'}`}>
                   <input
                     type="checkbox"
                     className="sr-only"

@@ -24,6 +24,7 @@ import { ReceiptReviewPage } from './pages/ReceiptReview';
 import { ReceiptsPage } from './pages/Receipts';
 import { InboxPage } from './pages/Inbox';
 import { isNative } from './lib/platform';
+import { applyTheme, getTheme } from './lib/theme';
 import { ComingSoonPage } from './pages/ComingSoon';
 import { DashboardPage } from './pages/Dashboard';
 import { WastePage } from './pages/Waste';
@@ -39,6 +40,8 @@ import { ScanPage } from './pages/Scan';
 import { SettingsPage } from './pages/Settings';
 import { StockPage } from './pages/Stock';
 import { TodayPage } from './pages/Today';
+
+applyTheme(getTheme());
 
 const queryClient = new QueryClient({
   defaultOptions: {

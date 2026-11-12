@@ -76,7 +76,7 @@ export function BarChart({
               {active === b.key && (
                 <div
                   role="tooltip"
-                  className={`pointer-events-none absolute bottom-full z-10 mb-1 w-max max-w-48 rounded-lg bg-ink px-2.5 py-1.5 text-center text-xs font-medium text-bg shadow-lg ${
+                  className={`pointer-events-none absolute bottom-full z-10 mb-1 w-max max-w-48 rounded-lg bg-strong px-2.5 py-1.5 text-center text-xs font-medium text-strong-ink shadow-lg ${
                     // Keep it inside the card at either end.
                     i < bars.length / 4 ? 'left-0' : i >= (bars.length * 3) / 4 ? 'right-0' : ''
                   }`}

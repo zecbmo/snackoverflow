@@ -19,7 +19,7 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 - **Prices (optional, off by default).** Turn prices on in Settings and the list shows an estimated total, each product shows its latest price, and meal suggestions favour cheaper extras. Prices come from receipts, what you type when scanning, and [Open Prices](https://prices.openfoodfacts.org/); no supermarket site is scraped.
 - **Dashboard and waste report.** Calories per day for each person over 7 or 30 days, with 7- and 30-day averages against a daily target you set in your profile (admins can see everyone's). What was binned this month and how it compares with last month at the same point, by item and category, with its value and your spending from receipts when prices are on. On a wide screen, Today shows the week's dinners, calories, waste, running low and the shopping list at a glance.
 - **Household ready.** Several people and phones see the same stock live. Admin and member roles, invite links, and optional sign-in through a self-hosted identity provider (OpenID Connect).
-- **Installable.** A web app you can add to your phone's home screen; works on desktop with a sidebar layout. Dark mode follows your device.
+- **Installable.** A web app you can add to your phone's home screen; works on desktop with a sidebar layout. Light and dark themes: follow your device or pick one in Settings. On a desktop the layout is more compact.
 - **Self-hosted.** Docker Compose (app + PostgreSQL), nightly database backups and a JSON export.
 
 ## What's next

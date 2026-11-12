@@ -78,7 +78,7 @@ export function PeoplePage() {
         <Card className="divide-y divide-line overflow-hidden">
           {users.data.map((u) => (
             <div key={u.id} className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3">
-              <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-ink font-semibold text-bg">
+              <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-strong font-semibold text-strong-ink">
                 {u.name.charAt(0).toUpperCase()}
               </span>
               <span className="min-w-0 flex-1">

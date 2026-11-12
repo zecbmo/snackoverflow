@@ -211,7 +211,7 @@ export function RecipeForm({ initial, recipeId, extraActions }: { initial: Draft
           );
         })}
         <Field label="Add ingredients" hint="Paste or type one per line, e.g. “2 onions, chopped”.">
-          {(id) => <textarea id={id} rows={3} value={paste} onChange={(e) => setPaste(e.target.value)} className="w-full rounded-xl border border-line bg-card p-3 text-[16px]" />}
+          {(id) => <textarea id={id} rows={3} value={paste} onChange={(e) => setPaste(e.target.value)} className="w-full rounded-xl border border-line bg-card p-3 text-base" />}
         </Field>
         <Button className="self-start" disabled={!paste.trim()} onClick={() => void addLines(paste)}>
           Add lines
@@ -226,7 +226,7 @@ export function RecipeForm({ initial, recipeId, extraActions }: { initial: Draft
               rows={8}
               value={draft.steps.join('\n\n')}
               onChange={(e) => set({ steps: e.target.value.split(/\n\s*\n/) })}
-              className="w-full rounded-xl border border-line bg-card p-3 text-[16px]"
+              className="w-full rounded-xl border border-line bg-card p-3 text-base"
             />
           )}
         </Field>

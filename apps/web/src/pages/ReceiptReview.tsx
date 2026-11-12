@@ -157,7 +157,7 @@ export function ReceiptReviewPage() {
       <Sheet open={typing} onClose={() => setTyping(false)} title="Type the items in">
         <div className="flex flex-col gap-3">
           <Field label="Items" hint="One per line with its price, e.g. “Semi skimmed milk 4 pints 1.55”. Start with “2 x” for more than one.">
-            {(fid) => <textarea id={fid} rows={8} value={text} onChange={(e) => setText(e.target.value)} className="w-full rounded-xl border border-line bg-card p-3 text-[16px]" />}
+            {(fid) => <textarea id={fid} rows={8} value={text} onChange={(e) => setText(e.target.value)} className="w-full rounded-xl border border-line bg-card p-3 text-base" />}
           </Field>
           <Button variant="primary" size="lg" onClick={() => void submitTyped()}>
             Use these

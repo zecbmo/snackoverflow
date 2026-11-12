@@ -236,7 +236,7 @@ export function ScanPage() {
             </div>
           )}
         </div>
-        <p className="mt-6 text-center text-[17px] text-white/80" aria-live="polite">
+        <p className="mt-6 text-center text-[1.0625rem] text-white/80" aria-live="polite">
           {status === 'denied'
             ? 'Camera blocked. Allow camera access in your browser, or type the barcode.'
             : status === 'unavailable' || status === 'error'
@@ -256,7 +256,7 @@ export function ScanPage() {
             <span className="font-display text-4xl font-bold" aria-label={`${live.length} scanned`}>
               {live.length}
             </span>
-            <span className="text-[15px] leading-tight text-white/80">
+            <span className="text-[0.9375rem] leading-tight text-white/80">
               scanned this session
               {needsName > 0 && (
                 <>

@@ -163,7 +163,7 @@ export function CookPage() {
                           checked={t.use}
                           onChange={(e) => setTake(li, ti, { use: e.target.checked })}
                         />
-                        <span className="min-w-0 flex-1 text-[15px]">
+                        <span className="min-w-0 flex-1 text-[0.9375rem]">
                           {t.productName} <span className="text-muted">· {t.locationName}</span>
                         </span>
                         <Pill className={toneClasses[toneFor(t, me.today)].pill}>{dateLabel(t.bestBefore, me.today)}</Pill>
@@ -183,7 +183,7 @@ export function CookPage() {
                 )}
               </Card>
             ))}
-            {short.length > 0 && <p className="text-[15px] text-muted">Short of {short.map((l) => l.ingredientName ?? l.text).join(', ')}. You can still cook; we'll take what's there.</p>}
+            {short.length > 0 && <p className="text-[0.9375rem] text-muted">Short of {short.map((l) => l.ingredientName ?? l.text).join(', ')}. You can still cook; we'll take what's there.</p>}
             <Button variant="primary" size="lg" onClick={() => setStep('keep')}>
               Next
             </Button>

@@ -51,8 +51,8 @@ function StockRow({ group, today, expanded, onToggle, plannedGrams }: { group: S
       <div className="flex items-center gap-3 px-4 py-3.5">
         <span aria-hidden className={`h-11 w-1.5 shrink-0 rounded-full ${t.bar}`} />
         <button type="button" onClick={onToggle} aria-expanded={expanded} className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-[17px] font-semibold">{group.name}</span>
-          <span className="block truncate text-[15px] text-muted">
+          <span className="block truncate text-[1.0625rem] font-semibold">{group.name}</span>
+          <span className="block truncate text-[0.9375rem] text-muted">
             {groupSummary(group)}
             {plannedGrams ? ` · ${gramsLabel(plannedGrams)} planned` : ''}
           </span>
@@ -105,7 +105,7 @@ export function StockPage() {
       <label className="mb-4 flex min-h-13 items-center gap-3 rounded-2xl border border-line bg-card px-4">
         <Icon name="search" className="size-5 text-muted" />
         <span className="sr-only">Search stock</span>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search stock" className="min-h-12 flex-1 bg-transparent text-[17px] outline-none placeholder:text-muted" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search stock" className="min-h-12 flex-1 bg-transparent text-[1.0625rem] outline-none placeholder:text-muted" />
       </label>
       <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4" role="group" aria-label="Filter">
         {chips.map((c) => (
@@ -114,13 +114,13 @@ export function StockPage() {
             type="button"
             aria-pressed={same(c.f, filter)}
             onClick={() => setFilter(c.f)}
-            className={`min-h-11 shrink-0 rounded-full border px-5 text-[15px] font-semibold ${same(c.f, filter) ? 'border-ink bg-ink text-bg' : 'border-line bg-card'}`}
+            className={`min-h-11 shrink-0 rounded-full border px-5 text-[0.9375rem] font-semibold ${same(c.f, filter) ? 'border-strong bg-strong text-strong-ink' : 'border-line bg-card'}`}
           >
             {c.label}
           </button>
         ))}
       </div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[15px] text-muted">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[0.9375rem] text-muted">
         <span>Sorted by best-before</span>
         <span className="flex gap-3">
           {(['red', 'amber', 'green'] as const).map((tone) => (

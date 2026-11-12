@@ -90,7 +90,7 @@ export function RecipeDetailPage() {
                     <span
                       aria-hidden
                       title={enough ? 'In stock' : 'Not enough in stock'}
-                      className={`mt-2 size-2.5 shrink-0 rounded-full ${l.ingredientId === null ? 'bg-transparent' : enough ? 'bg-ink' : 'border border-muted bg-transparent'}`}
+                      className={`mt-2 size-2.5 shrink-0 rounded-full ${l.ingredientId === null ? 'bg-transparent' : enough ? 'bg-strong' : 'border border-muted bg-transparent'}`}
                     />
                     <span className="flex-1">
                       {scaledLine(l.text, l.amount, l.unit, r.serves, n)}
@@ -124,7 +124,7 @@ export function RecipeDetailPage() {
           <Card className="p-5">
             <h2 className="mb-3 text-lg font-bold">Per serving</h2>
             {nutrition.kcal != null ? (
-              <dl className="grid grid-cols-2 gap-y-2 text-[15px]">
+              <dl className="grid grid-cols-2 gap-y-2 text-[0.9375rem]">
                 {(
                   [
                     ['kcal', 'Calories', ''],

@@ -54,7 +54,7 @@ export function DashboardPage() {
               type="button"
               aria-pressed={person === p.id}
               onClick={() => setPerson(p.id)}
-              className={`min-h-12 shrink-0 rounded-full border px-5 text-[17px] font-semibold ${person === p.id ? 'border-ink bg-ink text-bg' : 'border-line bg-card'}`}
+              className={`min-h-12 shrink-0 rounded-full border px-5 text-[1.0625rem] font-semibold ${person === p.id ? 'border-strong bg-strong text-strong-ink' : 'border-line bg-card'}`}
             >
               {p.label}
             </button>
@@ -127,7 +127,7 @@ function CaloriesCard({ person }: { person: string }) {
             showValues={range === 7}
             tableHeadings={['Day', 'Calories']}
             note={
-              <p className="mt-3 text-[15px] text-muted">
+              <p className="mt-3 text-[0.9375rem] text-muted">
                 {s.target ? 'Purple days went over target. ' : ''}Today is still being logged. Only meals marked eaten count.
               </p>
             }
@@ -203,7 +203,7 @@ export function WasteItems({ report, limit }: { report: WasteReportDto; limit?: 
         <li key={i.name} className="flex items-center gap-3 border-t border-line py-3">
           <div className="flex-1">
             <p className="font-semibold">{i.name}</p>
-            <p className="text-[15px] text-muted">
+            <p className="text-[0.9375rem] text-muted">
               {i.items === 1 ? 'Binned once' : `Binned ${i.items} times`}
               {report.pricing && i.pence !== null ? ` · ${formatPence(i.pence)}` : ''}
             </p>

@@ -103,7 +103,7 @@ export function ShoppingPage() {
         subtitle={`${toGet.length} to get${pricing && estimate !== null ? ` · about ${formatPence(estimate)}` : ''}`}
         left={<MenuButton />}
         right={
-          <button type="button" aria-label="Add to the list" onClick={() => setAdding(true)} className="inline-flex size-14 items-center justify-center rounded-full bg-ink text-bg">
+          <button type="button" aria-label="Add to the list" onClick={() => setAdding(true)} className="inline-flex size-14 items-center justify-center rounded-full bg-strong text-strong-ink">
             <Icon name="plus" />
           </button>
         }
@@ -134,7 +134,7 @@ export function ShoppingPage() {
                     <Button onClick={() => setIdeasFor({ id: hint.ingredientId, name: hint.name })}>More ideas</Button>
                   ) : (
                     !idea && (
-                      <Link to="/recipes" className="inline-flex min-h-11 items-center rounded-xl bg-ink px-4 font-semibold text-bg">
+                      <Link to="/recipes" className="inline-flex min-h-11 items-center rounded-xl bg-strong px-4 font-semibold text-strong-ink">
                         Find a recipe
                       </Link>
                     )
@@ -188,10 +188,10 @@ export function ShoppingPage() {
                         className="size-7 shrink-0 rounded-lg accent-[var(--accent)]"
                       />
                       <span className="min-w-0 flex-1">
-                        <span className={`block text-[17px] font-semibold ${i.checked ? 'text-muted line-through' : ''}`}>{itemTitle(i)}</span>
-                        {itemDetail(i) && <span className="block text-[15px] text-muted">{itemDetail(i)}</span>}
+                        <span className={`block text-[1.0625rem] font-semibold ${i.checked ? 'text-muted line-through' : ''}`}>{itemTitle(i)}</span>
+                        {itemDetail(i) && <span className="block text-[0.9375rem] text-muted">{itemDetail(i)}</span>}
                       </span>
-                      {pricing && i.pricePence !== null && <span className="whitespace-nowrap text-[17px] font-semibold text-muted">{formatPence(i.pricePence)}</span>}
+                      {pricing && i.pricePence !== null && <span className="whitespace-nowrap text-[1.0625rem] font-semibold text-muted">{formatPence(i.pricePence)}</span>}
                       <button type="button" aria-label={`Remove ${i.text}`} onClick={() => void remove(i)} className="inline-flex size-11 items-center justify-center rounded-full text-muted hover:bg-card-muted">
                         <Icon name="close" className="size-5" />
                       </button>
@@ -263,7 +263,7 @@ function AddItemSheet({ onClose }: { onClose: () => void }) {
         {suggestions.length > 0 && !match && (
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s) => (
-              <button key={s.id} type="button" onClick={() => void add({ ingredientId: s.id })} className="min-h-11 rounded-full border border-line px-4 text-[15px]">
+              <button key={s.id} type="button" onClick={() => void add({ ingredientId: s.id })} className="min-h-11 rounded-full border border-line px-4 text-[0.9375rem]">
                 {s.name}
               </button>
             ))}

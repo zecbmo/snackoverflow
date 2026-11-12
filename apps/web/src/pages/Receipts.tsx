@@ -146,7 +146,7 @@ export function ReceiptsPage() {
       <Sheet open={pasting} onClose={() => setPasting(false)} title="Paste a receipt">
         <div className="flex flex-col gap-3">
           <Field label="Receipt or order email" hint="Each item needs its price on the same line. Totals and payments are skipped.">
-            {(id) => <textarea id={id} rows={10} value={text} onChange={(e) => setText(e.target.value)} className="w-full rounded-xl border border-line bg-card p-3 text-[16px]" />}
+            {(id) => <textarea id={id} rows={10} value={text} onChange={(e) => setText(e.target.value)} className="w-full rounded-xl border border-line bg-card p-3 text-base" />}
           </Field>
           <Button variant="primary" size="lg" disabled={busy || text.trim().length < 3} onClick={() => void paste()}>
             Read it

@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast';
 import { Button, Card, ErrorNote, Field, PageHeader, Select, Spinner, TextInput, Toggle } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { keys, useShelfLife } from '../lib/queries';
+import { getTheme, setTheme, type Theme } from '../lib/theme';
 
 export function SettingsPage() {
   const me = useMe();
@@ -14,7 +15,8 @@ export function SettingsPage() {
   return (
     <>
       <PageHeader title="Settings" left={<MenuButton />} />
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5 lg:max-w-4xl">
+        <AppearanceCard />
         <HouseholdCard />
         <ShelfLifeCard />
         <PricesCard />
@@ -22,11 +24,11 @@ export function SettingsPage() {
         {isAdmin && me.features.backups && <BackupsCard />}
         <Card className="p-5">
           <h2 className="mb-2 text-lg font-bold">Recipes and assistants</h2>
-          <p className="text-[15px]">
+          <p className="text-[0.9375rem]">
             <span className="font-semibold">AI clean-up of imported recipes:</span>{' '}
             {me.features.ai ? 'on. Use "Tidy up with AI" after importing a link.' : 'off. Set AI_API_KEY on the server to turn it on.'}
           </p>
-          <p className="mt-2 text-[15px]">
+          <p className="mt-2 text-[0.9375rem]">
             <span className="font-semibold">Claude and other assistants (MCP):</span>{' '}
             {me.features.mcp ? (
               <>
@@ -294,7 +296,7 @@ function PricesCard() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold">Prices</h2>
-          <p className="text-[15px] text-muted">
+          <p className="text-[0.9375rem] text-muted">
             No UK supermarket has a public price API, so prices come from your receipts, what you type in, and Open Prices (shared by Open Food Facts users). When on, the list shows an
             estimated total and meal suggestions favour cheaper extras.
           </p>
@@ -329,7 +331,7 @@ function SuggestionsCard() {
   return (
     <Card className="p-5">
       <h2 className="mb-1 text-lg font-bold">Meal suggestions</h2>
-      <p className="mb-4 text-[15px] text-muted">Rules for “Suggest meals” and “Plan my week”.</p>
+      <p className="mb-4 text-[0.9375rem] text-muted">Rules for “Suggest meals” and “Plan my week”.</p>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-3">
         <Field label="Don't repeat within (days)">
           {(id) => <TextInput id={id} inputMode="numeric" disabled={!isAdmin} value={noRepeat} onChange={(e) => setNoRepeat(e.target.value)} />}
@@ -354,6 +356,38 @@ function SuggestionsCard() {
           </Button>
         )}
       </form>
+    </Card>
+  );
+}
+
+/** Light, dark or follow the device. Kept on this device only, so a phone and a laptop can differ. */
+function AppearanceCard() {
+  const [theme, setThemeState] = useState<Theme>(getTheme);
+  const options: [Theme, string][] = [
+    ['system', 'Match device'],
+    ['light', 'Light'],
+    ['dark', 'Dark'],
+  ];
+  return (
+    <Card className="p-5">
+      <h2 className="text-lg font-bold">Appearance</h2>
+      <p className="mb-3 mt-1 text-muted">Just for this device.</p>
+      <div className="flex max-w-md rounded-2xl bg-card-muted p-1" role="group" aria-label="Theme">
+        {options.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={theme === value}
+            onClick={() => {
+              setTheme(value);
+              setThemeState(value);
+            }}
+            className={`min-h-11 flex-1 rounded-xl px-3 font-semibold ${theme === value ? 'bg-card shadow-sm' : ''}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </Card>
   );
 }

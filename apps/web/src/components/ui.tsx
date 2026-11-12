@@ -5,7 +5,7 @@ type Variant = 'primary' | 'dark' | 'outline' | 'ghost' | 'danger';
 
 const variants: Record<Variant, string> = {
   primary: 'bg-accent text-accent-ink hover:brightness-110 disabled:opacity-50',
-  dark: 'bg-ink text-bg hover:opacity-90 disabled:opacity-50',
+  dark: 'bg-strong text-strong-ink hover:opacity-90 disabled:opacity-50',
   outline: 'border border-line bg-card text-ink hover:bg-card-muted disabled:opacity-50',
   ghost: 'text-ink hover:bg-card-muted disabled:opacity-50',
   danger: 'border border-line bg-card text-danger hover:bg-card-muted disabled:opacity-50',
@@ -17,7 +17,7 @@ export function Button({
   className = '',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg' }) {
-  const sizes = { sm: 'min-h-11 px-3 text-sm', md: 'min-h-11 px-4 text-[15px]', lg: 'min-h-14 px-5 text-base' };
+  const sizes = { sm: 'min-h-11 px-3 text-sm', md: 'min-h-11 px-4 text-[0.9375rem]', lg: 'min-h-14 px-5 text-base' };
   return (
     <button
       type="button"
@@ -63,7 +63,7 @@ export function Field({ label, hint, error, children }: { label: string; hint?: 
 }
 
 const inputClass =
-  'min-h-11 w-full rounded-xl border border-line bg-card px-3 text-[16px] text-ink placeholder:text-muted focus:border-accent focus:outline-none';
+  'min-h-11 w-full rounded-xl border border-line bg-card px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none';
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputClass} ${props.className ?? ''}`} />;
@@ -133,7 +133,7 @@ export function PageHeader({ title, subtitle, left, right }: { title: string; su
       {left}
       <div className="min-w-0 flex-1">
         {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
-        <h1 className="truncate text-3xl font-bold lg:text-[32px]">{title}</h1>
+        <h1 className="truncate text-3xl font-bold lg:text-3xl">{title}</h1>
       </div>
       {right}
     </header>

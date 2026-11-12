@@ -197,7 +197,7 @@ Dashboard details, as built:
 - The value of binned food uses the product's latest price per gram, else the ingredient's cheapest known price; spending is the sum of reviewed receipts. Both hide when pricing is off.
 - Charts are plain HTML columns with a tooltip on hover or focus and the numbers as a table, so they work with a screen reader and without colour.
 
-Visual direction: clean, card-based, large touch targets, dark mode. Warm off-white background, near-black ink, a violet accent (#6B4EFF) for primary actions, Bricolage Grotesque headings and Inter body text. Green, amber and red are reserved for freshness (fine, this week, going off); blue marks frozen items. Mock-ups: see the Snack Overflow design canvas.
+Visual direction: clean, card-based, large touch targets on phones, light and dark themes (follow the device, or pick one in Settings → Appearance; the choice is per device). With a mouse on a wide screen everything steps down a size (14px base instead of 16px) and the page uses more of the width. Soft off-white background with slightly cool neutrals (they sit better with violet than the warm ones in the mock-ups), near-black ink, a violet accent (#6B4EFF) for primary actions, Bricolage Grotesque headings and Inter body text. Green, amber and red are reserved for freshness (fine, this week, going off); blue marks frozen items. Mock-ups: see the Snack Overflow design canvas.
 
 ## Architecture and tech stack
 

@@ -129,7 +129,7 @@ export function ItemDetailPage() {
             {item.locationName} · {stateLabel[item.state]} · {amountLabel(item)}
           </span>
         </div>
-        <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 text-[15px]">
+        <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 text-[0.9375rem]">
           <div>
             <dt className="text-muted">Best before</dt>
             <dd>
@@ -198,7 +198,7 @@ export function ItemDetailPage() {
         <Card className="p-2">
           <ul>
             {q.data.events.map((e) => (
-              <li key={e.id} className={`flex justify-between gap-3 px-3 py-2 text-[15px] ${e.undoneAt ? 'text-muted line-through' : ''}`}>
+              <li key={e.id} className={`flex justify-between gap-3 px-3 py-2 text-[0.9375rem] ${e.undoneAt ? 'text-muted line-through' : ''}`}>
                 <span>
                   {eventWords[e.type]}
                   {e.userName ? ` by ${e.userName}` : ''}
