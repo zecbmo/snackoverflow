@@ -33,7 +33,7 @@ function aisleOf(item: ItemRow, catalog: Catalog): string {
 }
 
 /** The list, grouped by aisle. With `pricing` on, each line gets an estimated cost. */
-export async function listShopping(db: Db, auth: Auth, pricing = false): Promise<ShoppingItemDto[]> {
+export async function listShopping(db: Db, auth: Auth, pricing = false, now: Date = new Date()): Promise<ShoppingItemDto[]> {
   const [rows, catalog, people, prods] = await Promise.all([
     db.select().from(shoppingItems).where(eq(shoppingItems.householdId, auth.household.id)).orderBy(asc(shoppingItems.createdAt)),
     loadCatalog(db, auth.household.id),
@@ -41,6 +41,9 @@ export async function listShopping(db: Db, auth: Auth, pricing = false): Promise
     db.select().from(products).where(eq(products.householdId, auth.household.id)),
   ]);
   const names = new Map(people.map((p) => [p.id, p.name]));
+  // What the planned meals still need, after stock, per ingredient: shown as "Needed" on every item for that food.
+  const [needs, have] = await Promise.all([earmarks(db, auth, todayIn(auth.household.timeZone, now)), onHand(db, auth.household.id)]);
+  const short = new Map(needs.map((m) => [m.ingredientId, Math.max(0, m.grams - (have.get(m.ingredientId) ?? 0))]));
   const productsById = new Map(prods.map((p) => [p.id, p]));
   const [latest, byIngredient] = pricing ? await Promise.all([latestPrices(db, auth.household.id), ingredientPrices(db, auth.household.id)]) : [null, null];
   /** Grams said the way the food is sold: "568ml" for milk, "12 eggs", "2.5kg". */
@@ -67,7 +70,16 @@ export async function listShopping(db: Db, auth: Auth, pricing = false): Promise
       packLabel: packLabel(r),
       surplusGrams: r.surplusGrams,
       surplusLabel: say(r.surplusGrams, r),
-      needLabel: r.reason === 'plan' ? say(r.grams, r) : null,
+      needLabel: (() => {
+        const ingredientId = r.ingredientId ?? (r.productId ? (productsById.get(r.productId)?.ingredientId ?? null) : null);
+        const g = ingredientId ? short.get(ingredientId) : undefined;
+        if (!g || g < 1) return null;
+        return amountText(g, catalog.ingredients.get(ingredientId!));
+      })(),
+      foodGroup: (r.productId ? productsById.get(r.productId)?.foodGroup : null) ?? (() => {
+        const ingredientId = r.ingredientId ?? (r.productId ? (productsById.get(r.productId)?.ingredientId ?? null) : null);
+        return ingredientId ? (catalog.ingredients.get(ingredientId)?.foodGroup ?? null) : null;
+      })(),
       reason: r.reason,
       pricePence: latest && byIngredient ? estimateItemPence(r, latest, byIngredient) : null,
       forMeals: r.forMeals,

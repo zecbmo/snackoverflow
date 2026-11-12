@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { amountText, type PlanEntryDto, type RecipeSummaryDto, type StockItemDto } from '@snackoverflow/shared';
 import { dateLabel, toneClasses, toneFor } from '../lib/format';
-import { useRecipes, useStock } from '../lib/queries';
+import { useRecipes, useRecipeScores, useStock } from '../lib/queries';
+import { inRecipeTab, RECIPE_TABS, type RecipeTab, sortForTab } from '../pages/Recipes';
 import { groupStock, type StockGroup } from '../lib/stockGroups';
 import { matchesSearch } from '../lib/table';
 import { AddToPlanSheet, type PlanTarget } from './AddToPlanSheet';
@@ -62,6 +63,10 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [planning, setPlanning] = useState<PlanTarget | null>(null);
   const [over, setOver] = useState(false);
+  const [place, setPlace] = useState('all');
+  const [recipeTab, setRecipeTab] = useState<RecipeTab>('all');
+  const scores = useRecipeScores().data;
+  const byId = useMemo(() => new Map((scores?.scores ?? []).map((s) => [s.recipeId, s])), [scores]);
   // While a planned meal is dragged, show the tab it came from.
   useEffect(() => {
     if (!removing) return setOver(false);
@@ -100,9 +105,15 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
       return !c;
     });
 
-  const food = useMemo(() => groupStock((stock ?? []).filter((s) => !s.isMeal)).filter((g) => !q || matchesSearch(`${g.name} ${g.locationName}`, q)), [stock, q]);
+  const food = useMemo(
+    () => groupStock((stock ?? []).filter((s) => !s.isMeal && (place === 'all' || s.locationType === place))).filter((g) => !q || matchesSearch(`${g.name} ${g.locationName}`, q)),
+    [stock, q, place],
+  );
   const leftovers = useMemo(() => (stock ?? []).filter((s) => s.isMeal && (!q || matchesSearch(s.productName, q))), [stock, q]);
-  const recipeList = useMemo(() => (recipes ?? []).filter((r) => !q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q)), [recipes, q]);
+  const recipeList = useMemo(
+    () => sortForTab((recipes ?? []).filter((r) => inRecipeTab(byId.get(r.id), recipeTab) && (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q))), byId, recipeTab),
+    [recipes, q, recipeTab, byId],
+  );
 
   if (collapsed) {
     return (
@@ -169,6 +180,37 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
             { value: 'leftovers', label: 'Leftovers' },
           ]}
         />
+        {tab === 'stock' && (
+          <Segmented
+            label="Where"
+            value={place}
+            onChange={setPlace}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'fridge', label: 'Fridge' },
+              { value: 'freezer', label: 'Freezer' },
+              { value: 'cupboard', label: 'Cupboard' },
+            ]}
+          />
+        )}
+        {tab === 'recipes' && (
+          <div>
+            <div role="group" aria-label="Which recipes" className="grid grid-cols-2 gap-1">
+              {RECIPE_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={recipeTab === t.id}
+                  onClick={() => setRecipeTab(t.id)}
+                  className={`min-h-7 rounded-md border px-2 text-xs font-semibold ${recipeTab === t.id ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-muted hover:text-ink'}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-muted">{RECIPE_TABS.find((t) => t.id === recipeTab)?.help}</p>
+          </div>
+        )}
         <SearchBox value={q} onChange={setQ} placeholder={`Search ${tab}`} label={`Search ${tab}`} />
       </div>
       <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-4">

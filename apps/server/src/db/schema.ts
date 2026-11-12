@@ -167,6 +167,8 @@ export const ingredients = pgTable(
     densityGPerMl: doublePrecision('density_g_per_ml'),
     gramsPerCount: doublePrecision('grams_per_count'),
     countUnit: text('count_unit'),
+    /** Category (FOOD_GROUPS), from docs/data/ingredients.csv. */
+    foodGroup: text('food_group'),
     /** Typical pack sizes in grams, from docs/data/pack-sizes.csv. */
     packSizesGrams: jsonb('pack_sizes_grams').$type<number[]>(),
     /** How packs are sold: by weight (g), volume (ml) or count, for showing pack sizes. */
@@ -212,6 +214,8 @@ export const products = pgTable(
     recipeId: uuid('recipe_id'),
     /** Weight of one portion, for meals counted in portions. */
     portionGrams: doublePrecision('portion_grams'),
+    /** Overrides the ingredient's category. */
+    foodGroup: text('food_group'),
     createdAt: createdAt(),
   },
   (t) => [index('products_household_idx').on(t.householdId), index('products_ingredient_idx').on(t.ingredientId)],

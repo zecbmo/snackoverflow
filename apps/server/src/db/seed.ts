@@ -113,6 +113,7 @@ export async function seedHousehold(db: Db, householdId: string, seed: SeedData,
         packUnit: packs ? (packs.unit === 'ml' ? 'ml' : packs.unit === 'count' ? 'count' : 'g') : null,
         trackRunningLow: r.track_running_low === 'yes',
         nutritionPer100g: seed.nutrition[r.key as string] ?? null,
+        foodGroup: r.food_group || null,
       };
     });
   if (rows.length) await db.insert(ingredients).values(rows).onConflictDoNothing();
@@ -141,6 +142,12 @@ export async function syncSeedData(db: Db, seed: SeedData): Promise<void> {
   for (const h of all) {
     await seedHousehold(db, h.id, seed);
     for (const r of seed.ingredients) {
+      if (r.key && r.food_group) {
+        await db
+          .update(ingredients)
+          .set({ foodGroup: r.food_group })
+          .where(and(eq(ingredients.householdId, h.id), eq(ingredients.key, r.key), isNull(ingredients.foodGroup)));
+      }
       const packs = r.pack_sizes_key ? seed.packSizes[r.pack_sizes_key] : undefined;
       if (!packs || !r.key) continue;
       await db

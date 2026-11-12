@@ -34,15 +34,34 @@ export function RecipeImage({ recipe, className = '' }: { recipe: Pick<RecipeSum
   return <img src={recipe.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} className={`object-cover ${className}`} />;
 }
 
-type Tab = 'all' | 'cook-now' | 'nearly' | 'use-it-up';
+export type RecipeTab = 'all' | 'cook-now' | 'nearly' | 'use-it-up';
+type Tab = RecipeTab;
 type View = 'gallery' | 'table';
 
-const TAB_HELP: Record<Tab, string> = {
-  all: 'Every recipe, A to Z.',
-  'cook-now': 'Everything they need is in stock.',
-  nearly: 'Missing one to three things.',
-  'use-it-up': 'Ranked by how much soon-to-expire food they use.',
-};
+/** The recipe views, used on the Recipes page and in the Calendar's pane. */
+export const RECIPE_TABS: { id: RecipeTab; label: string; help: string }[] = [
+  { id: 'all', label: 'All', help: 'Every recipe, A to Z.' },
+  { id: 'cook-now', label: 'Ready to cook', help: 'Everything it needs is in stock.' },
+  { id: 'nearly', label: 'Missing a few', help: 'In stock except for one to three things.' },
+  { id: 'use-it-up', label: 'Use it up', help: "Uses food that's going off soon, best first." },
+];
+const TAB_HELP = Object.fromEntries(RECIPE_TABS.map((t) => [t.id, t.help])) as Record<Tab, string>;
+
+/** Whether a recipe belongs in a view, from its score. */
+export function inRecipeTab(s: RecipeScore | undefined, t: RecipeTab): boolean {
+  if (t === 'all') return true;
+  if (!s) return false;
+  if (t === 'cook-now') return s.cookNow;
+  if (t === 'nearly') return !s.cookNow && s.missing.length >= 1 && s.missing.length <= 3;
+  return s.uses.length > 0;
+}
+
+/** Recipes in a view, in that view's order (Use it up: most saved first; Missing a few: fewest missing first). */
+export function sortForTab<T extends { id: string }>(list: T[], byId: Map<string, RecipeScore>, t: RecipeTab): T[] {
+  if (t === 'use-it-up') return [...list].sort((a, b) => (byId.get(b.id)?.score ?? 0) - (byId.get(a.id)?.score ?? 0));
+  if (t === 'nearly') return [...list].sort((a, b) => (byId.get(a.id)?.missing.length ?? 9) - (byId.get(b.id)?.missing.length ?? 9));
+  return list;
+}
 
 function daysUntil(date: string, on: string): number {
   return Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${on}T00:00:00Z`)) / 86_400_000);
@@ -98,18 +117,10 @@ export function RecipesPage() {
       // Not remembered.
     }
   };
-  const inTab = (r: RecipeSummaryDto, t: Tab) => {
-    const s = byId.get(r.id);
-    if (t === 'all') return true;
-    if (!s) return false;
-    if (t === 'cook-now') return s.cookNow;
-    if (t === 'nearly') return !s.cookNow && s.missing.length >= 1 && s.missing.length <= 3;
-    return s.uses.length > 0;
-  };
+  const inTab = (r: RecipeSummaryDto, t: Tab) => inRecipeTab(byId.get(r.id), t);
   const count = (t: Tab) => (recipes.data ?? []).filter((r) => inTab(r, t)).length;
   let shown = (recipes.data ?? []).filter((r) => (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q)) && (!tag || r.tags.includes(tag)) && inTab(r, tab));
-  if (tab === 'use-it-up') shown = [...shown].sort((a, b) => (byId.get(b.id)?.score ?? 0) - (byId.get(a.id)?.score ?? 0));
-  if (tab === 'nearly') shown = [...shown].sort((a, b) => (byId.get(a.id)?.missing.length ?? 9) - (byId.get(b.id)?.missing.length ?? 9));
+  shown = sortForTab(shown, byId, tab);
 
   const plan = (r: RecipeSummaryDto) => setPlanning({ kind: 'recipe', id: r.id, title: r.title, servings: r.serves });
   const cook = (r: RecipeSummaryDto) => navigate(`/recipes/${r.id}/cook?servings=${r.serves}`);
@@ -190,14 +201,7 @@ export function RecipesPage() {
         }
       />
       <div role="tablist" aria-label="Which recipes" className="no-scrollbar -mx-4 mb-2 flex gap-1 overflow-x-auto border-b border-line px-4 lg:mx-0 lg:px-0">
-        {(
-          [
-            ['all', 'All'],
-            ['cook-now', 'Cook now'],
-            ['nearly', 'Nearly there'],
-            ['use-it-up', 'Use it up'],
-          ] as const
-        ).map(([t, label]) => (
+        {RECIPE_TABS.map(({ id: t, label }) => (
           <button
             key={t}
             role="tab"

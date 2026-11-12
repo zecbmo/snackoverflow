@@ -50,7 +50,7 @@ export async function pricingRoutes(app: FastifyInstance) {
   app.get('/api/shopping/estimate', async (req): Promise<ShoppingEstimateDto> => {
     const auth = requireAuth(req);
     if (!pricingOn(ctx, auth.household)) return { enabled: false, totalPence: null, priced: 0, unpriced: 0 };
-    const items = (await listShopping(ctx.db, auth, true)).filter((i) => !i.checked);
+    const items = (await listShopping(ctx.db, auth, true, ctx.now())).filter((i) => !i.checked);
     const priced = items.filter((i) => i.pricePence !== null);
     return {
       enabled: true,

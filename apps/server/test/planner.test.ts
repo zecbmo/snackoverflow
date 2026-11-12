@@ -194,13 +194,33 @@ describe('shopping list', () => {
     const list = await api.get<ShoppingItemDto[]>('/api/shopping');
     // 100g of potatoes and none in stock: buy the smallest bag (1kg) and know 900g will be spare.
     expect(list).toEqual([
-      expect.objectContaining({ text: 'Potatoes', aisle: 'Veg', reason: 'plan', packs: 1, packGrams: 1000, packLabel: '1kg', surplusGrams: 900, surplusLabel: '900g', forMeals: 'Fish pie', grams: 100 }),
+      expect.objectContaining({ text: 'Potatoes', aisle: 'Veg', foodGroup: 'Vegetables', reason: 'plan', packs: 1, packGrams: 1000, packLabel: '1kg', needLabel: '100g', surplusGrams: 900, surplusLabel: '900g', forMeals: 'Fish pie', grams: 100 }),
     ]);
     // Rebuilding updates rather than duplicating; with potatoes in stock it's covered.
     await api.post<ScanAddResult>('/api/scan/add', { barcode: '3002' });
     const again = await api.post<BuildListResultDto>('/api/shopping/build', { from: '2026-11-12', to: '2026-11-18' });
     expect(again).toMatchObject({ added: 0, covered: 1 });
     expect(await api.get('/api/shopping')).toEqual([]);
+  });
+
+  it("shows what the plan is short by on items added by hand too", async () => {
+    // The plan wants 520g of tomatoes; 500g are in stock and a pack was added to the list by hand.
+    const salad = await api.post<RecipeDto>('/api/recipes', {
+      title: 'Tomato salad',
+      serves: 2,
+      ingredients: [{ text: '520g tomatoes', amount: 520, unit: 'g', ingredientId: ing.tomatoes!.id }],
+    });
+    const vine = await api.post<ProductDto>('/api/products', { name: 'Vine Tomatoes', packAmount: 500, packUnit: 'g', ingredientId: ing.tomatoes!.id });
+    expect(vine.foodGroup).toBe('Vegetables');
+    await api.post('/api/stock', { productId: vine.id, locationId: loc.fridge.id });
+    expect((await api.get<StockItemDto[]>('/api/stock')).find((s) => s.productId === vine.id)?.foodGroup).toBe('Vegetables');
+    await api.post('/api/plan', { date: '2026-11-13', slot: 'lunch', kind: 'recipe', recipeId: salad.id, servings: 2 });
+    await api.post('/api/shopping', { productId: vine.id });
+    const item = (await api.get<ShoppingItemDto[]>('/api/shopping')).find((i) => i.productId === vine.id);
+    expect(item).toMatchObject({ reason: 'manual', needLabel: '20g', foodGroup: 'Vegetables' });
+    // A product can have its own category.
+    const snack = await api.patch<ProductDto>(`/api/products/${vine.id}`, { foodGroup: 'Snacks' });
+    expect(snack).toMatchObject({ foodGroup: 'Snacks', ownFoodGroup: 'Snacks' });
   });
 
   it('adds manual items, merges duplicates, ticks and clears', async () => {

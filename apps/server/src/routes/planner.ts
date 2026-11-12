@@ -105,7 +105,7 @@ export async function plannerRoutes(app: FastifyInstance) {
   // --- Shopping list -------------------------------------------------------------------
   app.get('/api/shopping', async (req) => {
     const auth = requireAuth(req);
-    return listShopping(ctx.db, auth, pricingOn(ctx, auth.household));
+    return listShopping(ctx.db, auth, pricingOn(ctx, auth.household), ctx.now());
   });
 
   app.post('/api/shopping', async (req) => {
@@ -114,7 +114,7 @@ export async function plannerRoutes(app: FastifyInstance) {
     const id = await addItem(ctx.db, auth, input);
     ctx.live.publish(auth.household.id, 'shopping');
     void notifyListChanged(auth.user.id, auth.household.id, auth.user.name, input.text ?? null);
-    return { id, items: await listShopping(ctx.db, auth, pricingOn(ctx, auth.household)) };
+    return { id, items: await listShopping(ctx.db, auth, pricingOn(ctx, auth.household), ctx.now()) };
   });
 
   app.patch<{ Params: { id: string } }>('/api/shopping/:id', async (req) => {

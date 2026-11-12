@@ -71,6 +71,8 @@ export interface IngredientDto {
   countUnit: string | null;
   /** How it's sold and measured: 'ml' for liquids, 'count' for eggs, 'g' otherwise (null: not known). */
   packUnit: string | null;
+  /** Category, e.g. "Dairy" (see FOOD_GROUPS). */
+  foodGroup: string | null;
   trackRunningLow: boolean;
   /** Effective shelf life (own values, then the category). */
   shelfLife: ShelfLife;
@@ -99,6 +101,10 @@ export interface ProductDto {
   pricePence: number | null;
   /** One item of a multipack, in grams (null: an item is the whole pack). */
   portionGrams: number | null;
+  /** Category: the product's own, else its ingredient's. */
+  foodGroup: string | null;
+  /** The product's own category, when set (for editing). */
+  ownFoodGroup: string | null;
 }
 
 export interface StockItemDto {
@@ -125,6 +131,8 @@ export interface StockItemDto {
   addedAt: string;
   /** A cooked meal (leftovers or batch-cook portions), counted in portions. */
   isMeal: boolean;
+  /** Category, e.g. "Dairy": the product's own, else its ingredient's. */
+  foodGroup: string | null;
   /** Which actions make sense right now, with a reason when they don't. */
   actions: {
     open: string | null;
@@ -397,8 +405,10 @@ export interface ShoppingItemDto {
   surplusGrams: number | null;
   /** The spare amount, said the same way. */
   surplusLabel: string | null;
-  /** For plan items: how much the planned meals are short by ("20g", "300ml"), before rounding up to packs. */
+  /** How much the planned meals are short by ("20g", "300ml") after what's in stock; null when nothing is short. */
   needLabel: string | null;
+  /** Category, e.g. "Vegetables" (null: unknown, such as free text). */
+  foodGroup: string | null;
   reason: 'plan' | 'running-low' | 'manual';
   /** Estimated cost of this line in pence; null when pricing is off or unknown. */
   pricePence: number | null;

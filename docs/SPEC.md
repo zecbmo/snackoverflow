@@ -28,6 +28,7 @@ The key split is **Ingredient** (generic, e.g. "Potatoes", what recipes use) ver
 | Household | Name, settings, default locations | One per install to start; the model allows more later |
 | User | Name, email, role (admin / member), notification preferences | Admins manage users and settings |
 | Location | Name, type (cupboard / fridge / freezer), icon | Type drives shelf-life rules, e.g. freezer dates |
+| Food group (Category) | One of 17 fixed groups (Meat, Fish & Seafood, Fruit, Vegetables, Bread & Bakery, Dairy, Grains & Cereals, Tinned & Canned Food, Frozen Food, Dried Food, Chilled & Prepared Food, Snacks, Sweets & Confectionery, Sauces & Condiments, Herbs & Spices, Oils & Fats, Drinks) | Ingredients get theirs from the seed data; a product can override its ingredient's |
 | Ingredient | Name, category, base unit, unit conversions, shelf life (closed / opened / frozen / defrosted), nutrition per 100g, typical pack sizes, "track running low" flag | Generic; shared by recipes, plan and list |
 | Product | Barcodes, name, brand, image, pack size, nutrition, linked ingredient (optional), learned shelf life, last known price | Created from Open Food Facts or by hand on an unknown scan, then remembered |
 | Stock item | Product, location, quantity left (grams), state (closed / opened / frozen / defrosted), best-before, added / opened / frozen dates, added by | One per scanned pack; also used for leftovers and batch-cook portions |
@@ -131,7 +132,7 @@ It works out the surplus for every ingredient: what you have, plus what the shop
 
 **Shopping list.** Planning and shopping are separate steps: make a plan, then tap "Build list from plan". There is one shared list, grouped by category (veg, dairy, tins...), and the user decides which shop to visit.
 
-- Plan items: what the plan needs, minus stock, minus what is already on the list, rounded up to whole packs. The list shows both: **Needed** (what the meals are short by, e.g. 20g of tomatoes) and **To buy** (whole packs), plus the spare.
+- Plan items: what the plan needs, minus stock, minus what is already on the list, rounded up to whole packs. The list shows **Category**, **Needed** (what the planned meals are short by after stock, e.g. 20g of tomatoes, on any item for that food, however it was added) and **To buy** (whole packs). It can be grouped by category (none by default).
 - Running low: staples like salt or oil are flagged "track running low". The app estimates when they will run out from usage rate, and adds them or sends a reminder. One tap marks anything as running low.
 - Manual items, free text allowed.
 - Items on the list count as "coming" in the planner and optimiser.
@@ -179,12 +180,12 @@ Phones have five tabs (Today, Stock, Scan, Calendar, Shop) with Scan as a large 
 | Screen | Main content | Key actions |
 | --- | --- | --- |
 | Today (home) | Today's meals, "use soon" strip (next 3 days), running-low nudges, quick stats | Cooked / skip, Use / Freeze from the strip |
-| Stock | A table with quick filters (All / Fridge / Freezer / Cupboard) and quick grouping (None / Location / Freshness), search, filter (including batch cooks and leftovers), sort, and a Columns picker to show or hide columns; columns Where, State (an icon: opened, frozen, defrosted), Packs, Amount (ml for liquids; ~ marks an estimate for opened packs), Planned (shown red when there isn't enough for the planned meals, or with the shopping-list mark when it's on the list) and Best before | Use, Freeze or Defrost and Bin on every row; Move, Mark as opened and details in "⋯"; tick rows for bulk actions; the side panel adds Add to shopping list, and the table narrows beside it |
+| Stock | A table with quick filters (All / Fridge / Freezer / Cupboard) and quick grouping (None / Location / Freshness / Category), search, filter (including batch cooks and leftovers, and a Category submenu), sort, and a Columns picker to show or hide columns; columns Category, Where, State (an icon: opened, frozen, defrosted), Packs, Amount (ml for liquids; ~ marks an estimate for opened packs), Planned (shown red when there isn't enough for the planned meals, or with the shopping-list mark when it's on the list) and Best before | Use, Freeze or Defrost and Bin on every row; Move, Mark as opened and details in "⋯"; tick rows for bulk actions; the side panel adds Add to shopping list, and the table narrows beside it |
 | Scan (centre) | Full-screen camera, location (or meal slot) chip, mode switch (Add / Use / Eat), session counter | Continuous scan, undo, Done summary |
 | Calendar | Week grid per person with meal slots, each meal's calorie total and the day's total, and a right-hand pane of stock, recipes and leftovers | Drag from the pane onto a day and meal, drag a planned meal to move it, or back onto the pane to take it off (its food comes off the planned list); all undoable. Set the amount of a planned food by the item (one bar of a multipack, using the product's "one item weighs") or by weight (150g of chicken); eating it takes exactly that from stock. +Add, Suggest meals, Plan my week, Build list |
 | Shopping | One list grouped by category, estimated total if pricing is on, surplus hints | Tick off, Put away mode, Add item, Add from receipt |
 | Receipt review | Each receipt line with its matched product, quantity, location, best-before and price; uncertain matches highlighted | Fix match, skip line, Add to stock |
-| Recipes (from Calendar and Today) | Library with Cook now / Nearly there / Use it up filters | Import URL, Cook, Batch cook, Add to plan |
+| Recipes (from Calendar and Today) | Library with Ready to cook / Missing a few / Use it up filters | Import URL, Cook, Batch cook, Add to plan |
 | Item detail | Packs with dates and locations, history, product info, shelf-life settings | Edit dates, link to ingredient, merge duplicates |
 | Dashboard (from Today) | Calories per day with 7- and 30-day averages against each person's daily target; waste per week/month by item and category (kg, and £ if pricing is on); spending from receipts when pricing is on | Switch person (admins), 7 / 30 days |
 | Waste report (menu) | What was binned by week or month: a chart of the last 8 weeks or 6 months, by item and by category | Week / month |
@@ -258,7 +259,7 @@ Each phase ends with a working, deployable app.
 3. **Recipes and cooking.** URL import, AI clean-up, MCP endpoint, unit conversions, ingredient matching, cook with deductions, leftovers, batch cooks, calories.
 4. **Planner and shopping list.** Per-person week planner, planned-stock warnings, meal-time prompts, build list from plan with pack rounding, running-low tracking, put-away mode.
    **Receipts:** photo / upload / share and email-forward import, line matching with learned abbreviations, review screen, add to stock, tick off the list, save prices.
-5. **Optimiser and pricing.** Cook now / Nearly there / Use it up, Suggest meals, Plan my week, surplus hints, optional pricing with Open Prices.
+5. **Optimiser and pricing.** Ready to cook / Missing a few / Use it up, Suggest meals, Plan my week, surplus hints, optional pricing with Open Prices.
 6. **Polish.** Dashboard (calories per day and averages per person, waste and spending stats), design refinements from real use.
 
 ## Decisions

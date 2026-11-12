@@ -109,6 +109,7 @@ export function ingredientDto(i: IngredientRow, catalog: Catalog): IngredientDto
     gramsPerCount: i.gramsPerCount,
     countUnit: i.countUnit,
     packUnit: i.packUnit,
+    foodGroup: i.foodGroup,
     trackRunningLow: i.trackRunningLow,
     shelfLife: ingredientShelfLife(i, catalog),
     overrides: { closedDays: i.closedDays, openedDays: i.openedDays, frozenDays: i.frozenDays, defrostedDays: i.defrostedDays },
@@ -135,6 +136,8 @@ export function productDto(p: ProductRow, codes: string[], catalog: Catalog, pri
     source: p.source,
     pricePence,
     portionGrams: p.portionGrams,
+    foodGroup: p.foodGroup ?? (p.ingredientId ? (catalog.ingredients.get(p.ingredientId)?.foodGroup ?? null) : null),
+    ownFoodGroup: p.foodGroup,
   };
 }
 

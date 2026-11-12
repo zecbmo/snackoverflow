@@ -1,6 +1,6 @@
 /** The product fields, shared by "Add product" and the product screen. */
 import { type FormEvent, useState } from 'react';
-import type { ProductDto, ProductInput } from '@snackoverflow/shared';
+import { FOOD_GROUPS, type ProductDto, type ProductInput } from '@snackoverflow/shared';
 import { Button, ErrorNote, Field, Select, TextInput } from '../components/ui';
 import { useIngredients, useShelfLife } from '../lib/queries';
 
@@ -31,6 +31,8 @@ export function ProductForm({
   const [packUnit, setPackUnit] = useState(product?.packUnit ?? 'g');
   const [ingredientId, setIngredientId] = useState(product?.ingredientId ?? '');
   const [categoryId, setCategoryId] = useState(product?.shelfLifeCategoryId ?? '');
+  const [foodGroup, setFoodGroup] = useState(product?.ownFoodGroup ?? '');
+  const ingredientGroup = ingredients.find((i) => i.id === ingredientId)?.foodGroup ?? null;
   const [codes, setCodes] = useState(product?.barcodes.join(', ') ?? '');
   const [itemGrams, setItemGrams] = useState(product?.portionGrams != null ? String(product.portionGrams) : '');
   const [error, setError] = useState<unknown>(null);
@@ -54,6 +56,7 @@ export function ProductForm({
         portionGrams: itemGrams.trim() === '' ? null : Number(itemGrams),
         ingredientId: ingredientId || null,
         ...(showCategory ? { shelfLifeCategoryId: categoryId || null } : {}),
+        foodGroup: (foodGroup || null) as ProductInput['foodGroup'],
         barcodes: codes
           .split(/[\s,]+/)
           .map((c) => c.trim())
@@ -98,6 +101,18 @@ export function ProductForm({
             {ingredients.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.name}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+      <Field label="Category" hint={`Leave on "From its ingredient" unless it's different.`}>
+        {(id) => (
+          <Select id={id} value={foodGroup} onChange={(e) => setFoodGroup(e.target.value)}>
+            <option value="">From its ingredient{ingredientGroup ? ` (${ingredientGroup})` : ''}</option>
+            {FOOD_GROUPS.map((g) => (
+              <option key={g} value={g}>
+                {g}
               </option>
             ))}
           </Select>

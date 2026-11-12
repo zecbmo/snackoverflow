@@ -36,6 +36,7 @@ export function ProductsPage() {
   const columns: Column<ProductDto>[] = [
     { key: 'name', header: 'Name', primary: true, className: 'max-w-[20rem]', cell: (p) => <span className={p.name ? '' : 'text-muted'}>{p.name ?? 'Unnamed product'}</span> },
     { key: 'brand', header: 'Brand', cell: (p) => p.brand ?? '' },
+    { key: 'category', header: 'Category', className: 'whitespace-nowrap', cell: (p) => p.foodGroup ?? '' },
     { key: 'ingredient', header: 'Ingredient', cell: (p) => p.ingredientName ?? <span className="text-fresh-amber-text">Not linked</span> },
     { key: 'pack', header: 'Pack', className: 'whitespace-nowrap', cell: packLabel },
     { key: 'barcode', header: 'Barcode', className: 'whitespace-nowrap tabular-nums', cell: (p) => (p.barcodes.length ? `${p.barcodes[0]}${p.barcodes.length > 1 ? ` +${p.barcodes.length - 1}` : ''}` : '') },

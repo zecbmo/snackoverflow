@@ -5,7 +5,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { addDays, formatPence, type ShoppingItemDto } from '@snackoverflow/shared';
+import { addDays, FOOD_GROUPS, formatPence, type ShoppingItemDto } from '@snackoverflow/shared';
 import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
 import { type Column, ColumnsMenu, DataTable, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
@@ -16,7 +16,7 @@ import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
 import { Button, EmptyState, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useIngredients, useRunningLow, useShopping, useSurplus, useUsers } from '../lib/queries';
-import { matchesSearch } from '../lib/table';
+import { groupRows, matchesSearch } from '../lib/table';
 
 /** "Potatoes, 2.5kg bag", "Red peppers × 3", "Milk × 2". */
 export function itemTitle(i: ShoppingItemDto): string {
@@ -26,22 +26,6 @@ export function itemTitle(i: ShoppingItemDto): string {
   return i.packs > 1 ? `${i.text} × ${i.packs}` : i.text;
 }
 
-/** What it's for: the planned meals, "Running low", or who added it. */
-function forText(i: ShoppingItemDto): string {
-  if (i.reason === 'plan' && i.forMeals) return i.forMeals;
-  if (i.reason === 'running-low') return 'Running low';
-  if (i.reason === 'manual' && i.addedByName) return `Added by ${i.addedByName}`;
-  return '';
-}
-
-function itemDetail(i: ShoppingItemDto): string {
-  const parts: string[] = [];
-  if (i.reason === 'plan' && i.forMeals) parts.push(i.forMeals);
-  if (i.reason === 'running-low') parts.push('Running low');
-  if (i.reason === 'manual' && i.addedByName) parts.push(`Added by ${i.addedByName}`);
-  if (i.surplusGrams && i.surplusGrams >= 50 && i.surplusLabel) parts.push(`${i.surplusLabel} spare`);
-  return parts.join(' · ');
-}
 
 export function ShoppingPage() {
   const me = useMe();
@@ -54,15 +38,14 @@ export function ShoppingPage() {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState('');
   const [show, setShow] = useState<'to-get' | 'got' | 'all'>('all');
-  const [group, setGroup] = useState<'aisle' | 'none'>('aisle');
-  const [hiddenColumns, toggleColumn] = useHiddenColumns('shopping', ['aisle']);
+  const [group, setGroup] = useState<'none' | 'category'>('none');
+  const [hiddenColumns, toggleColumn] = useHiddenColumns('shopping-list');
   const items = useMemo(() => (list.data ?? []).map((i) => (i.id in pending ? { ...i, checked: pending[i.id]! } : i)), [list.data, pending]);
   const toGet = items.filter((i) => !i.checked);
   const pricing = me.household.settings.pricingEnabled;
   const pricedToGet = toGet.filter((i) => i.pricePence !== null);
   const estimate = pricedToGet.length ? pricedToGet.reduce((sum, i) => sum + i.pricePence!, 0) : null;
   const ticked = items.filter((i) => i.checked);
-  const aisles = useMemo(() => [...new Set(items.map((i) => i.aisle))], [items]);
   const surplus = useSurplus().data ?? [];
   const people = Math.max(1, useUsers().data?.length ?? 2);
   const [planning, setPlanning] = useState<PlanTarget | null>(null);
@@ -115,7 +98,7 @@ export function ShoppingPage() {
   const columns: Column<ShoppingItemDto>[] = [
     { key: 'got', header: <span className="sr-only">Got it</span>, hideable: false, className: 'w-8 pr-0', cell: (i) => <GotBox item={i} onTick={tick} /> },
     { key: 'item', header: 'Item', hideable: false, cell: (i) => <span className={`font-semibold ${i.checked ? 'text-muted line-through' : 'text-ink'}`}>{i.text}</span> },
-    { key: 'aisle', header: 'Aisle', cell: (i) => i.aisle },
+    { key: 'category', header: 'Category', className: 'whitespace-nowrap', cell: (i) => i.foodGroup ?? '' },
     {
       key: 'need',
       label: 'Needed',
@@ -131,14 +114,15 @@ export function ShoppingPage() {
       className: 'whitespace-nowrap',
       cell: (i) => (i.packLabel ? `${i.packs} × ${i.packLabel}` : i.packs > 1 ? `× ${i.packs}` : '1'),
     },
-    { key: 'spare', label: 'Spare', header: <span title="Left over after the planned meals">Spare</span>, align: 'right', className: 'whitespace-nowrap tabular-nums text-muted', cell: (i) => (i.surplusGrams && i.surplusGrams >= 50 && i.surplusLabel ? i.surplusLabel : '') },
-    { key: 'for', header: 'For', className: 'max-w-[18rem] truncate', cell: (i) => forText(i) },
   ];
   if (pricing) {
     columns.push({ key: 'price', header: 'Price', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (i) => (i.pricePence !== null ? formatPence(i.pricePence) : '') });
   }
   const shown = items.filter((i) => (show === 'all' || (show === 'got' ? i.checked : !i.checked)) && (!q || matchesSearch(`${i.text} ${i.forMeals ?? ''} ${i.aisle}`, q)));
-  const groups = group === 'aisle' ? aisles.map((a) => ({ key: a, label: a, rows: shown.filter((i) => i.aisle === a) })).filter((g) => g.rows.length) : undefined;
+  const groups =
+    group === 'category'
+      ? groupRows(shown, (i) => i.foodGroup ?? 'Other', [...FOOD_GROUPS, 'Other']).map((g) => ({ key: g.key, label: g.key, rows: g.rows }))
+      : undefined;
   const putAwayButton =
     ticked.length > 0 ? (
       <Button variant="primary" onClick={() => void putAway()}>
@@ -191,8 +175,8 @@ export function ShoppingPage() {
           value={group}
           onChange={setGroup}
           options={[
-            { value: 'aisle', label: 'Aisle' },
             { value: 'none', label: 'None' },
+            { value: 'category', label: 'Category' },
           ]}
         />
         <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
@@ -265,7 +249,7 @@ export function ShoppingPage() {
             phone={(i) => ({
               lead: <GotBox item={i} onTick={tick} />,
               title: <span className={i.checked ? 'text-muted line-through' : ''}>{itemTitle(i)}</span>,
-              meta: itemDetail(i) || undefined,
+              meta: [i.needLabel ? `Need ${i.needLabel}` : null, i.packLabel ? `${i.packs} × ${i.packLabel}` : null, i.foodGroup].filter(Boolean).join(' · ') || undefined,
               badge: (
                 <span className="flex shrink-0 items-center gap-1">
                   {pricing && i.pricePence !== null && <span className="text-sm font-semibold tabular-nums text-muted">{formatPence(i.pricePence)}</span>}

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { isCalendarDate } from './dates';
 import { LOCATION_TYPES, STOCK_STATES } from './shelfLife';
 import { MEAL_SLOTS } from './shopping';
+import { FOOD_GROUPS } from './foodGroups';
 
 export const calendarDate = z.string().refine(isCalendarDate, { message: 'Must be a date (YYYY-MM-DD)' });
 export const id = z.uuid();
@@ -92,6 +93,7 @@ export const ingredientInput = z.object({
   countUnit: z.string().trim().max(30).nullish(),
   trackRunningLow: z.boolean().optional(),
   shelfLife: shelfLifeInput.optional(),
+  foodGroup: z.enum(FOOD_GROUPS).nullish(),
 });
 
 export const nutritionInput = z
@@ -120,6 +122,8 @@ export const productInput = z.object({
   nutritionPer100g: nutritionInput.nullish(),
   /** One item of a multipack (a single bar of four), in grams: lets people plan and eat one at a time. */
   portionGrams: z.number().positive().max(100_000).nullish(),
+  /** Overrides the ingredient's food group; null means "from its ingredient". */
+  foodGroup: z.enum(FOOD_GROUPS).nullish(),
   barcodes: z.array(z.string().trim().regex(/^[0-9A-Za-z-]{4,64}$/, 'Not a valid barcode')).optional(),
 });
 export const updateProductInput = productInput.partial();

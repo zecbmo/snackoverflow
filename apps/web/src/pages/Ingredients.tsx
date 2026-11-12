@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
-import type { IngredientDto, IngredientInput, ShelfLife } from '@snackoverflow/shared';
+import { FOOD_GROUPS, type IngredientDto, type IngredientInput, type ShelfLife } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton } from '../components/Layout';
 import { useToast } from '../components/Toast';
@@ -24,7 +24,7 @@ function shelfSummary(s: ShelfLife): string {
 export function IngredientsPage() {
   const ingredients = useIngredients();
   const [q, setQ] = useState('');
-  const [group, setGroup] = useState<'none' | 'aisle'>('none');
+  const [group, setGroup] = useState<'none' | 'aisle' | 'category'>('none');
   const [adding, setAdding] = useState(false);
   const [openId, openPanel, closePanel] = usePanelParam();
   const list = (ingredients.data ?? []).filter((i) => !q.trim() || matchesSearch(`${i.name} ${i.aisle ?? ''}`, q));
@@ -32,12 +32,18 @@ export function IngredientsPage() {
   const days = (n: number | null) => (n === null ? '' : `${n} d`);
   const columns: Column<IngredientDto>[] = [
     { key: 'name', header: 'Name', primary: true, cell: (i) => i.name },
+    { key: 'category', header: 'Category', cell: (i) => i.foodGroup ?? '' },
     { key: 'aisle', header: 'Aisle', cell: (i) => i.aisle ?? '' },
     { key: 'closed', header: 'Keeps', align: 'right', className: 'tabular-nums', cell: (i) => days(i.shelfLife.closedDays) },
     { key: 'opened', header: 'Once opened', align: 'right', className: 'tabular-nums', cell: (i) => days(i.shelfLife.openedDays) },
     { key: 'frozen', header: 'Frozen', align: 'right', className: 'tabular-nums', cell: (i) => (i.shelfLife.freezable === false ? 'No' : days(i.shelfLife.frozenDays)) },
   ];
-  const groups = group === 'aisle' ? groupRows(list, (i) => i.aisle ?? 'Other').map((g) => ({ key: g.key, label: g.key, rows: g.rows })) : undefined;
+  const groups =
+    group === 'aisle'
+      ? groupRows(list, (i) => i.aisle ?? 'Other').map((g) => ({ key: g.key, label: g.key, rows: g.rows }))
+      : group === 'category'
+        ? groupRows(list, (i) => i.foodGroup ?? 'Other', [...FOOD_GROUPS, 'Other']).map((g) => ({ key: g.key, label: g.key, rows: g.rows }))
+        : undefined;
 
   return (
     <>
@@ -60,6 +66,7 @@ export function IngredientsPage() {
           onChange={setGroup}
           options={[
             { value: 'none', label: 'No grouping' },
+            { value: 'category', label: 'Category' },
             { value: 'aisle', label: 'Aisle' },
           ]}
         />
@@ -100,6 +107,7 @@ function IngredientEditor({ ingredient, onDone }: { ingredient: IngredientDto | 
   const toast = useToast();
   const [name, setName] = useState(ingredient?.name ?? '');
   const [aisle, setAisle] = useState(ingredient?.aisle ?? '');
+  const [foodGroup, setFoodGroup] = useState(ingredient?.foodGroup ?? '');
   const [categoryId, setCategoryId] = useState(ingredient?.shelfLifeCategoryId ?? '');
   const [density, setDensity] = useState(str(ingredient?.densityGPerMl));
   const [perItem, setPerItem] = useState(str(ingredient?.gramsPerCount));
@@ -122,6 +130,7 @@ function IngredientEditor({ ingredient, onDone }: { ingredient: IngredientDto | 
     const input: IngredientInput = {
       name,
       aisle: aisle.trim() || null,
+      foodGroup: (foodGroup || null) as IngredientInput['foodGroup'],
       shelfLifeCategoryId: categoryId || null,
       densityGPerMl: numOrNull(density),
       gramsPerCount: numOrNull(perItem),
@@ -151,7 +160,19 @@ function IngredientEditor({ ingredient, onDone }: { ingredient: IngredientDto | 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
       <Field label="Name">{(id) => <TextInput id={id} required value={name} onChange={(e) => setName(e.target.value)} />}</Field>
-      <Field label="Aisle" hint="Groups the shopping list, e.g. Veg, Dairy, Tins and jars.">
+      <Field label="Category">
+        {(id) => (
+          <Select id={id} value={foodGroup} onChange={(e) => setFoodGroup(e.target.value)}>
+            <option value="">Not set</option>
+            {FOOD_GROUPS.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+      <Field label="Aisle" hint="Where it is in the shop, e.g. Veg, Dairy, Tins and jars.">
         {(id) => <TextInput id={id} value={aisle} onChange={(e) => setAisle(e.target.value)} />}
       </Field>
       <Field label="Shelf-life category">

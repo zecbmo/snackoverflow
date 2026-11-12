@@ -100,6 +100,7 @@ export function toStockDto(
     gramsPerCount: measures.gramsPerCount ?? null,
     addedAt: item.addedAt.toISOString(),
     isMeal: product.recipeId !== null,
+    foodGroup: product.foodGroup ?? (product.ingredientId ? (catalog.ingredients.get(product.ingredientId)?.foodGroup ?? null) : null),
     actions: {
       open: open.ok ? null : open.reason,
       freeze: freeze.ok ? null : freeze.reason,

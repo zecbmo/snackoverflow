@@ -26,9 +26,11 @@ test('plan a dinner, shop for it and put it away', async ({ page }, info) => {
   // Build the list: sold in 500g packs.
   await page.getByRole('button', { name: 'Build shopping list' }).click();
   await expect(page).toHaveURL(/\/shop$/);
-  const item = page.getByRole('checkbox', { name: /Got Pasta, .*500g/ });
+  // Whole packs (the size depends on everything planned this week), with its category and what the plan is short by.
+  const item = page.getByRole('checkbox', { name: /Got Pasta, \d/ });
   await expect(item).toBeVisible();
-  await expect(page.getByText(new RegExp(title)).first()).toBeVisible();
+  await expect(page.getByText('Grains & Cereals').first()).toBeVisible();
+  await expect(page.getByText(info.project.name === 'phone' ? /Need \d/ : /^\d+(\.\d+)?k?g$/).first()).toBeVisible();
 
   // Tick it off and put it away in one tap.
   await item.check();

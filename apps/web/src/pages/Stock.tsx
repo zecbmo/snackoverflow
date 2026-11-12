@@ -6,7 +6,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { addDays, amountText, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
+import { addDays, amountText, FOOD_GROUPS, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
 import { type Column, ColumnsMenu, DataTable, StatusDot, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
@@ -34,7 +34,7 @@ export function StockActionsRow({ item }: { item: StockItemDto }) {
 
 type FilterId = string; // 'all' | 'opened' | 'frozen' | 'soon' | `loc:${id}`
 type SortId = 'best-before' | 'name' | 'location' | 'added';
-type GroupId = 'none' | 'location' | 'status';
+type GroupId = 'none' | 'location' | 'status' | 'category';
 
 const STATUS: Record<Tone, string> = { red: 'Use first', amber: 'This week', green: 'Fine', blue: 'Frozen', grey: 'No date' };
 const STATUS_ORDER = [STATUS.red, STATUS.amber, STATUS.green, STATUS.blue, STATUS.grey];
@@ -91,6 +91,7 @@ export function StockPage() {
   const [filter, setFilter] = useState<FilterId>('all');
   const [sort, setSort] = useState<SortId>('best-before');
   const [group, setGroup] = useState<GroupId>('none');
+  const [category, setCategory] = useState('');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hiddenColumns, toggleColumn] = useHiddenColumns('stock');
@@ -105,6 +106,7 @@ export function StockPage() {
       if (filter === 'frozen' && i.state !== 'frozen') return false;
       if (filter === 'soon' && (i.state === 'frozen' || !i.bestBefore || i.bestBefore > soon)) return false;
       if (filter === 'meals' && !i.isMeal) return false;
+      if (category && (i.foodGroup ?? 'Other') !== category) return false;
       return !q || matchesSearch(`${i.productName} ${i.brand ?? ''} ${i.locationName}`, q);
     });
     const groups = groupStock(items);
@@ -112,7 +114,7 @@ export function StockPage() {
     if (sort === 'location') return sortRows(groups, (g) => g.locationName);
     if (sort === 'added') return sortRows(groups, (g) => g.packs.reduce((m, p) => (p.addedAt > m ? p.addedAt : m), ''), 'desc');
     return groups; // The server sends stock in best-before order.
-  }, [stock.data, place, filter, sort, q, me.today]);
+  }, [stock.data, place, filter, category, sort, q, me.today]);
 
   const tables = useMemo(() => {
     if (group === 'location') {
@@ -120,6 +122,7 @@ export function StockPage() {
       return groupRows(rows, (g) => g.locationName, order).map((x) => ({ key: x.key, label: x.key, rows: x.rows }));
     }
     if (group === 'status') return groupRows(rows, (g) => STATUS[toneFor(g.first, me.today)], STATUS_ORDER).map((x) => ({ key: x.key, label: x.key, rows: x.rows }));
+    if (group === 'category') return groupRows(rows, (g) => g.first.foodGroup ?? 'Other', [...FOOD_GROUPS, 'Other']).map((x) => ({ key: x.key, label: x.key, rows: x.rows }));
     return undefined;
   }, [rows, group, locations, me.today]);
 
@@ -166,6 +169,7 @@ export function StockPage() {
       cell: (g) => <StatusDot className={toneClasses[toneFor(g.first, me.today)].dot} meaning={toneMeaning[toneFor(g.first, me.today)]} />,
     },
     { key: 'name', header: 'Item', primary: true, cell: (g) => g.name, className: 'max-w-[18rem]' },
+    { key: 'category', header: 'Category', className: 'whitespace-nowrap', cell: (g) => g.first.foodGroup ?? '' },
     { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (g) => g.locationName },
     { key: 'state', label: 'State', header: <span title="Opened, frozen or defrosted">State</span>, className: 'w-14', cell: (g) => <StateIcon g={g} /> },
     { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : g.packs.length) },
@@ -217,7 +221,35 @@ export function StockPage() {
       >
         <Segmented label="Where" value={place} onChange={setPlace} options={places} />
         <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
-        <PickerMenu label="Filter" icon="filter" value={filter} defaultValue="all" options={filterOptions} onChange={setFilter} />
+        <Menu
+          label="Filter"
+          align="start"
+          items={[
+            ...filterOptions.map((o) => ({ label: o.label, checked: o.value === filter, onSelect: () => setFilter(o.value) })),
+            'divider' as const,
+            {
+              label: category ? `Category: ${category}` : 'Category',
+              icon: 'tag' as const,
+              onSelect: () => undefined,
+              submenu: [
+                { label: 'All categories', checked: category === '', onSelect: () => setCategory('') },
+                ...[...FOOD_GROUPS, 'Other'].map((c) => ({ label: c, checked: category === c, onSelect: () => setCategory(c) })),
+              ],
+            },
+          ]}
+          triggerClassName={`inline-flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-sm font-medium lg:min-h-8 lg:rounded-md ${
+            filter !== 'all' || category ? 'bg-accent-soft text-accent-text' : 'text-ink hover:bg-card-muted'
+          }`}
+          trigger={
+            <>
+              <Icon name="filter" className="size-4" />
+              Filter
+              {(filter !== 'all' || category) && (
+                <span className="font-semibold">: {[filter !== 'all' ? filterOptions.find((o) => o.value === filter)?.label : null, category || null].filter(Boolean).join(', ')}</span>
+              )}
+            </>
+          }
+        />
         <PickerMenu
           label="Sort"
           icon="sort"
@@ -241,6 +273,7 @@ export function StockPage() {
             { value: 'none', label: 'None' },
             { value: 'location', label: 'Location' },
             { value: 'status', label: 'Freshness' },
+            { value: 'category', label: 'Category' },
           ]}
         />
       </Toolbar>
@@ -276,8 +309,8 @@ export function StockPage() {
             actions: <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} compact />,
           })}
           empty={
-            <EmptyState title={q || filter !== 'all' || place !== 'all' ? 'Nothing matches' : 'Nothing in stock yet'}>
-              {q || filter !== 'all' || place !== 'all' ? (
+            <EmptyState title={q || filter !== 'all' || place !== 'all' || category ? 'Nothing matches' : 'Nothing in stock yet'}>
+              {q || filter !== 'all' || place !== 'all' || category ? (
                 <button
                   type="button"
                   className="font-semibold text-accent-text"
@@ -285,6 +318,7 @@ export function StockPage() {
                     setQ('');
                     setFilter('all');
                     setPlace('all');
+                    setCategory('');
                   }}
                 >
                   Clear the search and filter
