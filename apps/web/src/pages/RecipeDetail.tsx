@@ -40,9 +40,9 @@ export function RecipeDetailPage() {
   return (
     <>
       <PageHeader title={r.title} left={<BackButton to="/recipes" />} />
-      <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <div className="flex flex-col gap-5">
-          <RecipeImage recipe={r} className="h-52 w-full rounded-[18px] sm:h-72" />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <RecipeImage recipe={r} className="h-40 w-full rounded-[18px] sm:h-64" />
           <p className="text-muted">
             {[minutesLabel(r.prepMinutes) && `Prep ${minutesLabel(r.prepMinutes)}`, minutesLabel(r.cookMinutes) && `Cook ${minutesLabel(r.cookMinutes)}`, r.kcalPerServing && `${r.kcalPerServing} kcal a serving`]
               .filter(Boolean)
@@ -56,8 +56,8 @@ export function RecipeDetailPage() {
               </>
             )}
           </p>
-          <div className="grid grid-cols-2 gap-3">
-            <Link to={`/recipes/${r.id}/cook?servings=${n}`} className="inline-flex min-h-14 items-center justify-center rounded-xl bg-accent text-lg font-semibold text-accent-ink">
+          <div className="grid grid-cols-2 gap-3 lg:flex">
+            <Link to={`/recipes/${r.id}/cook?servings=${n}`} className="inline-flex min-h-12 items-center justify-center rounded-xl bg-accent px-8 font-semibold text-accent-ink">
               Cook
             </Link>
             <Button size="lg" variant="outline" onClick={() => setBatchOpen(true)}>

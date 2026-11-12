@@ -324,7 +324,7 @@ function TonightCard({ entry }: { entry: PlanEntryDto }) {
         <button
           type="button"
           onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}`)}
-          className="min-h-12 flex-1 rounded-xl bg-accent px-6 text-base font-semibold text-accent-ink lg:flex-none"
+          className="min-h-12 flex-1 whitespace-nowrap rounded-xl bg-accent px-4 text-base font-semibold text-accent-ink lg:flex-none"
         >
           Cooked it
         </button>

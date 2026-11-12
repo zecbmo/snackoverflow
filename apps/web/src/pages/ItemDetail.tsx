@@ -164,7 +164,7 @@ export function ItemDetailPage() {
           )}
         </dl>
         {!gone && (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap">
             <StockActionsRow item={item} />
             {item.actions.open === null && (
               <Button variant="outline" onClick={() => void actions.open(item)}>

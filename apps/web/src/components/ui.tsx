@@ -133,7 +133,7 @@ export function PageHeader({ title, subtitle, left, right }: { title: string; su
       {left}
       <div className="min-w-0 flex-1">
         {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
-        <h1 className="truncate text-2xl font-bold sm:text-3xl">{title}</h1>
+        <h1 className="line-clamp-2 text-2xl font-bold leading-tight sm:text-3xl">{title}</h1>
       </div>
       {right}
     </header>

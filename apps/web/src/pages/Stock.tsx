@@ -20,7 +20,7 @@ export function StockActionsRow({ item, onDone }: { item: StockItemDto; onDone?:
     onDone?.();
   };
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="grid grid-cols-4 gap-2 lg:flex lg:[&>button]:min-w-24">
       <Button variant="dark" onClick={after(() => actions.use(item))}>
         Use
       </Button>
@@ -120,8 +120,8 @@ export function StockPage() {
           </button>
         ))}
       </div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[0.9375rem] text-muted">
-        <span>Sorted by best-before</span>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
+        <span className="hidden sm:inline">Sorted by best-before</span>
         <span className="flex gap-3">
           {(['red', 'amber', 'green'] as const).map((tone) => (
             <span key={tone} className="inline-flex items-center gap-1.5">

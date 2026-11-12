@@ -184,7 +184,7 @@ export function CookPage() {
               </Card>
             ))}
             {short.length > 0 && <p className="text-[0.9375rem] text-muted">Short of {short.map((l) => l.ingredientName ?? l.text).join(', ')}. You can still cook; we'll take what's there.</p>}
-            <Button variant="primary" size="lg" onClick={() => setStep('keep')}>
+            <Button variant="primary" size="lg" className="lg:self-start lg:px-10" onClick={() => setStep('keep')}>
               Next
             </Button>
           </>

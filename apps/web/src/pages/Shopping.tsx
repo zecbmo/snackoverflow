@@ -103,7 +103,7 @@ export function ShoppingPage() {
         subtitle={`${toGet.length} to get${pricing && estimate !== null ? ` · about ${formatPence(estimate)}` : ''}`}
         left={<MenuButton />}
         right={
-          <button type="button" aria-label="Add to the list" onClick={() => setAdding(true)} className="inline-flex size-14 items-center justify-center rounded-full bg-strong text-strong-ink">
+          <button type="button" aria-label="Add to the list" onClick={() => setAdding(true)} className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink">
             <Icon name="plus" />
           </button>
         }
@@ -157,9 +157,11 @@ export function ShoppingPage() {
           </Button>
         </Card>
       )}
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <Button onClick={() => void build()}>Update from plan</Button>
-        <Link to="/receipts" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line bg-card font-semibold">
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:flex">
+        <Button className="whitespace-nowrap px-2 sm:px-4" onClick={() => void build()}>
+          Update from plan
+        </Button>
+        <Link to="/receipts" className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-xl border border-line bg-card px-2 text-[0.9375rem] font-semibold sm:px-4">
           Add from receipt
         </Link>
       </div>

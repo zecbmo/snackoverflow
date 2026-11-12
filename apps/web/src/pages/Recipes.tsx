@@ -83,10 +83,9 @@ export function RecipesPage() {
         left={<MenuButton />}
         right={
           <div className="flex gap-2">
-            <Link to="/recipes/import" className="inline-flex min-h-12 items-center gap-2 rounded-full bg-strong px-4 font-semibold text-strong-ink">
+            <Link to="/recipes/import" aria-label="Import a recipe from a link" className="inline-flex size-12 items-center justify-center gap-2 rounded-full bg-strong font-semibold text-strong-ink sm:w-auto sm:px-4">
               <Icon name="download" className="size-5" />
               <span className="hidden sm:inline">Import URL</span>
-              <span className="sm:hidden">Import</span>
             </Link>
             <Link to="/recipes/new" aria-label="New recipe" className="inline-flex size-12 items-center justify-center rounded-full border border-line bg-card">
               <Icon name="plus" />
