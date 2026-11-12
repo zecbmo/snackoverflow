@@ -3,6 +3,7 @@ import type { CalendarDate } from './dates';
 import type { Channel, NotificationPrefs, Nutrition, Role } from './schemas';
 import type { LocationType, ShelfLife, StockState } from './shelfLife';
 import type { DisplayUnit } from './units';
+import type { MealSlot } from './shopping';
 
 export interface UserDto {
   id: string;
@@ -187,7 +188,7 @@ export interface InviteDto {
 
 /** Messages pushed over the WebSocket so every phone stays in step. */
 export type LiveMessage = { type: 'invalidate'; topics: LiveTopic[] };
-export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household' | 'notifications' | 'recipes';
+export type LiveTopic = 'stock' | 'products' | 'ingredients' | 'locations' | 'users' | 'household' | 'notifications' | 'recipes' | 'plan' | 'shopping';
 
 export interface NotificationDto {
   id: string;
@@ -320,4 +321,88 @@ export interface CookResultDto {
   /** Packs whose numbers ran out: ask "Is there still some left?". */
   askStillSome: StockItemDto[];
   leftovers: StockItemDto[];
+}
+
+export interface PlanEntryDto {
+  id: string;
+  date: CalendarDate;
+  slot: MealSlot;
+  kind: 'recipe' | 'product' | 'stock' | 'text';
+  recipeId: string | null;
+  productId: string | null;
+  stockItemId: string | null;
+  title: string;
+  /** "From fridge", "Scanned", "Missing 1"… */
+  detail: string | null;
+  servings: number;
+  status: 'planned' | 'cooked' | 'skipped';
+  source: 'plan' | 'scan';
+  people: { userId: string; name: string; portions: number }[];
+  kcalPerServing: number | null;
+  /** Calories for the person being viewed (their share), or for the whole entry. */
+  kcal: number | null;
+}
+
+export interface PlanDayDto {
+  date: CalendarDate;
+  entries: PlanEntryDto[];
+  kcal: number;
+}
+
+export interface PlanDto {
+  from: CalendarDate;
+  to: CalendarDate;
+  /** Whose calendar this is; null = everyone. */
+  personId: string | null;
+  days: PlanDayDto[];
+}
+
+/** Food set aside for planned meals (planned meals warn, they don't lock stock). */
+export interface EarmarkDto {
+  ingredientId: string;
+  grams: number;
+  meals: { entryId: string; title: string; date: CalendarDate; grams: number }[];
+}
+
+export interface ShoppingItemDto {
+  id: string;
+  text: string;
+  ingredientId: string | null;
+  productId: string | null;
+  aisle: string;
+  grams: number | null;
+  packs: number;
+  packGrams: number | null;
+  /** One pack as people say it: "2.5kg", "568ml", "12 eggs". */
+  packLabel: string | null;
+  surplusGrams: number | null;
+  /** The spare amount, said the same way. */
+  surplusLabel: string | null;
+  reason: 'plan' | 'running-low' | 'manual';
+  forMeals: string | null;
+  checked: boolean;
+  addedByName: string | null;
+}
+
+export interface RunningLowDto {
+  ingredientId: string;
+  name: string;
+  onHandGrams: number;
+  daysLeft: number | null;
+  onList: boolean;
+}
+
+export interface BuildListResultDto {
+  added: number;
+  updated: number;
+  /** Food the plan needs that's already covered by stock. */
+  covered: number;
+  surplus: { ingredientId: string; name: string; grams: number }[];
+}
+
+export interface EatResultDto {
+  entry: PlanEntryDto;
+  product: ProductDto;
+  /** The stock change, when it was in stock. */
+  change: StockChangeDto | null;
 }

@@ -108,7 +108,6 @@ public class InboxWorker extends Worker {
         int id = (int) (n.optLong("seq") % Integer.MAX_VALUE);
         String path = n.optString("url", "/inbox");
         JSONObject data = n.optJSONObject("data");
-        String stockItemId = data != null ? data.optString("stockItemId", "") : "";
 
         Uri open = new Uri.Builder().scheme("snackoverflow").authority("notification")
                 .appendQueryParameter("url", path).appendQueryParameter("id", String.valueOf(id)).build();
@@ -122,16 +121,24 @@ public class InboxWorker extends Worker {
                 .setContentIntent(link(ctx, id * 4, open));
 
         JSONArray actions = n.optJSONArray("actions");
-        if (actions != null && !stockItemId.isEmpty()) {
+        if (actions != null) {
             for (int i = 0; i < actions.length() && i < 3; i++) {
                 JSONObject a = actions.optJSONObject(i);
                 if (a == null) continue;
-                Uri uri = new Uri.Builder().scheme("snackoverflow").authority("notification")
+                Uri.Builder ub = new Uri.Builder().scheme("snackoverflow").authority("notification")
                         .appendQueryParameter("action", a.optString("action"))
-                        .appendQueryParameter("stockItemId", stockItemId)
                         .appendQueryParameter("url", path)
-                        .appendQueryParameter("id", String.valueOf(id)).build();
-                b.addAction(0, a.optString("title"), link(ctx, id * 4 + 1 + i, uri));
+                        .appendQueryParameter("id", String.valueOf(id));
+                // The notification's data (stockItemId, entryId, recipeId...) goes along too.
+                if (data != null) {
+                    java.util.Iterator<String> keys = data.keys();
+                    while (keys.hasNext()) {
+                        String k = keys.next();
+                        Object v = data.opt(k);
+                        if (v instanceof String || v instanceof Number) ub.appendQueryParameter(k, String.valueOf(v));
+                    }
+                }
+                b.addAction(0, a.optString("title"), link(ctx, id * 4 + 1 + i, ub.build()));
             }
         }
         NotificationManagerCompat.from(ctx).notify(id, b.build());

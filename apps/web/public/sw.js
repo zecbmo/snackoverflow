@@ -83,6 +83,23 @@ self.addEventListener('notificationclick', (event) => {
   const n = event.notification;
   const data = n.data || {};
   n.close();
+  // Meal-time prompt buttons.
+  if (data.entryId && ['cooked', 'skip', 'move'].includes(event.action)) {
+    if (event.action === 'skip') {
+      event.waitUntil(
+        fetch(`/api/plan/${data.entryId}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'skipped' }),
+        }).catch(() => self.clients.openWindow('/plan')),
+      );
+      return;
+    }
+    const target = event.action === 'cooked' && data.recipeId ? `/recipes/${data.recipeId}/cook?entry=${data.entryId}` : `/plan?entry=${data.entryId}`;
+    event.waitUntil(self.clients.openWindow(target));
+    return;
+  }
   const action = ACTIONS[event.action];
   if (action && data.stockItemId) {
     event.waitUntil(

@@ -26,6 +26,10 @@ export const locationTypeEnum = pgEnum('location_type', ['cupboard', 'fridge', '
 export const stockStateEnum = pgEnum('stock_state', ['closed', 'opened', 'frozen', 'defrosted']);
 export const displayUnitEnum = pgEnum('display_unit', ['g', 'ml', 'count']);
 export const productSourceEnum = pgEnum('product_source', ['off', 'manual', 'scan']);
+export const mealSlotEnum = pgEnum('meal_slot', ['breakfast', 'lunch', 'dinner', 'snack']);
+export const planKindEnum = pgEnum('plan_kind', ['recipe', 'product', 'stock', 'text']);
+export const planStatusEnum = pgEnum('plan_status', ['planned', 'cooked', 'skipped']);
+export const shoppingReasonEnum = pgEnum('shopping_reason', ['plan', 'running-low', 'manual']);
 export const stockEventTypeEnum = pgEnum('stock_event_type', [
   'add',
   'use',
@@ -152,6 +156,8 @@ export const ingredients = pgTable(
     countUnit: text('count_unit'),
     /** Typical pack sizes in grams, from docs/data/pack-sizes.csv. */
     packSizesGrams: jsonb('pack_sizes_grams').$type<number[]>(),
+    /** How packs are sold: by weight (g), volume (ml) or count, for showing pack sizes. */
+    packUnit: text('pack_unit'),
     trackRunningLow: boolean('track_running_low').notNull().default(false),
     closedDays: integer('closed_days'),
     openedDays: integer('opened_days'),
@@ -428,3 +434,77 @@ export const cooks = pgTable('cooks', {
   createdAt: createdAt(),
   undoneAt: timestamp('undone_at', { withTimezone: true }),
 });
+
+/** One thing in a meal slot: a recipe, a product (a banana, a Snickers), leftovers from stock, or free text. */
+export const mealPlanEntries = pgTable(
+  'meal_plan_entries',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    date: day('date').notNull(),
+    slot: mealSlotEnum('slot').notNull(),
+    kind: planKindEnum('kind').notNull(),
+    recipeId: uuid('recipe_id').references(() => recipes.id, { onDelete: 'set null' }),
+    productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+    /** Leftovers or a batch-cook portion already in stock. */
+    stockItemId: uuid('stock_item_id').references(() => stockItems.id, { onDelete: 'set null' }),
+    text: text('text'),
+    /** Servings of a recipe, packs of a product, portions of leftovers. */
+    servings: doublePrecision('servings').notNull().default(1),
+    /** Calories per serving for free-text entries, if someone knows. */
+    kcalPerServing: doublePrecision('kcal_per_serving'),
+    status: planStatusEnum('status').notNull().default('planned'),
+    /** How it got here: planned ahead, or logged by scanning in Eat mode. */
+    source: text('source').notNull().default('plan'),
+    position: integer('position').notNull().default(0),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('meal_plan_household_date_idx').on(t.householdId, t.date)],
+);
+
+/** Who is eating a planned meal, and how much of it. No rows = the whole household. */
+export const mealPlanPeople = pgTable(
+  'meal_plan_people',
+  {
+    entryId: uuid('entry_id')
+      .notNull()
+      .references(() => mealPlanEntries.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    portions: doublePrecision('portions').notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.entryId, t.userId] })],
+);
+
+/** The one shared shopping list. */
+export const shoppingItems = pgTable(
+  'shopping_items',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    ingredientId: uuid('ingredient_id').references(() => ingredients.id, { onDelete: 'set null' }),
+    productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+    /** Free text, or the name to show. */
+    text: text('text').notNull(),
+    /** Grams the plan is short by (plan items). */
+    grams: doublePrecision('grams'),
+    packs: integer('packs').notNull().default(1),
+    packGrams: doublePrecision('pack_grams'),
+    /** Grams left over after this plan once the packs are bought. */
+    surplusGrams: doublePrecision('surplus_grams'),
+    reason: shoppingReasonEnum('reason').notNull().default('manual'),
+    /** What the plan needs it for ("Fish pie, roast veg"). */
+    forMeals: text('for_meals'),
+    checked: boolean('checked').notNull().default(false),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    addedBy: uuid('added_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('shopping_household_idx').on(t.householdId)],
+);

@@ -29,6 +29,7 @@ export function CookPage() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
   const batch = params.get('batch') === '1';
+  const entryId = params.get('entry');
   const servings = Number(params.get('servings')) || 0;
   const plan = useCookPlan(id, servings || 1);
   const me = useMe();
@@ -76,6 +77,7 @@ export function CookPage() {
     try {
       const r = await api.post<CookResultDto>(`/api/recipes/${id}/cook`, {
         servings: p.servings,
+        ...(entryId ? { mealPlanEntryId: entryId } : {}),
         lines: lines
           .filter((l) => !l.skipped)
           .map((l) => ({
@@ -89,6 +91,7 @@ export function CookPage() {
       setResult(r);
       setOpened(new Set(r.askOpened.map((i) => i.id)));
       await qc.invalidateQueries({ queryKey: ['stock'] });
+      await qc.invalidateQueries({ queryKey: ['plan'] });
       setStep('after');
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });

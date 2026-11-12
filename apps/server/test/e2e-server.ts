@@ -11,6 +11,7 @@ const off = new FakeOff({
   '5000000000024': { name: 'Chicken Thighs', quantity: '1 kg' },
   '5000000000031': { name: 'Baked Beans', quantity: '415 g' },
   '5000000000048': { name: 'Beef Mince', quantity: '500 g' },
+  '5000000000055': { name: 'Penne Pasta', quantity: '500 g' },
 });
 const t = await makeTestApp({ off, webDist: webDistDir(), realClock: true, config: { APP_URL: `http://localhost:${port}` } });
 await t.app.listen({ port, host: '127.0.0.1' });

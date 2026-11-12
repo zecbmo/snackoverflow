@@ -14,15 +14,19 @@ import {
   DEFAULT_NOTIFICATION_PREFS,
   formatShortDate,
   type NotificationPrefs,
-  type NotificationType,
+  type MealSlot,
+  SLOT_TIMES,
   wallClockIn,
 } from '@snackoverflow/shared';
 import type { AppContext } from '../context';
-import { households, locations, notificationLog, notifications, products, pushSubscriptions, stockItems, users } from '../db/schema';
+import { households, locations, mealPlanEntries, mealPlanPeople, notificationLog, notifications, products, pushSubscriptions, recipes, stockItems, users } from '../db/schema';
+import { runningLow } from '../services/shopping';
 import { escapeHtml } from './email';
 import type { PushPayload } from './push';
 
-export const SCHEDULE: Record<NotificationType, { hour: number; weekday?: number }> = {
+type DigestType = 'expiresTomorrow' | 'weeklySummary';
+
+export const SCHEDULE: Record<DigestType, { hour: number; weekday?: number }> = {
   expiresTomorrow: { hour: 9 },
   weeklySummary: { hour: 10, weekday: 0 },
 };
@@ -218,7 +222,7 @@ export async function runNotifications(ctx: AppContext, now: Date = ctx.now()): 
   for (const h of allHouseholds) {
     const clock = wallClockIn(h.timeZone, now);
     const members = await ctx.db.select().from(users).where(eq(users.householdId, h.id));
-    for (const type of Object.keys(SCHEDULE) as NotificationType[]) {
+    for (const type of Object.keys(SCHEDULE) as DigestType[]) {
       const when = SCHEDULE[type];
       if (clock.hour < when.hour) continue;
       if (when.weekday !== undefined && clock.weekday !== when.weekday) continue;
@@ -245,6 +249,94 @@ export async function runNotifications(ctx: AppContext, now: Date = ctx.now()): 
         await markSent(ctx, user.id, type, key);
       }
     }
+    add(stats, await mealTimePrompts(ctx, h, members, clock));
+    if (clock.hour >= RUNNING_LOW_HOUR) add(stats, await runningLowReminders(ctx, h, members, clock, now));
+  }
+  return stats;
+}
+
+const SLOT_WORDS: Record<MealSlot, string> = { breakfast: 'this morning', lunch: 'for lunch', dinner: 'tonight', snack: 'today' };
+const RUNNING_LOW_HOUR = 10;
+
+/** "Cooking Fish pie tonight?" at the meal's usual time, with Cooked it / Skip / Move. */
+async function mealTimePrompts(
+  ctx: AppContext,
+  h: { id: string; timeZone: string },
+  members: (typeof users.$inferSelect)[],
+  clock: { date: string; hour: number; minute: number },
+): Promise<NotificationRunStats> {
+  const stats: NotificationRunStats = { app: 0, push: 0, email: 0 };
+  const due = await ctx.db
+    .select({ entry: mealPlanEntries, title: recipes.title, serves: recipes.serves })
+    .from(mealPlanEntries)
+    .innerJoin(recipes, eq(recipes.id, mealPlanEntries.recipeId))
+    .where(and(eq(mealPlanEntries.householdId, h.id), eq(mealPlanEntries.date, clock.date), eq(mealPlanEntries.status, 'planned'), eq(mealPlanEntries.kind, 'recipe')));
+  const now = clock.hour * 60 + clock.minute;
+  for (const { entry, title } of due) {
+    const at = SLOT_TIMES[entry.slot];
+    const start = at.hour * 60 + at.minute;
+    // Only around the meal: from its time to three hours after.
+    if (now < start || now > start + 180) continue;
+    const eaters = await ctx.db.select({ userId: mealPlanPeople.userId }).from(mealPlanPeople).where(eq(mealPlanPeople.entryId, entry.id));
+    const recipients = eaters.length ? members.filter((m) => eaters.some((e) => e.userId === m.id)) : members;
+    for (const user of recipients) {
+      const prefs = prefsOf(user);
+      const channels: Channel[] = prefs.channels.mealTime ?? [];
+      if (!channels.length || inQuietHours(prefs, clock.hour, clock.minute)) continue;
+      if (await alreadySent(ctx, user.id, 'mealTime', entry.id)) continue;
+      add(
+        stats,
+        await deliver(ctx, user, channels, 'mealTime', {
+          title: `Cooking ${title} ${SLOT_WORDS[entry.slot]}?`,
+          body: `${entry.slot.charAt(0).toUpperCase()}${entry.slot.slice(1)} · ${entry.servings} ${entry.servings === 1 ? 'serving' : 'servings'}`,
+          url: `/plan?date=${entry.date}`,
+          tag: `meal-${entry.id}`,
+          actions: [
+            { action: 'cooked', title: 'Cooked it' },
+            { action: 'skip', title: 'Skip' },
+            { action: 'move', title: 'Move' },
+          ],
+          data: { entryId: entry.id, recipeId: entry.recipeId },
+        }),
+      );
+      await markSent(ctx, user.id, 'mealTime', entry.id);
+    }
+  }
+  return stats;
+}
+
+/** Staples running low: one reminder per staple per week. */
+async function runningLowReminders(
+  ctx: AppContext,
+  h: { id: string; timeZone: string; name: string; createdAt: Date },
+  members: (typeof users.$inferSelect)[],
+  clock: { date: string; hour: number; minute: number },
+  now: Date,
+): Promise<NotificationRunStats> {
+  const stats: NotificationRunStats = { app: 0, push: 0, email: 0 };
+  const listeners = members.filter((m) => (prefsOf(m).channels.runningLow ?? []).length > 0);
+  if (!listeners.length) return stats;
+  const anyone = members[0];
+  if (!anyone) return stats;
+  const low = (await runningLow(ctx.db, { user: anyone, household: h as typeof households.$inferSelect }, now)).filter((l) => !l.onList);
+  if (!low.length) return stats;
+  const week = Math.floor(Date.parse(`${clock.date}T00:00:00Z`) / (7 * 86_400_000));
+  for (const user of listeners) {
+    const prefs = prefsOf(user);
+    if (inQuietHours(prefs, clock.hour, clock.minute)) continue;
+    const fresh = [];
+    for (const l of low) if (!(await alreadySent(ctx, user.id, 'runningLow', `${l.ingredientId}:${week}`))) fresh.push(l);
+    if (!fresh.length) continue;
+    add(
+      stats,
+      await deliver(ctx, user, prefs.channels.runningLow ?? [], 'runningLow', {
+        title: 'Running low',
+        body: `${fresh.map((l) => l.name).join(', ')}. Add ${fresh.length === 1 ? 'it' : 'them'} to the shopping list?`,
+        url: '/shop',
+        tag: 'running-low',
+      }),
+    );
+    for (const l of fresh) await markSent(ctx, user.id, 'runningLow', `${l.ingredientId}:${week}`);
   }
   return stats;
 }

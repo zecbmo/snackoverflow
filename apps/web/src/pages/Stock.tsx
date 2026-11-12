@@ -6,7 +6,8 @@ import { useStockActions } from '../components/StockActions';
 import { Button, EmptyState, ErrorNote, PageHeader, Pill, Spinner } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { dateLabel, toneClasses, toneFor } from '../lib/format';
-import { useLocations, useStock } from '../lib/queries';
+import { useEarmarks, useLocations, useStock } from '../lib/queries';
+import { gramsLabel } from '../lib/format';
 import { groupStock, groupSummary, type StockGroup } from '../lib/stockGroups';
 
 type Filter = { kind: 'all' } | { kind: 'location'; id: string } | { kind: 'opened' } | { kind: 'frozen' };
@@ -42,7 +43,7 @@ export function StockActionsRow({ item, onDone }: { item: StockItemDto; onDone?:
   );
 }
 
-function StockRow({ group, today, expanded, onToggle }: { group: StockGroup; today: string; expanded: boolean; onToggle: () => void }) {
+function StockRow({ group, today, expanded, onToggle, plannedGrams }: { group: StockGroup; today: string; expanded: boolean; onToggle: () => void; plannedGrams?: number }) {
   const tone = toneFor(group.first, today);
   const t = toneClasses[tone];
   return (
@@ -51,7 +52,10 @@ function StockRow({ group, today, expanded, onToggle }: { group: StockGroup; tod
         <span aria-hidden className={`h-11 w-1.5 shrink-0 rounded-full ${t.bar}`} />
         <button type="button" onClick={onToggle} aria-expanded={expanded} className="min-w-0 flex-1 text-left">
           <span className="block truncate text-[17px] font-semibold">{group.name}</span>
-          <span className="block truncate text-[15px] text-muted">{groupSummary(group)}</span>
+          <span className="block truncate text-[15px] text-muted">
+            {groupSummary(group)}
+            {plannedGrams ? ` · ${gramsLabel(plannedGrams)} planned` : ''}
+          </span>
         </button>
         <Pill className={t.pill}>{group.first.state === 'frozen' && !group.first.bestBefore ? 'Frozen' : dateLabel(group.first.bestBefore, today)}</Pill>
       </div>
@@ -75,6 +79,7 @@ export function StockPage() {
   const [filter, setFilter] = useState<Filter>({ kind: 'all' });
   const [q, setQ] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const planned = new Map((useEarmarks().data ?? []).map((m) => [m.ingredientId, m.grams]));
 
   const groups = useMemo(() => {
     const items = (stock.data ?? []).filter((i) => {
@@ -140,7 +145,14 @@ export function StockPage() {
       ) : (
         <ul className="overflow-hidden rounded-[18px] border border-line bg-card">
           {groups.map((g) => (
-            <StockRow key={g.key} group={g} today={me.today} expanded={expanded === g.key} onToggle={() => setExpanded(expanded === g.key ? null : g.key)} />
+            <StockRow
+              key={g.key}
+              group={g}
+              today={me.today}
+              expanded={expanded === g.key}
+              onToggle={() => setExpanded(expanded === g.key ? null : g.key)}
+              plannedGrams={g.first.ingredientId ? planned.get(g.first.ingredientId) : undefined}
+            />
           ))}
         </ul>
       )}

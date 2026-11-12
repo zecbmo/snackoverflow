@@ -3,15 +3,19 @@ import { useQuery } from '@tanstack/react-query';
 import type {
   CookPlanDto,
   DeviceDto,
+  EarmarkDto,
   IngredientDto,
   LocationDto,
   NotificationListDto,
   NotificationSettingsDto,
+  PlanDto,
   ProductDto,
   RecipeDto,
   RecipeSummaryDto,
+  RunningLowDto,
   SessionDto,
   ShelfLifeCategoryDto,
+  ShoppingItemDto,
   StockEventDto,
   StockItemDto,
   UserDto,
@@ -38,6 +42,10 @@ export const keys = {
   recipe: (id: string) => ['recipes', id] as const,
   cookPlan: (id: string, servings: number) => ['stock', 'cook-plan', id, servings] as const,
   cooks: ['stock', 'cooks'] as const,
+  plan: (from: string, to: string, person: string) => ['plan', from, to, person] as const,
+  earmarks: ['plan', 'earmarks'] as const,
+  shopping: ['shopping'] as const,
+  runningLow: ['shopping', 'running-low'] as const,
 };
 
 export const useSession = () => useQuery({ queryKey: keys.session, queryFn: () => api.get<SessionDto>('/api/session'), retry: false });
@@ -74,3 +82,8 @@ export interface CookRow {
   undoneAt: string | null;
 }
 export const useCooks = () => useQuery({ queryKey: keys.cooks, queryFn: () => api.get<CookRow[]>('/api/cooks') });
+export const usePlan = (from: string, to: string, person = 'me') =>
+  useQuery({ queryKey: keys.plan(from, to, person), queryFn: () => api.get<PlanDto>(`/api/plan?from=${from}&to=${to}&person=${encodeURIComponent(person)}`) });
+export const useEarmarks = () => useQuery({ queryKey: keys.earmarks, queryFn: () => api.get<EarmarkDto[]>('/api/plan/earmarks') });
+export const useShopping = () => useQuery({ queryKey: keys.shopping, queryFn: () => api.get<ShoppingItemDto[]>('/api/shopping') });
+export const useRunningLow = () => useQuery({ queryKey: keys.runningLow, queryFn: () => api.get<RunningLowDto[]>('/api/running-low') });

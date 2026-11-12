@@ -6,10 +6,10 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
-import type { StockChangeDto, StockItemDto, UseAmountInput } from '@snackoverflow/shared';
+import type { EarmarkDto, StockChangeDto, StockItemDto, UseAmountInput } from '@snackoverflow/shared';
 import { api, errorMessage } from '../lib/api';
 import { useLocations } from '../lib/queries';
-import { amountLabel, longDate } from '../lib/format';
+import { amountLabel, gramsLabel, longDate } from '../lib/format';
 import { Icon, locationIcon } from './Icon';
 import { useToast } from './Toast';
 import { Button, Field, Sheet, TextInput } from './ui';
@@ -36,12 +36,74 @@ export function useStockActions(): StockActions {
 
 type Prompt = { kind: 'opened'; change: StockChangeDto } | { kind: 'still-some'; change: StockChangeDto };
 
+interface PlanWarning {
+  message: string;
+  ingredientId: string;
+  resolve: (choice: 'use' | 'cancel' | 'list') => void;
+}
+
+function weekday(date: string): string {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
+}
+
+/** Grams a use would take out of a pack. */
+function gramsUsed(item: StockItemDto, amount: UseAmountInput): number {
+  const left = item.remainingGrams ?? 0;
+  if (amount.kind === 'all') return left;
+  if (amount.kind === 'fraction') return left * amount.fraction;
+  return Math.min(left, amount.grams);
+}
+
 export function StockActionsProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [useFor, setUseFor] = useState<StockItemDto | null>(null);
   const [moveFor, setMoveFor] = useState<StockItemDto | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [warning, setWarning] = useState<PlanWarning | null>(null);
+
+  /** Planned meals don't lock stock, but using something they need gets a warning first. */
+  const checkPlan = useCallback(
+    async (item: StockItemDto, amount: UseAmountInput): Promise<boolean> => {
+      if (!item.ingredientId || item.isMeal) return true;
+      let marks: EarmarkDto[];
+      try {
+        marks = await qc.fetchQuery({ queryKey: ['plan', 'earmarks'], queryFn: () => api.get<EarmarkDto[]>('/api/plan/earmarks'), staleTime: 30_000 });
+      } catch {
+        return true;
+      }
+      const mark = marks.find((m) => m.ingredientId === item.ingredientId);
+      if (!mark) return true;
+      const stock = qc.getQueryData<StockItemDto[]>(['stock']) ?? [item];
+      const have = stock.filter((s) => s.ingredientId === item.ingredientId && !s.isMeal).reduce((g, s) => g + (s.remainingGrams ?? 0), 0);
+      const after = have - gramsUsed(item, amount);
+      if (after >= mark.grams) return true;
+      // The first planned meal that would go short.
+      let running = after;
+      const meal = mark.meals.find((m) => (running -= m.grams) < 0) ?? mark.meals[0]!;
+      const leftFor = Math.max(0, running + meal.grams);
+      const choice = await new Promise<'use' | 'cancel' | 'list'>((resolve) =>
+        setWarning({
+          ingredientId: item.ingredientId!,
+          message: `This leaves ${gramsLabel(leftFor)} for ${meal.title} on ${weekday(meal.date)}, which needs ${gramsLabel(meal.grams)}.`,
+          resolve,
+        }),
+      );
+      setWarning(null);
+      if (choice === 'cancel') return false;
+      if (choice === 'list') {
+        try {
+          await api.post('/api/shopping', { ingredientId: item.ingredientId });
+          await qc.invalidateQueries({ queryKey: ['shopping'] });
+          toast.show('Added to the shopping list.');
+        } catch (e) {
+          toast.show(errorMessage(e), { tone: 'error' });
+        }
+      }
+      return true;
+    },
+    [qc, toast],
+  );
 
   const refresh = useCallback(() => qc.invalidateQueries({ queryKey: ['stock'] }), [qc]);
 
@@ -84,6 +146,7 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
     () => ({
       use: (item) => setUseFor(item),
       async useAmount(item, amount) {
+        if (!(await checkPlan(item, amount))) return null;
         const change = await run(
           () => api.post<StockChangeDto>(`/api/stock/${item.id}/use`, { amount }),
           (c) => (c.item.fractionLeft <= 0 ? `Used up the ${item.productName}.` : `Used some ${item.productName}.`),
@@ -102,11 +165,12 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
       },
       move: (item) => setMoveFor(item),
       async discard(item) {
+        if (!(await checkPlan(item, { kind: 'all' }))) return;
         await run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/discard`, {}), () => `Binned the ${item.productName}.`);
       },
       followUp,
     }),
-    [run, followUp],
+    [run, followUp, checkPlan],
   );
 
   const prompt = prompts[0];
@@ -123,6 +187,22 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
           void run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/move`, { locationId }), (c) => `Moved to the ${c.item.locationName}.`)
         }
       />
+      <Sheet open={warning !== null} onClose={() => warning?.resolve('cancel')} title="Planned for a meal">
+        {warning && (
+          <div className="flex flex-col gap-3">
+            <p>{warning.message}</p>
+            <Button variant="dark" size="lg" onClick={() => warning.resolve('use')}>
+              Use anyway
+            </Button>
+            <Button size="lg" onClick={() => warning.resolve('list')}>
+              Use it and add to shopping list
+            </Button>
+            <Button variant="ghost" size="lg" onClick={() => warning.resolve('cancel')}>
+              Cancel
+            </Button>
+          </div>
+        )}
+      </Sheet>
       <Sheet open={prompt?.kind === 'opened'} onClose={nextPrompt} title="Is it opened now?">
         {prompt?.kind === 'opened' && (
           <div className="flex flex-col gap-3">

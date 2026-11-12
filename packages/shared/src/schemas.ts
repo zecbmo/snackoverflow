@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { isCalendarDate } from './dates';
 import { LOCATION_TYPES, STOCK_STATES } from './shelfLife';
+import { MEAL_SLOTS } from './shopping';
 
 export const calendarDate = z.string().refine(isCalendarDate, { message: 'Must be a date (YYYY-MM-DD)' });
 export const id = z.uuid();
@@ -141,11 +142,13 @@ export const scanInput = z.object({
   locationId: id.optional(),
   /** When the scan really happened, for scans queued offline and synced later. */
   scannedAt: z.iso.datetime({ offset: true }).optional(),
+  /** Eat mode: which meal to log it to (defaults to the meal for the time of day). */
+  slot: z.enum(MEAL_SLOTS).optional(),
 });
 
 // --- Notifications ----------------------------------------------------------------
 
-export const NOTIFICATION_TYPES = ['weeklySummary', 'expiresTomorrow'] as const;
+export const NOTIFICATION_TYPES = ['weeklySummary', 'expiresTomorrow', 'mealTime', 'runningLow', 'listChanged'] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 /** app = the in-app inbox (the bell) and the Android app's notifications. */
 export const CHANNELS = ['app', 'push', 'email'] as const;
@@ -154,14 +157,15 @@ export type Channel = (typeof CHANNELS)[number];
 const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM');
 
 export const notificationPrefsInput = z.object({
-  channels: z.record(z.enum(NOTIFICATION_TYPES), z.array(z.enum(CHANNELS))),
+  // Partial: types added later fall back to their defaults.
+  channels: z.partialRecord(z.enum(NOTIFICATION_TYPES), z.array(z.enum(CHANNELS))),
   quietStart: timeOfDay.nullable(),
   quietEnd: timeOfDay.nullable(),
 });
 export type NotificationPrefs = z.infer<typeof notificationPrefsInput>;
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
-  channels: { weeklySummary: ['app', 'push', 'email'], expiresTomorrow: ['app', 'push'] },
+  channels: { weeklySummary: ['app', 'push', 'email'], expiresTomorrow: ['app', 'push'], mealTime: ['app', 'push'], runningLow: ['app'], listChanged: [] },
   quietStart: '22:00',
   quietEnd: '07:00',
 };
@@ -222,6 +226,8 @@ export const cookLineInput = z.object({
 
 export const cookInput = z.object({
   servings: z.number().positive().max(500),
+  /** The planned meal being cooked, which is then marked as cooked. */
+  mealPlanEntryId: id.optional(),
   lines: z.array(cookLineInput).max(200).default([]),
   /** Portions to keep, per location: leftovers, or the whole batch for a batch cook. */
   leftovers: z
@@ -230,3 +236,66 @@ export const cookInput = z.object({
     .default([]),
 });
 export type CookInput = z.infer<typeof cookInput>;
+
+// --- Planner ---------------------------------------------------------------------------
+
+export const mealSlot = z.enum(MEAL_SLOTS);
+const people = z.array(z.object({ userId: id, portions: z.number().positive().max(50) })).max(20);
+
+export const planEntryInput = z
+  .object({
+    date: calendarDate,
+    slot: mealSlot,
+    kind: z.enum(['recipe', 'product', 'stock', 'text']),
+    recipeId: id.nullish(),
+    productId: id.nullish(),
+    stockItemId: id.nullish(),
+    text: z.string().trim().max(200).nullish(),
+    servings: z.number().positive().max(100).default(1),
+    kcalPerServing: z.number().min(0).max(10_000).nullish(),
+    /** Who's eating it; leave out for the whole household. */
+    people: people.default([]),
+    /** Log it as eaten straight away (e.g. adding a banana you just had). */
+    eaten: z.boolean().default(false),
+  })
+  .refine(
+    (v) =>
+      (v.kind === 'recipe' && v.recipeId) ||
+      (v.kind === 'product' && v.productId) ||
+      (v.kind === 'stock' && v.stockItemId) ||
+      (v.kind === 'text' && v.text),
+    'Pick what to plan',
+  );
+export type PlanEntryInput = z.infer<typeof planEntryInput>;
+
+export const updatePlanEntryInput = z.object({
+  date: calendarDate.optional(),
+  slot: mealSlot.optional(),
+  servings: z.number().positive().max(100).optional(),
+  status: z.enum(['planned', 'cooked', 'skipped']).optional(),
+  people: people.optional(),
+});
+
+/** Eating planned leftovers or a product takes it out of stock. */
+export const eatPlanEntryInput = z.object({ fromStock: z.boolean().default(true) });
+
+// --- Shopping list ------------------------------------------------------------------------
+
+export const shoppingItemInput = z
+  .object({
+    text: z.string().trim().max(200).optional(),
+    ingredientId: id.nullish(),
+    productId: id.nullish(),
+    packs: z.number().int().min(1).max(99).default(1),
+    reason: z.enum(['manual', 'running-low']).default('manual'),
+  })
+  .refine((v) => v.text || v.ingredientId || v.productId, 'Say what to get');
+
+export const updateShoppingItemInput = z.object({
+  checked: z.boolean().optional(),
+  packs: z.number().int().min(1).max(99).optional(),
+  text: z.string().trim().min(1).max(200).optional(),
+});
+
+export const buildListInput = z.object({ from: calendarDate, to: calendarDate });
+export const putAwayInput = z.object({ itemIds: z.array(id).max(200).optional() });

@@ -8,9 +8,10 @@ import { api, ApiError, isOffline } from './api';
 
 export interface QueuedScan {
   id: string;
-  mode: 'add' | 'use';
+  mode: 'add' | 'use' | 'eat';
   barcode: string;
   locationId?: string;
+  slot?: string;
   scannedAt: string;
 }
 
@@ -61,8 +62,9 @@ export function syncQueue(): Promise<{ synced: number; dropped: number }> {
         try {
           await api.post(`/api/scan/${scan.mode}`, {
             barcode: scan.barcode,
-            locationId: scan.locationId,
+            locationId: scan.mode === 'eat' ? undefined : scan.locationId,
             ...(scan.mode === 'add' ? { scannedAt: scan.scannedAt } : {}),
+            ...(scan.mode === 'eat' && scan.slot ? { slot: scan.slot } : {}),
           });
           synced++;
         } catch (e) {

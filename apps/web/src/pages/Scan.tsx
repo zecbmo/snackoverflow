@@ -5,8 +5,8 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
-import { formatPackSize, type ProductDto, type ScanAddResult, type ScanUseResult, type StockItemDto } from '@snackoverflow/shared';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { type EatResultDto, formatPackSize, MEAL_SLOTS, type MealSlot, type ProductDto, type ScanAddResult, type ScanUseResult, slotForTime, type StockItemDto } from '@snackoverflow/shared';
 import { Icon, locationIcon } from '../components/Icon';
 import { useMe } from '../components/Layout';
 import { useStockActions } from '../components/StockActions';
@@ -18,7 +18,7 @@ import { longDate } from '../lib/format';
 import { useIngredients, useLocations } from '../lib/queries';
 import { beep, useBarcodeScanner } from '../scanner/useBarcodeScanner';
 
-type Mode = 'add' | 'use';
+type Mode = 'add' | 'use' | 'eat';
 
 interface Entry {
   key: number;
@@ -26,6 +26,7 @@ interface Entry {
   mode: Mode;
   add?: ScanAddResult;
   use?: ScanUseResult;
+  eat?: EatResultDto;
   /** Saved on the phone with no signal; sent when back online. */
   queued?: QueuedScan;
   error?: string;
@@ -55,12 +56,16 @@ export function ScanPage() {
   const toast = useToast();
   const actions = useStockActions();
   const locations = useLocations().data ?? [];
-  const [mode, setMode] = useState<Mode>('add');
+  const [params] = useSearchParams();
+  const [mode, setMode] = useState<Mode>(() => (['add', 'use', 'eat'].includes(params.get('mode') ?? '') ? (params.get('mode') as Mode) : 'add'));
+  const [slot, setSlot] = useState<MealSlot>(() =>
+    MEAL_SLOTS.includes(params.get('slot') as MealSlot) ? (params.get('slot') as MealSlot) : slotForTime(new Date().getHours()),
+  );
   const [addLocation, setAddLocation] = useState<string | null>(readStoredLocation);
   const [useLocation, setUseLocation] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [flash, setFlash] = useState<{ kind: 'ok' | 'unknown' | 'miss'; n: number } | null>(null);
-  const [sheet, setSheet] = useState<'location' | 'keyboard' | 'name' | 'date' | 'summary' | null>(null);
+  const [sheet, setSheet] = useState<'location' | 'keyboard' | 'name' | 'date' | 'summary' | 'slot' | null>(null);
   const busy = useRef(false);
   const last = useRef<{ code: string; at: number } | null>(null);
   const nextKey = useRef(1);
@@ -89,6 +94,12 @@ export function ScanPage() {
           beep(r.known ? 'ok' : 'warn');
           setFlash({ kind: r.known ? 'ok' : 'unknown', n: key });
           if (!r.known) setSheet('name');
+        } else if (mode === 'eat') {
+          const r = await api.post<EatResultDto>('/api/scan/eat', { barcode: code, slot });
+          setEntries((all) => [{ key, barcode: code, mode, eat: r }, ...all]);
+          beep('ok');
+          setFlash({ kind: 'ok', n: key });
+          void qc.invalidateQueries({ queryKey: ['plan'] });
         } else {
           const r = await api.post<ScanUseResult>('/api/scan/use', { barcode: code, locationId: useLocation ?? undefined });
           setEntries((all) => [{ key, barcode: code, mode, use: r }, ...all]);
@@ -99,7 +110,7 @@ export function ScanPage() {
       } catch (e) {
         if (isOffline(e)) {
           // No signal: keep the scan and send it later, like a till that keeps working offline.
-          const queued = enqueueScan({ mode, barcode: code, locationId: (mode === 'add' ? addLocationId : useLocation) ?? undefined });
+          const queued = enqueueScan({ mode, barcode: code, locationId: (mode === 'add' ? addLocationId : useLocation) ?? undefined, slot: mode === 'eat' ? slot : undefined });
           beep('ok');
           setFlash({ kind: 'ok', n: key });
           setEntries((all) => [{ key, barcode: code, mode, queued }, ...all]);
@@ -113,7 +124,7 @@ export function ScanPage() {
         last.current = { code, at: Date.now() };
       }
     },
-    [mode, addLocationId, useLocation, qc],
+    [mode, addLocationId, useLocation, qc, slot],
   );
 
   const scanning = sheet === null;
@@ -126,6 +137,19 @@ export function ScanPage() {
   }, [flash]);
 
   const undo = async (entry: Entry) => {
+    if (entry.eat) {
+      try {
+        if (entry.eat.change) await api.post(`/api/events/${entry.eat.change.eventId}/undo`);
+        await api.del(`/api/plan/${entry.eat.entry.id}`);
+        update(entry.key, { undone: true });
+        void qc.invalidateQueries({ queryKey: ['stock'] });
+        void qc.invalidateQueries({ queryKey: ['plan'] });
+        toast.show('Undone.');
+      } catch (e) {
+        toast.show(errorMessage(e), { tone: 'error' });
+      }
+      return;
+    }
     if (entry.queued) {
       removeQueued(entry.queued.id);
       update(entry.key, { undone: true });
@@ -171,17 +195,17 @@ export function ScanPage() {
           </button>
           <button
             type="button"
-            onClick={() => setSheet('location')}
+            onClick={() => setSheet(mode === 'eat' ? 'slot' : 'location')}
             className="inline-flex min-h-12 items-center gap-2 rounded-full bg-white/10 px-4 text-lg font-semibold backdrop-blur"
           >
-            <Icon name={location ? locationIcon(location.type) : 'box'} className="size-5" />
-            {location?.name ?? 'Any location'}
+            <Icon name={mode === 'eat' ? 'calendar' : location ? locationIcon(location.type) : 'box'} className="size-5" />
+            {mode === 'eat' ? `Your ${slot}` : (location?.name ?? 'Any location')}
             <Icon name="chevronDown" className="size-4" />
           </button>
         </div>
 
-        <div role="tablist" aria-label="Scan mode" className="mt-4 grid grid-cols-2 rounded-2xl bg-white/10 p-1 backdrop-blur">
-          {(['add', 'use'] as const).map((m) => (
+        <div role="tablist" aria-label="Scan mode" className="mt-4 grid grid-cols-3 rounded-2xl bg-white/10 p-1 backdrop-blur">
+          {(['add', 'use', 'eat'] as const).map((m) => (
             <button
               key={m}
               role="tab"
@@ -190,7 +214,7 @@ export function ScanPage() {
               onClick={() => setMode(m)}
               className={`min-h-12 rounded-xl text-lg font-semibold ${mode === m ? 'bg-white text-[#1a1c1a]' : 'text-white'}`}
             >
-              {m === 'add' ? 'Add' : 'Use'}
+              {m === 'add' ? 'Add' : m === 'use' ? 'Use' : 'Eat'}
             </button>
           ))}
         </div>
@@ -218,7 +242,9 @@ export function ScanPage() {
               ? 'No camera here. Type the barcode instead.'
               : mode === 'add'
                 ? 'Keep scanning. Each beep adds one pack.'
-                : 'Keep scanning. Each beep uses one pack.'}
+                : mode === 'use'
+                  ? 'Keep scanning. Each beep uses one pack.'
+                  : `Each beep logs it to your ${slot} and takes it out of stock.`}
         </p>
       </div>
 
@@ -265,6 +291,24 @@ export function ScanPage() {
           setSheet(null);
         }}
       />
+      <Sheet open={sheet === 'slot'} onClose={() => setSheet(null)} title="Log it to…">
+        <div className="flex flex-col gap-2">
+          {MEAL_SLOTS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={slot === s}
+              onClick={() => {
+                setSlot(s);
+                setSheet(null);
+              }}
+              className={`flex min-h-14 items-center rounded-xl border px-4 text-left font-medium capitalize ${slot === s ? 'border-accent bg-accent-soft' : 'border-line'}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </Sheet>
       <KeyboardSheet open={sheet === 'keyboard'} onClose={() => setSheet(null)} onSubmit={(code) => void handleCode(code)} />
       {current?.add && (
         <NameSheet
@@ -287,8 +331,8 @@ export function ScanPage() {
       <Sheet open={sheet === 'summary'} onClose={() => setSheet(null)} title="This session">
         <ul className="mb-4 flex flex-col divide-y divide-line">
           {live.map((e) => {
-            const item = e.add?.change.item ?? (e.use?.status === 'used' ? e.use.change.item : null);
-            const name = e.add ? (e.add.product.name ?? 'Unnamed product') : e.use?.product?.name ?? e.barcode;
+            const item = e.add?.change.item ?? (e.use?.status === 'used' ? e.use.change.item : null) ?? e.eat?.change?.item ?? null;
+            const name = e.add ? (e.add.product.name ?? 'Unnamed product') : e.eat ? (e.eat.product.name ?? 'Unnamed product') : (e.use?.product?.name ?? e.barcode);
             return (
               <li key={e.key}>
                 {item ? (
@@ -296,7 +340,7 @@ export function ScanPage() {
                     <span className="flex-1">
                       <span className="block font-semibold">{name}</span>
                       <span className="block text-sm text-muted">
-                        {e.mode === 'add' ? `Added to ${item.locationName} · best before ${longDate(item.bestBefore)}` : `Used from ${item.locationName}`}
+                        {e.mode === 'add' ? `Added to ${item.locationName} · best before ${longDate(item.bestBefore)}` : e.mode === 'eat' ? `Logged to your ${e.eat?.entry.slot ?? 'meal'}` : `Used from ${item.locationName}`}
                       </span>
                     </span>
                     <Icon name="chevronRight" className="size-5 text-muted" />
@@ -336,7 +380,13 @@ function ResultCard({ entry, onUndo, onDate, onName, onSome }: { entry: Entry; o
   let detail: string;
   let primary: { text: string; onClick: () => void } | null = null;
   let canUndo = true;
-  if (entry.queued) {
+  if (entry.eat) {
+    const e = entry.eat;
+    label = `Logged to your ${e.entry.slot}`;
+    labelClass = 'text-accent-text';
+    title = `${e.product.name ?? 'Unnamed product'}${packLabel(e.product)}`;
+    detail = [e.entry.kcal !== null ? `${e.entry.kcal} kcal` : 'Calories unknown', e.change ? `taken from ${e.change.item.locationName.toLowerCase()}` : 'not in stock'].join(' · ');
+  } else if (entry.queued) {
     label = 'Saved offline';
     labelClass = 'text-accent-text';
     title = `Barcode ${entry.barcode}`;

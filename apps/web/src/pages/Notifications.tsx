@@ -11,6 +11,9 @@ import { keys, useNotificationSettings } from '../lib/queries';
 const TYPES: { type: NotificationType; title: string; when: string; channels: Channel[] }[] = [
   { type: 'expiresTomorrow', title: 'Expires tomorrow', when: 'Daily at 9am, with Use, Freeze and Binned buttons', channels: ['app', 'push'] },
   { type: 'weeklySummary', title: 'Going off this week', when: 'Sundays at 10am', channels: ['app', 'push', 'email'] },
+  { type: 'mealTime', title: 'Did you cook it?', when: 'At meal times, for planned meals, with Cooked it, Skip and Move', channels: ['app', 'push'] },
+  { type: 'runningLow', title: 'Running low', when: 'When staples look like running out', channels: ['app', 'push'] },
+  { type: 'listChanged', title: 'Shopping list changed', when: 'When someone else adds to the list', channels: ['app', 'push'] },
 ];
 
 const channelName: Record<Channel, string> = { app: 'In the app', push: 'Browser push', email: 'Email' };

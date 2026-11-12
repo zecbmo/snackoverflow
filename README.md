@@ -2,7 +2,7 @@
 
 A self-hosted household food app: scan your shopping in, see what's going off, plan meals around what you already have, and build a cheap shopping list that wastes as little as possible.
 
-> Status: phases 1 to 3 are built: **stock**, the **Android app**, and **recipes and cooking**. Recipes, the planner and the shopping list come in later phases (see [the build phases](docs/SPEC.md#build-phases)).
+> Status: phases 1 to 4 are built: **stock**, the **Android app**, **recipes and cooking**, and the **planner and shopping list**. The optimiser, pricing and the dashboard come next (see [the build phases](docs/SPEC.md#build-phases)).
 
 ## What it does today
 
@@ -12,13 +12,15 @@ A self-hosted household food app: scan your shopping in, see what's going off, p
 - **Notifications.** "Expires tomorrow" reminders with Use / Freeze / Binned buttons, and a Sunday "going off this week" summary. Everything lands in the in-app inbox (the bell), and each person picks extra channels (browser push, email) and quiet hours.
 - **Android app.** Native ML Kit barcode scanning, phone notifications with action buttons, and an offline queue: scans made with no signal are kept and added when you're back online (the web app queues offline scans too). No Firebase: the app checks your server's inbox in the background about every 15 minutes.
 - **Recipes and cooking.** Import recipes from a link (BBC Good Food, Hello Fresh, most blogs), type them in, or let your own Claude add them over MCP. Ingredient lines are matched to your food, with calories per serving. Cook from stock in one go (earliest-expiring first), keep leftovers with the right food-safety dates, or batch cook into fridge and freezer portions. Every cook can be undone.
+- **Meal planner.** Each person's week as breakfast, lunch, dinner and snack, with calories per person (a shared meal is split between who's eating it). Plan recipes, leftovers, food or a note; scan in **Eat** mode to log a snack to your current meal. "Cooking Fish pie tonight?" at meal times with Cooked it / Skip / Move. Planned meals don't lock stock, but using food a planned meal needs gets a warning first.
+- **Shopping list.** One shared list, built from the plan (what it needs, minus stock, rounded up to real pack sizes, with what's left over), staples running low, and anything typed in. Tick things off in the shop, then put them away in one tap.
 - **Household ready.** Several people and phones see the same stock live. Admin and member roles, invite links, and optional sign-in through a self-hosted identity provider (OpenID Connect).
 - **Installable.** A web app you can add to your phone's home screen; works on desktop with a sidebar layout. Dark mode follows your device.
 - **Self-hosted.** Docker Compose (app + PostgreSQL), nightly database backups and a JSON export.
 
 ## Coming next
 
-The per-person meal planner, shopping list and receipt import (4), the waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
+Receipt import (rest of 4), the waste-aware optimiser and pricing (5), and the dashboard (6). The full design is in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Try it on Windows (one click)
 

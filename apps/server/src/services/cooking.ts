@@ -14,7 +14,7 @@ import {
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import type { Db } from '../db/client';
-import { cooks, locations, products, recipes, shelfLifeCategories, stockEvents, stockItems } from '../db/schema';
+import { cooks, locations, mealPlanEntries, products, recipes, shelfLifeCategories, stockEvents, stockItems } from '../db/schema';
 import { badRequest, conflict, notFound } from '../http';
 import { loadCatalog } from './catalog';
 import { getRecipe } from './recipes';
@@ -134,7 +134,13 @@ export async function confirmCook(deps: StockDeps, recipeId: string, input: Cook
     .insert(cooks)
     .values({ householdId: auth.household.id, recipeId, servings: input.servings, userId: auth.user.id, createdAt: now })
     .returning();
-  const d: StockDeps = { ...deps, cookId: cook!.id };
+  const d: StockDeps = { ...deps, cookId: cook!.id, mealPlanEntryId: input.mealPlanEntryId };
+  if (input.mealPlanEntryId) {
+    await db
+      .update(mealPlanEntries)
+      .set({ status: 'cooked' })
+      .where(and(eq(mealPlanEntries.id, input.mealPlanEntryId), eq(mealPlanEntries.householdId, auth.household.id)));
+  }
 
   const askOpened = new Map<string, StockItemDto>();
   const askStillSome = new Map<string, StockItemDto>();
@@ -199,6 +205,9 @@ export async function undoCook(deps: StockDeps, cookId: string): Promise<void> {
     }
   }
   await db.update(cooks).set({ undoneAt: now }).where(eq(cooks.id, cookId));
+  // The planned meal goes back to planned.
+  const planned = [...new Set(events.map((e) => e.mealPlanEntryId).filter((x): x is string => Boolean(x)))];
+  if (planned.length) await db.update(mealPlanEntries).set({ status: 'planned' }).where(inArray(mealPlanEntries.id, planned));
 }
 
 /** Recent cooks, newest first. */

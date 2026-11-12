@@ -1,10 +1,15 @@
-import { Link } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router';
+import type { PlanEntryDto } from '@snackoverflow/shared';
 import { addDays, formatQuantity } from '@snackoverflow/shared';
 import { BellButton, MenuButton, useMe } from '../components/Layout';
 import { useStockActions } from '../components/StockActions';
 import { Button, Card, EmptyState, PageHeader, Pill, Spinner } from '../components/ui';
 import { amountLabel, dateLabel, greeting, longToday, stateLabel, toneClasses, toneFor } from '../lib/format';
-import { useProducts, useStock, useWaste } from '../lib/queries';
+import { usePlan, useProducts, useRecipes, useRunningLow, useStock, useWaste } from '../lib/queries';
+import { api } from '../lib/api';
+import { minutesLabel } from '../lib/format';
+import { useToast } from '../components/Toast';
 
 export function TodayPage() {
   const me = useMe();
@@ -18,9 +23,18 @@ export function TodayPage() {
   const wasteChange =
     waste && waste.lastMonthGrams > 0 ? Math.round(((waste.thisMonthGrams - waste.lastMonthGrams) / waste.lastMonthGrams) * 100) : null;
 
+  const day = usePlan(me.today, me.today, 'me').data?.days[0];
+  const eatenKcal = (day?.entries ?? []).filter((e) => e.status === 'cooked').reduce((n, e) => n + (e.kcal ?? 0), 0);
+  const plannedKcal = (day?.entries ?? []).filter((e) => e.status !== 'skipped').reduce((n, e) => n + (e.kcal ?? 0), 0);
+  const tonight = (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned' && e.slot === 'dinner') ?? (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned');
+  const low = (useRunningLow().data ?? []).filter((l) => !l.onList);
+  const qc = useQueryClient();
+  const toast = useToast();
+
   return (
     <>
       <PageHeader title={greeting()} subtitle={longToday(me.today)} left={<MenuButton />} right={<BellButton />} />
+      {tonight && <TonightCard entry={tonight} />}
 
       <section aria-labelledby="use-soon" className="mb-6">
         <div className="mb-3 flex items-baseline justify-between">
@@ -111,12 +125,17 @@ export function TodayPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-3">
         <Card className="p-5">
-          <p className="text-muted">In stock</p>
+          <p className="text-muted">Today so far</p>
           <p className="mt-1 font-display text-4xl font-bold">
-            {stock.data?.length ?? '–'} <span className="font-sans text-lg font-normal text-muted">packs</span>
+            {eatenKcal.toLocaleString('en-GB')} <span className="font-sans text-lg font-normal text-muted">kcal</span>
           </p>
-          <Link to="/stock" className="mt-2 inline-block font-semibold text-accent-text">
-            Open stock
+          {plannedKcal > 0 && (
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-card-muted" role="img" aria-label={`${eatenKcal} of ${plannedKcal} planned calories`}>
+              <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (eatenKcal / plannedKcal) * 100)}%` }} />
+            </div>
+          )}
+          <Link to="/plan" className="mt-2 inline-block font-semibold text-accent-text">
+            Open planner
           </Link>
         </Card>
         <Card className="p-5">
@@ -133,6 +152,26 @@ export function TodayPage() {
         </Card>
       </div>
 
+      {low.length > 0 && (
+        <Card className="mb-6 flex items-center gap-4 p-5">
+          <div className="flex-1">
+            <p className="text-lg font-semibold">Running low</p>
+            <p className="text-muted">{low.map((l) => (l.daysLeft ? `${l.name} (about ${l.daysLeft} day${l.daysLeft === 1 ? '' : 's'})` : l.name)).join(', ')}</p>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              for (const l of low) await api.post('/api/shopping', { ingredientId: l.ingredientId, reason: 'running-low' }).catch(() => {});
+              await qc.invalidateQueries({ queryKey: ['shopping'] });
+              toast.show('Added to the shopping list.');
+            }}
+            className="inline-flex min-h-11 items-center rounded-xl bg-ink px-4 font-semibold text-bg"
+          >
+            Add to list
+          </button>
+        </Card>
+      )}
+
       {unnamed.length > 0 && (
         <Card className="mb-6 flex items-center gap-4 p-5">
           <div className="flex-1">
@@ -147,5 +186,42 @@ export function TodayPage() {
         </Card>
       )}
     </>
+  );
+}
+
+/** "Tonight · 6pm: Fish pie" with Cooked it / Skip / Move. */
+function TonightCard({ entry }: { entry: PlanEntryDto }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const recipe = useRecipes().data?.find((r) => r.id === entry.recipeId);
+  const label = entry.slot === 'dinner' ? 'Tonight · 6pm' : entry.slot === 'lunch' ? 'Lunch · 12:30' : entry.slot === 'breakfast' ? 'Breakfast' : 'Today';
+  const skip = async () => {
+    await api.patch(`/api/plan/${entry.id}`, { status: 'skipped' });
+    await qc.invalidateQueries({ queryKey: ['plan'] });
+    toast.show('Skipped.', { action: { label: 'Undo', onClick: async () => void (await api.patch(`/api/plan/${entry.id}`, { status: 'planned' }), await qc.invalidateQueries({ queryKey: ['plan'] })) } });
+  };
+  return (
+    <section className="mb-6 rounded-[24px] bg-[#1a1c1a] p-6 text-white" aria-label="Today's meal">
+      <div className="mb-2 flex justify-between text-sm font-semibold uppercase tracking-wider">
+        <span className="text-[#b4a6ff]">{label}</span>
+        {entry.people.length > 0 && <span className="normal-case tracking-normal text-white/70">{entry.people.map((p) => p.name).join(' + ')}</span>}
+      </div>
+      <h2 className="text-3xl font-bold">{entry.title}</h2>
+      <p className="mt-1 text-white/75">
+        {[`Serves ${entry.servings}`, minutesLabel(recipe?.totalMinutes ?? null), entry.kcalPerServing ? `${entry.kcalPerServing} kcal each` : null].filter(Boolean).join(' · ')}
+      </p>
+      <div className="mt-5 flex gap-3">
+        <button type="button" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}`)} className="min-h-14 flex-1 rounded-xl bg-accent px-4 text-lg font-semibold text-accent-ink">
+          Cooked it
+        </button>
+        <button type="button" onClick={() => void skip()} className="min-h-14 rounded-xl border border-white/25 px-5 text-lg font-semibold">
+          Skip
+        </button>
+        <button type="button" onClick={() => navigate(`/plan?entry=${entry.id}&date=${entry.date}`)} className="min-h-14 rounded-xl border border-white/25 px-5 text-lg font-semibold">
+          Move
+        </button>
+      </div>
+    </section>
   );
 }

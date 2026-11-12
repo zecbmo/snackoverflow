@@ -76,7 +76,24 @@ const ACTIONS: Record<string, [string, unknown, string]> = {
 async function handleNotificationLink(u: URL, queryClient: QueryClient, navigate: Navigate, toast: (msg: string) => void) {
   const path = u.searchParams.get('url') || '/inbox';
   const id = Number(u.searchParams.get('id'));
-  const action = ACTIONS[u.searchParams.get('action') ?? ''];
+  const actionName = u.searchParams.get('action') ?? '';
+  const entryId = u.searchParams.get('entryId');
+  const recipeId = u.searchParams.get('recipeId');
+  // Meal-time prompt: "Cooking Fish pie tonight?"
+  if (entryId && ['cooked', 'skip', 'move'].includes(actionName)) {
+    if (Number.isFinite(id)) void Inbox.dismiss({ id });
+    if (actionName === 'cooked' && recipeId) return navigate(`/recipes/${recipeId}/cook?entry=${entryId}`);
+    if (actionName === 'move') return navigate(`/plan?entry=${entryId}`);
+    try {
+      await api.patch(`/api/plan/${entryId}`, { status: 'skipped' });
+      await queryClient.invalidateQueries({ queryKey: ['plan'] });
+      toast('Skipped.');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Something went wrong.');
+    }
+    return navigate('/plan');
+  }
+  const action = ACTIONS[actionName];
   const stockItemId = u.searchParams.get('stockItemId');
   if (action && stockItemId) {
     try {

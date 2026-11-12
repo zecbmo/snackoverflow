@@ -41,6 +41,8 @@ export interface StockDeps {
   now: Date;
   /** Set while cooking, so every use and leftover can be undone together. */
   cookId?: string;
+  /** Set when food is eaten or cooked for a planned meal. */
+  mealPlanEntryId?: string;
 }
 
 export function householdToday(auth: Auth, now: Date): CalendarDate {
@@ -162,7 +164,7 @@ export async function firstLocationOfType(db: Db, householdId: string, type: Loc
 }
 
 async function writeEvent(
-  { db, auth, now, cookId }: StockDeps,
+  { db, auth, now, cookId, mealPlanEntryId }: StockDeps,
   item: StockRow,
   type: StockEventType,
   extra: { grams?: number | null; fraction?: number | null; before?: StockSnapshot | null; from?: string; to?: string },
@@ -182,6 +184,7 @@ async function writeEvent(
       userId: auth.user.id,
       createdAt: now,
       cookId: cookId ?? null,
+      mealPlanEntryId: mealPlanEntryId ?? null,
     })
     .returning({ id: stockEvents.id });
   if (!ev) throw new Error('Could not record the stock event');
