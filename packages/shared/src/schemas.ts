@@ -252,11 +252,22 @@ export const cookInput = z.object({
   /** The planned meal being cooked, which is then marked as cooked. */
   mealPlanEntryId: id.optional(),
   lines: z.array(cookLineInput).max(200).default([]),
-  /** Portions to keep, per location: leftovers, or the whole batch for a batch cook. */
+  /** Servings to keep, per location (halves allowed): leftovers, or the whole batch for a batch cook. */
   leftovers: z
-    .array(z.object({ locationId: id, portions: z.number().int().min(1).max(200) }))
+    .array(
+      z.object({
+        locationId: id,
+        portions: z
+          .number()
+          .min(0.5)
+          .max(200)
+          .refine((n) => Number.isInteger(n * 2), 'Whole or half portions'),
+      }),
+    )
     .max(10)
     .default([]),
+  /** Split each kept serving into this many smaller portions (each with that share of the calories). */
+  split: z.number().int().min(1).max(4).default(1),
 });
 export type CookInput = z.infer<typeof cookInput>;
 
@@ -324,6 +335,22 @@ export const updateShoppingItemInput = z.object({
   /** This item's category on the list; null goes back to the food's own. */
   foodGroup: z.enum(FOOD_GROUPS).nullable().optional(),
 });
+
+/** Adding stock by hand, several lines at once: a product, a food, or just a name. */
+export const manualAddLine = z
+  .object({
+    productId: id.optional(),
+    ingredientId: id.optional(),
+    text: z.string().trim().min(1).max(200).optional(),
+    count: z.number().int().min(1).max(50).default(1),
+    /** Leave out for the item's usual place. */
+    locationId: id.optional(),
+    /** Leave out to estimate it as usual. */
+    bestBefore: calendarDate.optional(),
+  })
+  .refine((v) => v.productId || v.ingredientId || v.text, 'Say what to add');
+export type ManualAddLine = z.infer<typeof manualAddLine>;
+export const manualAddInput = z.object({ items: z.array(manualAddLine).min(1).max(100) });
 
 export const buildListInput = z.object({ from: calendarDate, to: calendarDate });
 export const putAwayInput = z.object({ itemIds: z.array(id).max(200).optional() });

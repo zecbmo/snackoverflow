@@ -267,7 +267,7 @@ function ShoppingSummary() {
   );
 }
 
-/** Tonight's meal: "Tonight · Chicken curry" with Cooked it / Skip; the title opens it in the calendar. */
+/** Tonight's meal: "Tonight · Chicken curry" with Cooked it / Skip; the rest of the card opens that day in the calendar. */
 function TonightCard({ entry }: { entry: PlanEntryDto }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -288,17 +288,21 @@ function TonightCard({ entry }: { entry: PlanEntryDto }) {
     .filter(Boolean)
     .join(' · ');
   return (
-    <section aria-label="Today's meal" className="mb-5 flex flex-col gap-3 rounded-xl border border-line bg-card p-4 lg:flex-row lg:items-center lg:rounded-lg lg:py-3">
+    <section
+      aria-label="Today's meal"
+      className="relative mb-5 flex flex-col gap-3 rounded-xl border border-line bg-card p-4 hover:bg-card-muted/50 lg:flex-row lg:items-center lg:rounded-lg lg:py-3"
+    >
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-accent-text">{label}</p>
         <h2 className="truncate text-lg font-bold">
-          <Link to={`/calendar?entry=${entry.id}&date=${entry.date}`} className="hover:underline" title="Open in the calendar">
+          {/* The whole card opens that day in the calendar, like the week's dinners below. */}
+          <Link to={`/calendar?date=${entry.date}`} className="after:absolute after:inset-0 after:rounded-xl after:content-[''] lg:after:rounded-lg">
             {entry.title}
           </Link>
         </h2>
         <p className="text-sm text-muted">{meta}</p>
       </div>
-      <div className="flex gap-2">
+      <div className="relative z-10 flex gap-2">
         <Button variant="primary" className="flex-1 lg:flex-none" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}`)}>
           Cooked it
         </Button>

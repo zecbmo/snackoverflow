@@ -71,6 +71,13 @@
       "when": 1794574215846,
       "tag": "0009_review_people_and_list",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794577111795,
+      "tag": "0010_review2_portion_split",
+      "breakpoints": true
     }
   ]
 }

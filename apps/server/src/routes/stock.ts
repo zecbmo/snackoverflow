@@ -7,6 +7,7 @@ import {
   defrostStockInput,
   discardStockInput,
   freezeStockInput,
+  manualAddInput,
   moveStockInput,
   type ScanAddResult,
   type ScanUseResult,
@@ -33,6 +34,7 @@ import {
 } from '../db/schema';
 import { badRequest, HttpError, notFound, parse } from '../http';
 import { barcodesFor, findProductByBarcode, loadCatalog, productDto } from '../services/catalog';
+import { addByHand } from '../services/manualAdd';
 import { productById, resolveBarcode } from '../services/scan';
 import {
   addPack,
@@ -94,6 +96,12 @@ export async function stockRoutes(app: FastifyInstance) {
     const d = deps(req);
     const all = await listStock(d.db, d.auth, d.now);
     return all.filter((s) => s.productId === req.params.id);
+  });
+
+  /** Several things added by hand at once (no barcode): products, foods or just names. */
+  app.post('/api/stock/add-many', async (req) => {
+    const input = parse(manualAddInput, req.body);
+    return change(req, (d) => addByHand(d, ctx.seed.units, input.items));
   });
 
   app.post('/api/stock', async (req) => {

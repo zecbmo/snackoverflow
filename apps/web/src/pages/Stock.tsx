@@ -4,9 +4,10 @@
  * click a row for its details in a side panel.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, amountText, FOOD_GROUPS, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
+import { AddItemsSheet } from '../components/AddItemsSheet';
 import { type Column, ColumnsMenu, DataTable, StatusDot, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
@@ -81,6 +82,17 @@ interface PlanStatus {
 }
 
 export function StockPage() {
+  // "Add items" (by hand, no barcode) opens here; the sidebar links to /stock?add=1.
+  const [params, setParams] = useSearchParams();
+  const [adding, setAddingState] = useState(params.get('add') === '1');
+  const addParam = params.get('add') === '1';
+  useEffect(() => {
+    if (addParam) setAddingState(true);
+  }, [addParam]);
+  const setAdding = (on: boolean) => {
+    setAddingState(on);
+    if (!on && params.has('add')) setParams((p) => (p.delete('add'), p), { replace: true });
+  };
   const me = useMe();
   const stock = useStock();
   const locationsQuery = useLocations().data;
@@ -201,14 +213,20 @@ export function StockPage() {
         subtitle={stock.data ? `${stock.data.length} ${stock.data.length === 1 ? 'pack' : 'packs'}` : undefined}
         left={<MenuButton />}
         actions={
-          <Link
-            to="/scan"
-            className="hidden min-h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-sm font-semibold text-accent-ink hover:brightness-110 lg:inline-flex"
-          >
-            <Icon name="scan" className="size-4" /> Scan items
-          </Link>
+          <>
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <Icon name="plus" className="size-4" /> Add items
+            </Button>
+            <Link
+              to="/scan"
+              className="hidden min-h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-sm font-semibold text-accent-ink hover:brightness-110 lg:inline-flex"
+            >
+              <Icon name="scan" className="size-4" /> Scan items
+            </Link>
+          </>
         }
       />
+      <AddItemsSheet open={adding} onClose={() => setAdding(false)} />
       <Toolbar
         search={
           <div className="flex items-center gap-1.5">

@@ -214,6 +214,8 @@ export const products = pgTable(
     recipeId: uuid('recipe_id'),
     /** Weight of one portion, for meals counted in portions. */
     portionGrams: doublePrecision('portion_grams'),
+    /** Cooked meals kept in smaller portions: how many of these make one serving (1 = a full serving). */
+    portionSplit: integer('portion_split').notNull().default(1),
     /** Overrides the ingredient's category. */
     foodGroup: text('food_group'),
     createdAt: createdAt(),

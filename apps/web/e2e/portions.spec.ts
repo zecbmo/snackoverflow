@@ -22,14 +22,21 @@ test('take a free portion of a planned meal, then make it a batch cook', async (
   await page.goto(`/calendar?date=${today}`);
   await page.getByRole('button', { name: new RegExp(title) }).first().click();
   const sheet = page.getByRole('dialog');
-  await expect(sheet.getByText('Portions: you, 2 free')).toBeVisible();
+  await expect(sheet.getByRole('button', { name: /Portion 1: You/ })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: /Portion 3: free/ })).toBeVisible();
 
   // Take a free one: now two are mine.
   await sheet.getByRole('button', { name: /Portion 2: free/ }).click();
   await page.getByRole('menuitemradio', { name: 'You' }).click();
-  await expect(sheet.getByText('Portions: you, 1 free')).toBeVisible();
+  await expect(sheet.getByRole('button', { name: /Portion 2: You/ })).toBeVisible();
 
-  // A batch cook is for the freezer: nobody's eating it now.
-  await sheet.getByRole('checkbox', { name: /Batch cook/ }).check();
-  await expect(sheet.getByText(/Nobody: it's a batch cook/)).toBeVisible();
+  // Servings save as you tap.
+  await sheet.getByRole('button', { name: 'More', exact: true }).click();
+  await expect(sheet.getByText('4 servings')).toBeVisible();
+  await expect(sheet.getByRole('button', { name: /Portion 4: free/ })).toBeVisible();
+
+  // Batch cook frees every portion: it's for the freezer, nobody's eating it now.
+  await sheet.getByRole('button', { name: 'Batch cook' }).click();
+  await expect(sheet.getByRole('button', { name: 'Batch cook' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(sheet.getByRole('button', { name: /Portion 1: free/ })).toBeVisible();
 });

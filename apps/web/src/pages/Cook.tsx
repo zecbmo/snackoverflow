@@ -1,18 +1,21 @@
 /**
  * Cook a recipe (or batch cook it): check what comes out of stock, earliest
- * best-before first; keep leftovers or portions; then answer "Is it opened now?"
- * for packs used in part. The whole cook can be undone.
+ * best-before first; keep leftovers (in halves, up to what was cooked, cut into smaller
+ * portions if you like); when it wasn't planned, put what was eaten on the calendar;
+ * then answer "Is it opened now?" for packs used in part. The whole cook can be undone.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { amountText, type CookPlanDto, type CookResultDto, type StockItemDto } from '@snackoverflow/shared';
+import { amountText, type CookPlanDto, type CookResultDto, formatAmount, MEAL_SLOTS, type MealSlot, type PlanEntryDto, slotForTime, type StockItemDto } from '@snackoverflow/shared';
 import { BackButton, useMe } from '../components/Layout';
+import { PortionPicker } from '../components/PortionIcons';
+import { Segmented } from '../components/Toolbar';
 import { useToast } from '../components/Toast';
 import { Button, Card, ErrorNote, PageHeader, Pill, Select, Spinner, TextInput } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { dateLabel, toneClasses, toneFor } from '../lib/format';
-import { useCookPlan, useLocations } from '../lib/queries';
+import { useCookPlan, useLocations, useRecipe, useUsers } from '../lib/queries';
 
 type Take = CookPlanDto['lines'][number]['takes'][number] & { use: boolean; edit: string };
 type Line = Omit<CookPlanDto['lines'][number], 'takes'> & { takes: Take[]; skipped: boolean };
@@ -37,6 +40,17 @@ function stockLine(l: Line): string {
   return `${name} · ${amountText(l.inStockGrams, l.unit)} in stock`;
 }
 
+const SLOT_LABEL: Record<MealSlot, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+const SPLITS = [
+  { value: '1', label: 'No' },
+  { value: '2', label: 'Halves' },
+  { value: '3', label: 'Thirds' },
+  { value: '4', label: 'Quarters' },
+] as const;
+
+/** "1 portion", "1½ portions". */
+const portionWords = (n: number) => `${formatAmount(n)} ${n > 1 ? 'portions' : 'portion'}`;
+
 export function CookPage() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
@@ -44,6 +58,8 @@ export function CookPage() {
   const entryId = params.get('entry');
   const servings = Number(params.get('servings')) || 0;
   const plan = useCookPlan(id, servings || 1);
+  const recipe = useRecipe(id).data;
+  const members = useUsers().data ?? [];
   const me = useMe();
   const locationsQuery = useLocations();
   const locations = useMemo(() => locationsQuery.data ?? [], [locationsQuery.data]);
@@ -51,8 +67,14 @@ export function CookPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const [lines, setLines] = useState<Line[] | null>(null);
-  const [step, setStep] = useState<'take' | 'keep' | 'after'>('take');
+  const [step, setStep] = useState<'take' | 'keep' | 'calendar' | 'after'>('take');
+  // Servings kept per place (halves allowed); `split` cuts each serving into smaller portions.
   const [groups, setGroups] = useState<{ locationId: string; portions: number }[]>([]);
+  const [split, setSplit] = useState(1);
+  // Not from the calendar: who ate what wasn't kept, and when.
+  const [eaters, setEaters] = useState<{ userId: string; portions: number }[]>([]);
+  const [slot, setSlot] = useState<MealSlot>(() => slotForTime(new Date().getHours()));
+  const [planned, setPlanned] = useState<string | null>(null);
   const [result, setResult] = useState<CookResultDto | null>(null);
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -103,14 +125,34 @@ export function CookPage() {
               .filter((t) => !('grams' in t) || (t.grams ?? 0) > 0),
           })),
         leftovers: groups.filter((g) => g.portions > 0),
+        split,
       });
       setResult(r);
       setOpened(new Set(r.askOpened.map((i) => i.id)));
       await qc.invalidateQueries({ queryKey: ['stock'] });
       await qc.invalidateQueries({ queryKey: ['plan'] });
-      setStep('after');
+      // Cooked without a plan and not all of it kept: offer to put what was eaten on the calendar.
+      const eaten = p.servings - portions;
+      if (!entryId && eaten > 0) {
+        setEaters([{ userId: me.user.id, portions: Math.min(1, eaten) }]);
+        setStep('calendar');
+      } else setStep('after');
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addToCalendar = async () => {
+    setBusy(true);
+    try {
+      const e = await api.post<PlanEntryDto>('/api/plan', { date: me.today, slot, kind: 'recipe', recipeId: id, servings: p.servings - portions, people: eaters, eaten: true });
+      setPlanned(e.id);
+      await qc.invalidateQueries({ queryKey: ['plan'] });
+      setStep('after');
+    } catch (err) {
+      toast.show(errorMessage(err), { tone: 'error' });
     } finally {
       setBusy(false);
     }
@@ -121,13 +163,15 @@ export function CookPage() {
     try {
       for (const sid of opened) await api.post(`/api/stock/${sid}/open`, {});
       await qc.invalidateQueries({ queryKey: ['stock'] });
-      toast.show(batch ? 'Batch cooked. Portions are in stock.' : 'Enjoy!', {
+      toast.show(allKept ? 'Batch cooked. Portions are in stock.' : 'Enjoy!', {
         action: result
           ? {
               label: 'Undo',
               onClick: async () => {
                 await api.post(`/api/cooks/${result.cookId}/undo`, {});
+                if (planned) await api.del(`/api/plan/${planned}`).catch(() => {});
                 await qc.invalidateQueries({ queryKey: ['stock'] });
+                await qc.invalidateQueries({ queryKey: ['plan'] });
               },
             }
           : undefined,
@@ -144,13 +188,24 @@ export function CookPage() {
 
   const short = lines.filter((l) => !l.skipped && (l.shortGrams ?? 0) > 0 && !l.optional);
   const portions = groups.reduce((n, g) => n + g.portions, 0);
+  // Keeping every serving is a batch cook, whichever button started it.
+  const allKept = portions > 0 && portions >= p.servings - 0.001;
+  const room = p.servings - portions;
+  const pieces = portions * split;
+  const kcalEach = recipe?.kcalPerServing ? Math.round(recipe.kcalPerServing / split) : null;
 
   return (
     <>
-      <PageHeader title={batch ? `Batch cook ${p.title}` : `Cook ${p.title}`} subtitle={`${p.servings} servings`} left={<BackButton to={`/recipes/${id}`} />} />
+      <PageHeader title={batch || (step !== 'take' && allKept) ? `Batch cook ${p.title}` : `Cook ${p.title}`} subtitle={`${p.servings} servings`} left={<BackButton to={`/recipes/${id}`} />} />
       <div className="flex max-w-3xl flex-col gap-4">
         {step === 'take' && (
           <>
+            {short.length > 0 && (
+              <p role="note" className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2 text-[0.9375rem]">
+                <strong className="font-semibold">Not all of this is in stock</strong> (short of {short.map((l) => (l.ingredientName ?? l.text).toLowerCase()).join(', ')}). We'll take what you have and
+                assume you have the rest, so you can still cook it.
+              </p>
+            )}
             <p className="text-muted">This is what we'll take from stock, using what goes off first. Change any amount, or untick what you didn't use.</p>
             {lines.map((l, li) => (
               <Card key={l.recipeIngredientId} className={`p-4 ${l.skipped ? 'opacity-60' : ''}`}>
@@ -210,7 +265,6 @@ export function CookPage() {
                 )}
               </Card>
             ))}
-            {short.length > 0 && <p className="text-[0.9375rem] text-muted">Short of {short.map((l) => l.ingredientName ?? l.text).join(', ')}. You can still cook; we'll take what's there.</p>}
             <Button variant="primary" size="lg" className="lg:self-start lg:px-10" onClick={() => setStep('keep')}>
               Next
             </Button>
@@ -220,8 +274,13 @@ export function CookPage() {
         {step === 'keep' && (
           <>
             <Card className="flex flex-col gap-3 p-5">
-              <h2 className="text-xl font-bold">{batch ? 'Where are the portions going?' : 'Any leftovers?'}</h2>
-              <p className="text-muted">{batch ? 'Each place gets its own best-before.' : 'Leftovers keep for 2 days in the fridge (rice dishes 1 day), or freeze them.'}</p>
+              <h2 className="text-xl font-bold">{batch || allKept ? 'Where are the portions going?' : 'Any leftovers?'}</h2>
+              <p className="text-muted">
+                {batch || allKept
+                  ? 'Each place gets its own best-before.'
+                  : 'Leftovers keep for 2 days in the fridge (rice dishes 1 day), or freeze them.'}{' '}
+                You cooked {formatAmount(p.servings)}, so you can keep up to {formatAmount(p.servings)}.
+              </p>
               {groups.map((g, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <div className="flex items-center gap-2" role="group" aria-label="Portions">
@@ -229,19 +288,20 @@ export function CookPage() {
                       type="button"
                       aria-label="Fewer portions"
                       disabled={g.portions <= 0}
-                      onClick={() => setGroups((gs) => gs.map((x, j) => (j === i ? { ...x, portions: x.portions - 1 } : x)))}
+                      onClick={() => setGroups((gs) => gs.map((x, j) => (j === i ? { ...x, portions: Math.max(0, x.portions - 0.5) } : x)))}
                       className="inline-flex size-11 items-center justify-center rounded-full border border-line text-xl disabled:opacity-40"
                     >
                       −
                     </button>
-                    <span className="min-w-24 text-center font-semibold" aria-live="polite">
-                      {g.portions} {g.portions === 1 ? 'portion' : 'portions'}
+                    <span className="min-w-28 text-center font-semibold" aria-live="polite">
+                      {portionWords(g.portions)}
                     </span>
                     <button
                       type="button"
                       aria-label="More portions"
-                      onClick={() => setGroups((gs) => gs.map((x, j) => (j === i ? { ...x, portions: x.portions + 1 } : x)))}
-                      className="inline-flex size-11 items-center justify-center rounded-full border border-line text-xl"
+                      disabled={room < 0.5}
+                      onClick={() => setGroups((gs) => gs.map((x, j) => (j === i ? { ...x, portions: x.portions + 0.5 } : x)))}
+                      className="inline-flex size-11 items-center justify-center rounded-full border border-line text-xl disabled:opacity-40"
                     >
                       +
                     </button>
@@ -255,10 +315,26 @@ export function CookPage() {
                   </Select>
                 </div>
               ))}
-              {groups.length < 4 && (
-                <Button className="self-start" onClick={() => setGroups((gs) => [...gs, { locationId: (locations.find((l) => l.type === 'freezer') ?? locations[0]!).id, portions: 1 }])}>
+              {groups.length < 4 && room >= 0.5 && (
+                <Button
+                  className="self-start"
+                  onClick={() => setGroups((gs) => [...gs, { locationId: (locations.find((l) => l.type === 'freezer') ?? locations[0]!).id, portions: Math.min(1, room) }])}
+                >
                   Add another place
                 </Button>
+              )}
+              {portions > 0 && (
+                <div className="flex flex-col gap-2 border-t border-line pt-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">Split into smaller portions?</span>
+                    <Segmented label="Split into smaller portions" value={String(split) as (typeof SPLITS)[number]['value']} onChange={(v) => setSplit(Number(v))} options={[...SPLITS]} />
+                  </div>
+                  <p className="text-sm text-muted">
+                    {split === 1
+                      ? `${portionWords(portions)} kept${kcalEach ? `, about ${kcalEach} kcal each` : ''}.`
+                      : `${formatAmount(portions)} ${portions > 1 ? 'servings' : 'serving'} kept as ${portionWords(pieces)}${kcalEach ? ` of about ${kcalEach} kcal each` : ''}.`}
+                  </p>
+                </div>
               )}
             </Card>
             <div className="grid grid-cols-2 gap-3">
@@ -266,7 +342,46 @@ export function CookPage() {
                 Back
               </Button>
               <Button variant="primary" size="lg" disabled={busy} onClick={() => void confirm()}>
-                {busy ? 'Saving…' : portions ? `Cooked, keep ${portions}` : 'Cooked it'}
+                {busy ? 'Saving…' : allKept ? `Batch cooked, keep ${formatAmount(pieces)}` : portions ? `Cooked, keep ${formatAmount(pieces)}` : 'Cooked it'}
+              </Button>
+            </div>
+          </>
+        )}
+
+        {step === 'calendar' && (
+          <>
+            <Card className="flex flex-col gap-3 p-5">
+              <h2 className="text-xl font-bold">Add it to your calendar?</h2>
+              <p className="text-muted">
+                This wasn't planned. Put the {formatAmount(p.servings - portions)} {p.servings - portions > 1 ? 'servings' : 'serving'} you didn't keep on the calendar so they count
+                towards calories. Tap a circle to say who had it.
+              </p>
+              <PortionPicker
+                entry={{ servings: p.servings - portions, people: eaters.map((e) => ({ ...e, name: members.find((m) => m.id === e.userId)?.name ?? 'Someone' })), batch: false } as PlanEntryDto}
+                viewerId={me.user.id}
+                meId={me.user.id}
+                isAdmin={me.user.role === 'admin'}
+                members={members}
+                onChange={setEaters}
+              />
+              <label className="flex items-center gap-2 text-sm">
+                Meal
+                <Select aria-label="Meal" value={slot} onChange={(e) => setSlot(e.target.value as MealSlot)} className="max-w-40">
+                  {MEAL_SLOTS.map((m) => (
+                    <option key={m} value={m}>
+                      {SLOT_LABEL[m]}
+                    </option>
+                  ))}
+                </Select>
+                <span className="text-muted">today</span>
+              </label>
+            </Card>
+            <div className="grid grid-cols-2 gap-3">
+              <Button size="lg" onClick={() => setStep('after')}>
+                Skip
+              </Button>
+              <Button variant="primary" size="lg" disabled={busy || eaters.length === 0} onClick={() => void addToCalendar()}>
+                Add to calendar
               </Button>
             </div>
           </>

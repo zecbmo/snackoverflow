@@ -75,8 +75,13 @@ export function applyStillSome(pack: PackAmount, answer: StillSomeAnswer): PackA
 }
 
 /** A closed pack used in part for the first time prompts "Is it opened now?". */
-export function shouldAskOpened(state: StockState, amount: UseAmount, after: PackAmount): boolean {
-  return state === 'closed' && amount.kind !== 'all' && after.fractionLeft > 0;
+/**
+ * Ask "Is it opened now?" after using part of a closed pack, but only for food whose date
+ * changes once opened (`openable`): potatoes or onions have no opened shelf life, so there's
+ * nothing to ask (and marking them opened would be refused).
+ */
+export function shouldAskOpened(state: StockState, amount: UseAmount, after: PackAmount, openable = true): boolean {
+  return openable && state === 'closed' && amount.kind !== 'all' && after.fractionLeft > 0;
 }
 
 export interface PackForOrdering {

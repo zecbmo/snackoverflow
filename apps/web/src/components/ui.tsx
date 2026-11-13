@@ -99,7 +99,7 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 }
 
 /** Bottom sheet on phones, centred dialog on wide screens. Uses <dialog> for focus handling and Escape. */
-export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+export function Sheet({ open, onClose, title, children, wide = false }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -120,7 +120,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      className="m-0 mt-auto w-full max-w-none bg-transparent p-0 backdrop:bg-black/40 sm:m-auto sm:max-w-md lg:max-w-[28rem]"
+      className={`m-0 mt-auto w-full max-w-none bg-transparent p-0 backdrop:bg-black/40 sm:m-auto ${wide ? 'sm:max-w-2xl lg:max-w-3xl' : 'sm:max-w-md lg:max-w-[28rem]'}`}
     >
       {open && (
         <div className="animate-slide-up max-h-[85vh] overflow-y-auto rounded-t-2xl bg-card p-5 pb-8 text-ink shadow-xl sm:rounded-xl lg:p-4 lg:pb-5">

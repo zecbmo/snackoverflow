@@ -289,15 +289,25 @@ function Sidebar() {
         )}
       </div>
       <nav aria-label="Pages" className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-3 ${collapsed ? 'items-stretch px-2' : 'px-3'}`}>
-        <Link
-          to="/scan"
-          aria-label="Scan items"
-          title={collapsed ? 'Scan items' : undefined}
-          className="mb-3 inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-accent text-sm font-semibold text-accent-ink hover:brightness-110"
-        >
-          <Icon name="scan" className="size-[18px]" />
-          {!collapsed && 'Scan items'}
-        </Link>
+        <div className={`mb-3 flex shrink-0 gap-1.5 ${collapsed ? 'flex-col' : ''}`}>
+          <Link
+            to="/scan"
+            aria-label="Scan items"
+            title={collapsed ? 'Scan items' : undefined}
+            className="inline-flex h-8 flex-1 items-center justify-center gap-2 rounded-md bg-accent text-sm font-semibold text-accent-ink hover:brightness-110"
+          >
+            <Icon name="scan" className="size-[18px]" />
+            {!collapsed && 'Scan items'}
+          </Link>
+          <Link
+            to="/stock?add=1"
+            aria-label="Add items by hand"
+            title="Add items by hand"
+            className="inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-line bg-card text-ink hover:bg-card-muted"
+          >
+            <Icon name="plus" className="size-[18px]" />
+          </Link>
+        </div>
         {main.map((l) => (
           <SideLink key={l.to} {...l} collapsed={collapsed} end={l.to === '/'} />
         ))}

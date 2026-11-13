@@ -16,6 +16,7 @@ import type {
   ScanAddResult,
   SessionDto,
   ShoppingItemDto,
+  StockChangeDto,
   StockItemDto,
 } from '@snackoverflow/shared';
 import { runNotifications } from '../src/notify/notifications';
@@ -405,5 +406,85 @@ describe('cook plan', () => {
     ]);
     expect(plan.lines[0]!.inStockGrams).toBe(0);
     expect(plan.lines[1]).toMatchObject({ neededGrams: 900, inStockGrams: 2500 });
+  });
+});
+
+describe('review 2: cooking', () => {
+  const cookPie = async (body: Record<string, unknown>) => {
+    const pie = await fishPie();
+    await api.post<ScanAddResult>('/api/scan/add', { barcode: '3002' });
+    const plan = await api.get<CookPlanDto>(`/api/recipes/${pie.id}/cook-plan`);
+    const lines = [{ takes: plan.lines[0]!.takes.map((tk) => ({ stockItemId: tk.stockItemId, grams: tk.grams! })) }];
+    return { pie, res: await api.raw('POST', `/api/recipes/${pie.id}/cook`, { servings: 2, lines, ...body }) };
+  };
+
+  it("doesn't ask whether potatoes are opened (their date doesn't change)", async () => {
+    const { res } = await cookPie({});
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as CookResultDto).askOpened).toEqual([]);
+  });
+
+  it('keeps half portions, never more than was cooked', async () => {
+    const { res } = await cookPie({ leftovers: [{ locationId: loc.fridge.id, portions: 1.5 }] });
+    const cooked = res.json() as CookResultDto;
+    // 100g of potatoes for 2 servings: 1.5 servings is 75g.
+    expect(cooked.leftovers[0]).toMatchObject({ remainingGrams: 75 });
+    const { res: tooMany } = await cookPie({ leftovers: [{ locationId: loc.fridge.id, portions: 3 }] });
+    expect(tooMany.statusCode).toBe(400);
+    const { res: odd } = await cookPie({ leftovers: [{ locationId: loc.fridge.id, portions: 0.3 }] });
+    expect(odd.statusCode).toBe(400);
+  });
+
+  it('splits kept servings into smaller portions with their share of the calories', async () => {
+    const { pie, res } = await cookPie({ leftovers: [{ locationId: loc.fridge.id, portions: 2 }], split: 2 });
+    const kept = (res.json() as CookResultDto).leftovers[0]!;
+    expect(kept.productName).toBe('Fish pie (half portions)');
+    // Two servings (100g) kept as four portions of 25g.
+    expect(kept.remainingGrams).toBe(100);
+    const products = await api.get<ProductDto[]>('/api/products?q=Fish pie');
+    const half = products.find((p) => p.name === 'Fish pie (half portions)')!;
+    expect(half).toMatchObject({ isMeal: true });
+    // Eating one portion of it counts half a serving's calories.
+    const recipe = await api.get<RecipeDto>(`/api/recipes/${pie.id}`);
+    const entry = await api.post<PlanEntryDto>('/api/plan', {
+      date: '2026-11-12',
+      slot: 'lunch',
+      kind: 'stock',
+      stockItemId: kept.id,
+      servings: 1,
+      people: [{ userId: me.user.id, portions: 1 }],
+    });
+    // (Within a calorie: the recipe's figure per serving is rounded, the portion's is worked out per 100g.)
+    expect(Math.abs(entry.kcal! - recipe.kcalPerServing! / 2)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('review 2: adding stock by hand', () => {
+  it('adds foods, known products and new names in one go, each to its usual place', async () => {
+    const spuds = await api.post<ScanAddResult>('/api/scan/add', { barcode: '3002', locationId: loc.cupboard.id });
+    const added = await api.post<StockChangeDto[]>('/api/stock/add-many', {
+      items: [
+        // A food: uses the product bought last time for it (and where it went).
+        { ingredientId: ing.potatoes!.id, count: 2 },
+        // A food never bought before: a simple product is made for it.
+        { ingredientId: ing.tomatoes!.id },
+        // Just a name.
+        { text: 'Birthday cake', locationId: loc.fridge.id, bestBefore: '2026-11-20' },
+      ],
+    });
+    expect(added).toHaveLength(4);
+    expect(added.slice(0, 2).map((c) => [c.item.productId, c.item.locationId])).toEqual([
+      [spuds.change.item.productId, loc.cupboard.id],
+      [spuds.change.item.productId, loc.cupboard.id],
+    ]);
+    expect(added[2]!.item).toMatchObject({ productName: 'Tomatoes', ingredientId: ing.tomatoes!.id });
+    expect(added[3]!.item).toMatchObject({ productName: 'Birthday cake', locationId: loc.fridge.id, bestBefore: '2026-11-20' });
+    // Typed again by name, it's the same product (remembered).
+    const again = await api.post<StockChangeDto[]>('/api/stock/add-many', { items: [{ text: 'birthday cake' }] });
+    expect(again[0]!.item.productId).toBe(added[3]!.item.productId);
+    // Each pack can be undone like any other change.
+    await api.post(`/api/events/${again[0]!.eventId}/undo`);
+    expect((await api.get<StockItemDto[]>('/api/stock')).some((s) => s.id === again[0]!.item.id)).toBe(false);
+    expect((await api.raw('POST', '/api/stock/add-many', { items: [{ count: 1 }] })).statusCode).toBe(400);
   });
 });

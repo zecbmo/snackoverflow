@@ -120,6 +120,7 @@ export function productDto(p: ProductRow, codes: string[], catalog: Catalog, pri
   return {
     id: p.id,
     name: p.name,
+    isMeal: p.recipeId !== null,
     brand: p.brand,
     imageUrl: p.imageUrl,
     barcodes: codes,

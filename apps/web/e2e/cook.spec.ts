@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signIn, typeBarcode } from './helpers';
 
-/** Phase 3 key flow: type a recipe in, cook it from stock, keep leftovers. */
+/** Phase 3 key flow: type a recipe in, cook it from stock, keep leftovers, put what was eaten on the calendar. */
 test('cook a recipe from stock and keep leftovers', async ({ page }, info) => {
   const title = `Test chilli ${info.project.name}`;
   await signIn(page);
@@ -24,8 +24,14 @@ test('cook a recipe from stock and keep leftovers', async ({ page }, info) => {
   await page.getByRole('link', { name: 'Cook', exact: true }).click();
   await expect(page.getByText('Beef Mince', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Next' }).click();
+  // Leftovers go in halves.
   await page.getByRole('button', { name: 'More portions' }).click();
-  await page.getByRole('button', { name: /Cooked, keep 1/ }).click();
+  await expect(page.getByText('½ portion', { exact: false }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'More portions' }).click();
+  await page.getByRole('button', { name: /Cooked, keep 1$/ }).click();
+  // It wasn't planned: put what was eaten on the calendar (one portion is yours already).
+  await expect(page.getByRole('heading', { name: 'Add it to your calendar?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add to calendar' }).click();
   await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByText('Enjoy!')).toBeVisible();
 

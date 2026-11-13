@@ -211,8 +211,7 @@ export function RecipesPage() {
           </>
         }
       />
-      <div className="no-scrollbar -mx-4 mb-2 flex items-end gap-1 overflow-x-auto border-b border-line px-4 lg:mx-0 lg:px-0">
-        <div role="tablist" aria-label="Which recipes" className="flex gap-1">
+      <div role="tablist" aria-label="Which recipes" className="no-scrollbar -mx-4 mb-2 flex gap-1 overflow-x-auto border-b border-line px-4 lg:mx-0 lg:px-0">
         {RECIPE_TABS.map(({ id: t, label }) => (
           <button
             key={t}
@@ -225,12 +224,9 @@ export function RecipesPage() {
             {label} <span className="font-normal text-muted">{count(t)}</span>
           </button>
         ))}
-        </div>
-        <span className="mb-1 ml-auto pl-2">
-          <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_CHOICES} />
-        </span>
       </div>
       <Toolbar search={<SearchBox value={q} onChange={setQ} placeholder="Search recipes" label="Search recipes" />}>
+        <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_CHOICES} />
         {tags.length > 0 && (
           <PickerMenu label="Tag" icon="tag" value={tag} defaultValue="" onChange={setTag} options={[{ value: '', label: 'All tags' }, ...tags.map((t) => ({ value: t, label: t }))]} />
         )}

@@ -83,6 +83,8 @@ export interface IngredientDto {
 export interface ProductDto {
   id: string;
   name: string | null;
+  /** A cooked meal (leftovers or batch portions), made by cooking rather than bought. */
+  isMeal: boolean;
   brand: string | null;
   imageUrl: string | null;
   barcodes: string[];

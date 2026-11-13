@@ -3,7 +3,7 @@
  * stock, minus what's already on the list, rounded up to whole packs), staples
  * running low, manual items, and putting the shopping away afterwards.
  */
-import { and, asc, desc, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import {
   addDays,
   type BuildListResultDto,
@@ -19,12 +19,12 @@ import {
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import type { Db } from '../db/client';
-import { ingredients, locations, products, shoppingItems, stockEvents, stockItems, users } from '../db/schema';
+import { ingredients, products, shoppingItems, stockEvents, stockItems, users } from '../db/schema';
 import { notFound } from '../http';
 import { type Catalog, type IngredientRow, loadCatalog } from './catalog';
 import { earmarks } from './planner';
 import { estimateItemPence, ingredientPrices, latestPrices } from './pricing';
-import { addPack, firstLocationOfType, type StockDeps } from './stock';
+import { addPack, type StockDeps, usualLocationId } from './stock';
 
 type ItemRow = typeof shoppingItems.$inferSelect;
 
@@ -314,22 +314,7 @@ export async function putAway(deps: StockDeps, itemIds?: string[]): Promise<{ ad
       continue;
     }
     // Its usual place: where it went last time, else the default for its kind of food.
-    const [last] = await db
-      .select({ locationId: stockItems.locationId })
-      .from(stockItems)
-      .where(and(eq(stockItems.productId, product.id), lt(stockItems.addedAt, deps.now)))
-      .orderBy(desc(stockItems.addedAt))
-      .limit(1);
-    let locationId = last?.locationId;
-    if (!locationId) {
-      const ing = product.ingredientId ? catalog.ingredients.get(product.ingredientId) : undefined;
-      const cat = (product.shelfLifeCategoryId ?? ing?.shelfLifeCategoryId) ? catalog.categories.get((product.shelfLifeCategoryId ?? ing?.shelfLifeCategoryId)!) : undefined;
-      locationId = (await firstLocationOfType(db, auth.household.id, cat?.defaultLocation ?? 'cupboard'))?.id;
-    }
-    if (!locationId) {
-      const [any] = await db.select({ id: locations.id }).from(locations).where(eq(locations.householdId, auth.household.id)).limit(1);
-      locationId = any?.id;
-    }
+    const locationId = await usualLocationId(deps, product, catalog);
     if (!locationId) {
       needsScan.push(item);
       continue;

@@ -2,7 +2,7 @@
  * Stock changes. Every change writes a stock event holding the pack as it was
  * before, so any change can be undone and waste can be counted.
  */
-import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm';
 import {
   type AdjustStockInput,
   applyStillSome,
@@ -155,6 +155,25 @@ async function loadLocation(db: Db, auth: Auth, id: string): Promise<LocationRow
   return loc;
 }
 
+/** Where a product usually goes: where it went last time, else the default for its kind of food, else anywhere. */
+export async function usualLocationId(deps: StockDeps, product: ProductRow, catalog: Catalog): Promise<string | undefined> {
+  const { db, auth } = deps;
+  const [last] = await db
+    .select({ locationId: stockItems.locationId })
+    .from(stockItems)
+    .where(and(eq(stockItems.productId, product.id), lt(stockItems.addedAt, deps.now)))
+    .orderBy(desc(stockItems.addedAt))
+    .limit(1);
+  if (last) return last.locationId;
+  const ing = product.ingredientId ? catalog.ingredients.get(product.ingredientId) : undefined;
+  const categoryId = product.shelfLifeCategoryId ?? ing?.shelfLifeCategoryId;
+  const cat = categoryId ? catalog.categories.get(categoryId) : undefined;
+  const byType = await firstLocationOfType(db, auth.household.id, cat?.defaultLocation ?? 'cupboard');
+  if (byType) return byType.id;
+  const [any] = await db.select({ id: locations.id }).from(locations).where(eq(locations.householdId, auth.household.id)).limit(1);
+  return any?.id;
+}
+
 export async function firstLocationOfType(db: Db, householdId: string, type: LocationType): Promise<LocationRow | null> {
   const [loc] = await db
     .select()
@@ -281,10 +300,9 @@ export async function usePack(deps: StockDeps, id: string, amount: UseAmount): P
     fraction: result.usedFraction,
     before: snapshot(item),
   });
-  return finishChange(db, auth, now, item.id, eventId, {
-    askStillSome: result.askStillSome,
-    askOpened: shouldAskOpened(item.state, amount, result.after),
-  });
+  const change = await finishChange(db, auth, now, item.id, eventId, { askStillSome: result.askStillSome });
+  // Only ask "Is it opened now?" when opening would change its date (`actions.open` is null when allowed).
+  return { ...change, askOpened: shouldAskOpened(item.state, amount, result.after, change.item.actions.open === null) };
 }
 
 /** Bin a pack (or part of it). Kept separate from use so waste can be counted. */

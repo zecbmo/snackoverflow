@@ -211,7 +211,7 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
             </div>
             <p className="mt-1.5 text-xs text-muted">{RECIPE_TABS.find((t) => t.id === recipeTab)?.help}</p>
             <div className="mt-2">
-              <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_CHOICES.map((m) => ({ ...m, label: m.value === 'any' ? 'Any' : m.label }))} />
+              <Segmented stretch label="Meal" value={meal} onChange={setMeal} options={MEAL_CHOICES.map((m) => ({ ...m, label: m.value === 'any' ? 'Any' : m.label }))} />
             </div>
           </div>
         )}

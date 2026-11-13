@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "portion_split" integer DEFAULT 1 NOT NULL;

@@ -55,21 +55,24 @@ export function Segmented<V extends string>({
   options,
   onChange,
   label,
+  stretch = false,
 }: {
   value: V;
   options: { value: V; label: ReactNode }[];
   onChange: (v: V) => void;
   label: string;
+  /** Fill the width available, sharing it between the options. */
+  stretch?: boolean;
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-lg bg-card-muted p-0.5 lg:rounded-md">
+    <div role="group" aria-label={label} className={`${stretch ? 'flex w-full' : 'inline-flex shrink-0'} rounded-lg bg-card-muted p-0.5 lg:rounded-md`}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`min-h-10 whitespace-nowrap rounded-md px-3 text-sm font-medium lg:min-h-7 lg:rounded lg:px-2.5 ${
+          className={`min-h-10 whitespace-nowrap rounded-md px-3 text-sm font-medium lg:min-h-7 lg:rounded lg:px-2.5 ${stretch ? 'flex-1' : ''} ${
             value === o.value ? 'bg-card font-semibold text-ink shadow-sm' : 'text-muted hover:text-ink'
           }`}
         >

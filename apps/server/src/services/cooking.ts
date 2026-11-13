@@ -91,13 +91,20 @@ export async function planCook(db: Db, auth: Auth, recipeId: string, servings: n
   };
 }
 
-/** The meal product for a recipe's leftovers and batch portions (made the first time). */
-async function mealProduct(db: Db, auth: Auth, recipeId: string, portionGrams: number | null) {
+const SPLIT_NAME: Record<number, string> = { 2: 'half', 3: 'third', 4: 'quarter' };
+
+/**
+ * The meal product for a recipe's leftovers and batch portions (made the first time). Smaller
+ * portions (`split` per serving) are a product of their own, "Beef chilli (half portions)", so one
+ * portion of it is that share of a serving, calories and all.
+ */
+async function mealProduct(db: Db, auth: Auth, recipeId: string, servingGrams: number | null, split = 1) {
   const [existing] = await db
     .select()
     .from(products)
-    .where(and(eq(products.householdId, auth.household.id), eq(products.recipeId, recipeId)))
+    .where(and(eq(products.householdId, auth.household.id), eq(products.recipeId, recipeId), eq(products.portionSplit, split)))
     .limit(1);
+  const portionGrams = servingGrams ? servingGrams / split : null;
   const recipe = await getRecipe(db, auth, recipeId);
   // Rice and pasta dishes keep for less time than other leftovers (FSA).
   const catalog = await loadCatalog(db, auth.household.id);
@@ -109,13 +116,15 @@ async function mealProduct(db: Db, auth: Auth, recipeId: string, portionGrams: n
     .where(and(eq(shelfLifeCategories.householdId, auth.household.id), eq(shelfLifeCategories.key, categoryKey)));
   const perServing = recipe.nutritionPerServing;
   const portion = portionGrams ?? 1;
+  // Per 100g is the same whatever the portion size: it's the same food.
   const nutritionPer100g =
-    portionGrams && perServing.kcal != null && recipe.nutritionCoverage >= 0.6
-      ? Object.fromEntries(Object.entries(perServing).map(([k, v]) => [k, typeof v === 'number' ? round((v / portionGrams) * 100) : v]))
+    servingGrams && perServing.kcal != null && recipe.nutritionCoverage >= 0.6
+      ? Object.fromEntries(Object.entries(perServing).map(([k, v]) => [k, typeof v === 'number' ? round((v / servingGrams) * 100) : v]))
       : null;
   const values = {
-    name: recipe.title,
+    name: split > 1 ? `${recipe.title} (${SPLIT_NAME[split]} portions)` : recipe.title,
     recipeId,
+    portionSplit: split,
     portionGrams: portion,
     packGrams: portion,
     packAmount: 1,
@@ -139,6 +148,8 @@ export async function confirmCook(deps: StockDeps, recipeId: string, input: Cook
   const { db, auth, now } = deps;
   const [recipe] = await db.select().from(recipes).where(and(eq(recipes.id, recipeId), eq(recipes.householdId, auth.household.id)));
   if (!recipe) throw notFound('No such recipe.');
+  const kept = input.leftovers.reduce((n, g) => n + g.portions, 0);
+  if (kept > input.servings + 0.001) throw badRequest(`You cooked ${input.servings} servings, so you can keep up to ${input.servings}.`);
   const [cook] = await db
     .insert(cooks)
     .values({ householdId: auth.household.id, recipeId, servings: input.servings, userId: auth.user.id, createdAt: now })
@@ -166,9 +177,11 @@ export async function confirmCook(deps: StockDeps, recipeId: string, input: Cook
   const leftovers: StockItemDto[] = [];
   if (input.leftovers.length) {
     const plan = await planCook(db, auth, recipeId, recipe.serves);
-    const product = await mealProduct(db, auth, recipeId, plan.portionGrams);
+    const product = await mealProduct(db, auth, recipeId, plan.portionGrams, input.split);
+    // Kept servings, whatever size the portions are cut into.
+    const serving = plan.portionGrams ?? 1;
     for (const group of input.leftovers) {
-      const added = await addPack(d, { product, locationId: group.locationId, grams: (product.portionGrams ?? 1) * group.portions });
+      const added = await addPack(d, { product, locationId: group.locationId, grams: serving * group.portions });
       leftovers.push(added.item);
     }
   }

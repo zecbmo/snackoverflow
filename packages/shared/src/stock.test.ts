@@ -67,6 +67,11 @@ describe('shouldAskOpened', () => {
     expect(shouldAskOpened('opened', { kind: 'fraction', fraction: 0.5 }, after)).toBe(false);
     expect(shouldAskOpened('closed', { kind: 'all' }, { ...after, fractionLeft: 0 })).toBe(false);
   });
+
+  it("doesn't ask about food whose date doesn't change once opened (potatoes)", () => {
+    const after = { fractionLeft: 0.5, initialGrams: 2500, remainingGrams: 1250 };
+    expect(shouldAskOpened('closed', { kind: 'grams', grams: 1250 }, after, false)).toBe(false);
+  });
 });
 
 describe('orderForUse', () => {

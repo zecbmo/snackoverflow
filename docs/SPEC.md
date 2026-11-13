@@ -66,10 +66,15 @@ The scanner has three modes, switched at the top of the camera screen:
 
 - From the item (tap, then Use), or scan in "Use" mode.
 - Quick choices: Used it all / Some (¼, ½, ¾) / Exact amount. Exact is never required.
-- When a closed item is used for the first time, a prompt asks "Is it opened now?". Yes sets the best-before to the earlier of the current date and the opened shelf life (e.g. pesto: 14 days).
+- When a closed item is used for the first time, a prompt asks "Is it opened now?". Yes sets the best-before to the earlier of the current date and the opened shelf life (e.g. pesto: 14 days). Food whose date doesn't change once opened (potatoes, onions) is never asked about.
 - When the tracked amount gets close to zero, or looks off after a rough "some", the app asks "Is there still some left?" with Yes / Nearly gone / None.
 - If using something would leave a planned meal short, a warning appears ("This leaves 50g for Fish pie on Thursday") with Use anyway / Cancel / Add to shopping list.
 - Discard (binned it) is separate from Use, so waste can be counted.
+
+**Add by hand**
+
+- "Add items" (next to Scan items) opens a window to add several things at once without a barcode: type a food and press Enter (with suggestions), set how many packs, where (its usual place by default) and, if you like, the best-before; then add them all. It isn't tied to the shopping list.
+- A food uses the product last bought for it; a name never seen before becomes a simple product, remembered next time. Each pack is added as usual (estimated dates, a stock event each, Undo).
 
 **Freeze and defrost**
 
@@ -80,10 +85,12 @@ The scanner has three modes, switched at the top of the camera screen:
 **Cook a planned meal**
 
 1. At the slot's time (e.g. 6pm for dinner) a notification asks "Cooking Fish pie tonight?" with Cooked / Skip / Move.
-2. Cooked opens a confirm screen with every deduction prefilled from stock, earliest-expiring first. Each line shows the amount for the servings being cooked in the recipe's own units ("2 apples", "900g potatoes"), what the recipe uses for its own servings, and how much is in stock. Adjust any line, or tick "didn't use".
+2. Cooked opens a confirm screen with every deduction prefilled from stock, earliest-expiring first. When not everything is in stock, a note at the top says the app will take what's there and assume you have the rest. Each line shows the amount for the servings being cooked in the recipe's own units ("2 apples", "900g potatoes"), what the recipe uses for its own servings, and how much is in stock. Adjust any line, or tick "didn't use".
 3. Done goes back to where the cook started (Today, the Calendar or the recipe).
-4. Any opened prompts appear, then "Any leftovers?" asks for portions and a location.
-5. Leftovers become stock items ("Fish pie · 2 portions · fridge · use by Sat") that can be planned like any meal.
+4. "Any leftovers?" asks how many servings to keep, in halves, up to the servings cooked, and where. An option splits them into smaller portions (halves, thirds or quarters of a serving), each with that share of the calories; smaller portions are a meal product of their own ("Fish pie (half portions)"). Keeping every serving makes it a batch cook ("Batch cooked").
+5. Cooked without a planned meal and not all kept: "Add it to your calendar?" puts what was eaten on today's calendar (the who's-eating circles, and the meal), or Skip.
+6. Any opened prompts appear.
+7. Leftovers become stock items ("Fish pie · 2 portions · fridge · use by Sat") that can be planned like any meal.
 
 **Batch cook**
 
@@ -115,7 +122,7 @@ The scanner has three modes, switched at the top of the camera screen:
 - Something added to your calendar is one serving, for you. More servings show as dashed (free) portions.
 - Only your own portions count towards your calories. Free portions, and batch cooks, count for nobody.
 - A meal shows on your calendar when you have a portion or when any portion is free, so everyone can see what's being cooked. A single serving that's yours shows only on yours; a meal given entirely to other people doesn't show on yours.
-- In the meal's sheet, tap an icon to change it. Anyone can take a free portion or give theirs back; only admins can give portions to other people. Fewer servings take portions back from the last people listed.
+- In the meal's sheet, tap an icon to change it. Anyone can take a free portion or give theirs back; only admins can give portions to other people. Servings change with − and + (saved as you tap); fewer servings take portions back from the last people listed. A Batch cook button frees every portion and makes the meal count for nobody; giving someone a portion makes it an ordinary meal again.
 - Food logged as already eaten with nobody named counts for the person who logged it.
 - Admins can view and edit other people's calendars. Anyone who doesn't want calorie tracking can ignore it; nothing is forced.
 
@@ -193,13 +200,13 @@ Phones have five tabs (Today, Stock, Scan, Calendar, Shop) with Scan as a large 
 
 | Screen | Main content | Key actions |
 | --- | --- | --- |
-| Today (home) | Today's meals, "use soon" strip (next 3 days), running-low nudges, quick stats | Cooked / skip (the meal's name opens it in the Calendar), Use / Freeze from the strip |
-| Stock | A table with quick filters (All / Fridge / Freezer / Cupboard) and quick grouping (None / Location / Freshness / Category), search, filter (including batch cooks and leftovers, and a Category submenu), sort, and a Columns picker to show or hide columns; columns Category, Where, State (an icon: opened, frozen, defrosted), Packs, Amount (ml for liquids; ~ marks an estimate for opened packs), Planned (shown red when there isn't enough for the planned meals, or with the shopping-list mark when it's on the list) and Best before | Use, Freeze or Defrost and Bin on every row; Move, Mark as opened and details in "⋯"; tick rows for bulk actions; the side panel adds Add to shopping list, and the table narrows beside it |
+| Today (home) | Today's meals, "use soon" strip (next 3 days), running-low nudges, quick stats | Cooked / skip (anywhere else on the meal's card opens that day in the Calendar, like the week's dinners), Use / Freeze from the strip |
+| Stock | Scan items and Add items (by hand, in bulk) at the top. A table with quick filters (All / Fridge / Freezer / Cupboard) and quick grouping (None / Location / Freshness / Category), search, filter (including batch cooks and leftovers, and a Category submenu), sort, and a Columns picker to show or hide columns; columns Category, Where, State (an icon: opened, frozen, defrosted), Packs, Amount (ml for liquids; ~ marks an estimate for opened packs), Planned (shown red when there isn't enough for the planned meals, or with the shopping-list mark when it's on the list) and Best before | Use, Freeze or Defrost and Bin on every row; Move, Mark as opened and details in "⋯"; tick rows for bulk actions; the side panel adds Add to shopping list, and the table narrows beside it |
 | Scan (centre) | Full-screen camera, location (or meal slot) chip, mode switch (Add / Use / Eat), session counter | Continuous scan, undo, Done summary |
 | Calendar | Week grid per person with meal slots, person icons for each meal's portions, each meal's calorie total and the day's total, and a right-hand pane of stock, recipes (with the same views and a Breakfast / Lunch / Dinner filter) and leftovers | Drag from the pane onto a day and meal, drag a planned meal to move it, or back onto the pane to take it off (its food comes off the planned list); all undoable. Set the amount of a planned food by the item (one bar of a multipack, using the product's "one item weighs") or by weight (150g of chicken); eating it takes exactly that from stock. Assign portions, mark a batch cook. +Add, Suggest meals, Plan my week, a link to the Shopping list |
 | Shopping | "For your plan" (automatic) and "Added by hand", optionally grouped by category, estimated total if pricing is on, surplus hints | Tick off, Put away mode, Add item (at the bottom), set a category, Add from receipt |
 | Receipt review | Each receipt line with its matched product, quantity, location, best-before and price; uncertain matches highlighted; the photo (or PDF) of the receipt beside the lines on wide screens | Fix match, skip line, Add to stock |
-| Recipes (from Calendar and Today) | Library with Ready to cook / Missing a few / Use it up views and a Breakfast / Lunch / Dinner filter (from tags; "main course" counts as dinner). The side panel has Cook and Batch cook at the top, Full recipe and Add to plan at the bottom | Import URL, Cook, Batch cook, Add to plan |
+| Recipes (from Calendar and Today) | Library with Ready to cook / Missing a few / Use it up views and a Breakfast / Lunch / Dinner filter in the toolbar beside Tag (from tags; "main course" counts as dinner; full width in the Calendar pane). The side panel has Cook and Batch cook at the top, Full recipe and Add to plan at the bottom | Import URL, Cook, Batch cook, Add to plan |
 | Item detail | Packs with dates and locations, history, product info, shelf-life settings | Edit dates, link to ingredient, merge duplicates |
 | Dashboard (from Today) | Calories per day with 7- and 30-day averages against each person's daily target; waste per week/month by item and category (kg, and £ if pricing is on); spending from receipts when pricing is on | Switch person (admins), 7 / 30 days |
 | Waste report (menu) | What was binned by week or month: a chart of the last 8 weeks or 6 months, by item and by category | Week / month |

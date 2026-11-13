@@ -19,7 +19,7 @@ import { amountLabel } from '../lib/format';
 import { useIngredients, usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
 import { PlanWeekSheet, SuggestSheet } from '../components/OptimiserSheets';
 import { CalendarPane, type CalendarDrag, DRAG_TYPE, readDrag, startDrag } from '../components/CalendarPane';
-import { PortionDots, PortionPicker, portionsSummary, showPortions } from '../components/PortionIcons';
+import { PortionDots, PortionPicker, showPortions } from '../components/PortionIcons';
 import { amountText } from '@snackoverflow/shared';
 
 const SLOT_LABEL: Record<MealSlot, string> = {
@@ -602,60 +602,86 @@ function amountWords(e: PlanEntryDto): string {
 }
 
 /** How much of it: servings for a recipe; items or a weight for food and leftovers. */
+/** A − / + stepper: 1 at a time, or halves below one. */
+const stepUp = (n: number) => n + (n >= 1 ? 1 : 0.5);
+const stepDown = (n: number) => Math.max(0.5, n - (n > 1 ? 1 : 0.5));
+
+/**
+ * How much of it: servings for a recipe, items or portions for food and leftovers, saved as you
+ * tap − or +. Food can also be set by weight (150g of chicken), typed in and saved with Update.
+ */
 function AmountEditor({ entry, onSaved }: { entry: PlanEntryDto; onSaved?: (e: PlanEntryDto) => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const canWeigh = entry.kind !== 'recipe' && entry.unitGrams !== null;
   const unit = entry.displayUnit === 'ml' ? 'ml' : 'g';
   const [mode, setMode] = useState<'items' | 'weight'>(byWeight(entry) ? 'weight' : 'items');
-  const [value, setValue] = useState(byWeight(entry) ? String(Math.round(entry.servings * entry.unitGrams!)) : String(entry.servings));
-  const number = Number(value);
-  const servings = mode === 'weight' && entry.unitGrams ? number / entry.unitGrams : number;
-  const valid = Number.isFinite(number) && number > 0 && servings <= 100;
-  const save = async () => {
+  const [count, setCount] = useState(entry.servings);
+  const [weight, setWeight] = useState(byWeight(entry) ? String(Math.round(entry.servings * entry.unitGrams!)) : String(Math.round(entry.servings * (entry.unitGrams ?? 0))));
+  const save = async (servings: number, quiet = false) => {
     try {
       const updated = await api.patch<PlanEntryDto>(`/api/plan/${entry.id}`, { servings: Math.round(servings * 1000) / 1000 });
       onSaved?.(updated);
       await qc.invalidateQueries({ queryKey: ['plan'] });
-      toast.show('Amount changed.');
+      if (!quiet) toast.show('Amount changed.');
     } catch (e) {
+      setCount(entry.servings);
       toast.show(errorMessage(e), { tone: 'error' });
     }
   };
-  const switchMode = (m: 'items' | 'weight') => {
-    if (m === mode || !entry.unitGrams) return;
-    setValue(m === 'weight' ? String(Math.round((Number(value) || 1) * entry.unitGrams)) : String(Math.max(1, Math.round((Number(value) || entry.unitGrams) / entry.unitGrams))));
-    setMode(m);
+  const change = (n: number) => {
+    setCount(n);
+    void save(n, true);
   };
+  const grams = Number(weight);
+  const weightValid = Number.isFinite(grams) && grams > 0 && entry.unitGrams !== null && grams / entry.unitGrams <= 100;
+  const noun = entry.kind === 'recipe' ? (count === 1 ? 'serving' : 'servings') : entry.kind === 'stock' ? (count === 1 ? 'portion' : 'portions') : count === 1 ? 'item' : 'items';
+  const step = 'inline-flex size-11 items-center justify-center rounded-full border border-line bg-card text-xl disabled:opacity-40 lg:size-8 lg:text-base';
   return (
-    <form
-      className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-card-muted p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (valid) void save();
-      }}
-    >
-      <Field label={entry.kind === 'recipe' ? 'Servings' : mode === 'weight' ? `Amount (${unit})` : entry.kind === 'stock' ? 'Portions' : 'Items'}>
-        {(id) => <TextInput id={id} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} className="w-28" />}
-      </Field>
-      {canWeigh && (
-        <Segmented
-          label="Measure by"
-          value={mode}
-          onChange={switchMode}
-          options={[
-            { value: 'items', label: entry.kind === 'stock' ? 'Portions' : 'Items' },
-            { value: 'weight', label: unit === 'ml' ? 'Volume' : 'Weight' },
-          ]}
-        />
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-card-muted p-3">
+      {mode === 'items' ? (
+        <div className="flex items-center gap-2" role="group" aria-label={entry.kind === 'recipe' ? 'Servings' : 'Amount'}>
+          <button type="button" aria-label="Fewer" disabled={count <= 0.5} onClick={() => change(stepDown(count))} className={step}>
+            −
+          </button>
+          <span className="min-w-24 text-center font-semibold" aria-live="polite">
+            {count} {noun}
+          </span>
+          <button type="button" aria-label="More" disabled={count >= 100} onClick={() => change(stepUp(count))} className={step}>
+            +
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (weightValid) void save(grams / entry.unitGrams!);
+          }}
+        >
+          <Field label={`Amount (${unit})`}>{(id) => <TextInput id={id} inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} className="w-28" />}</Field>
+          <Button type="submit" disabled={!weightValid}>
+            Update
+          </Button>
+        </form>
       )}
-      <Button type="submit" disabled={!valid}>
-        Update
-      </Button>
+      {canWeigh && (
+        <span className="ml-auto">
+          <Segmented
+            label="Measure by"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'items', label: entry.kind === 'stock' ? 'Portions' : 'Items' },
+              { value: 'weight', label: unit === 'ml' ? 'Volume' : 'Weight' },
+            ]}
+          />
+        </span>
+      )}
       {canWeigh && mode === 'items' && (
         <p className="w-full text-xs text-muted">One item is {amountText(entry.unitGrams!, { displayUnit: entry.displayUnit })}. For multipacks, set the size of one item on the product.</p>
       )}
-    </form>
+    </div>
   );
 }
 
@@ -705,26 +731,33 @@ function EntrySheet({ entry: initial, viewerId, members, onClose }: { entry: Pla
         {amountWords(entry) ? ` · ${amountWords(entry)}` : ''}
         {entry.kcalPerServing !== null && !entry.batch ? ` · ${entry.kcalPerServing} kcal a serving` : ''}
       </p>
-      {!moving && entry.kind !== 'text' && <AmountEditor key={`${entry.id}-${entry.servings}`} entry={entry} onSaved={setEntry} />}
+      {!moving && entry.kind !== 'text' && <AmountEditor key={entry.id} entry={entry} onSaved={setEntry} />}
       {!moving && entry.kind !== 'text' && (
         <div className="mb-4 flex flex-col gap-2 rounded-lg bg-card-muted p-3">
           <p className="text-sm font-medium">Who's eating?</p>
-          {entry.batch ? (
-            <p className="text-sm text-muted">Nobody: it's a batch cook for the freezer, so it doesn't count towards anyone's calories.</p>
-          ) : (
-            <>
-              <PortionPicker entry={entry} viewerId={viewerId} meId={me.user.id} isAdmin={isAdmin} members={members} onChange={(people) => void patch({ people })} />
-              <p className="text-xs text-muted">
-                {portionsSummary(entry, me.user.id)}. Only your own portions count towards your calories. Tap an icon to {isAdmin ? 'give it to someone' : 'take it or give it back'}.
-              </p>
-            </>
-          )}
-          {entry.kind === 'recipe' && entry.status === 'planned' && (
-            <label className="flex min-h-11 items-center gap-2 text-sm lg:min-h-8">
-              <input type="checkbox" className="size-5 accent-[var(--accent)] lg:size-4" checked={entry.batch} onChange={(e) => void patch({ batch: e.target.checked })} />
-              Batch cook (portions go into stock, nobody eats it now)
-            </label>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Giving someone a portion of a batch cook makes it an ordinary meal again. */}
+            <PortionPicker
+              entry={entry}
+              viewerId={viewerId}
+              meId={me.user.id}
+              isAdmin={isAdmin}
+              members={members}
+              onChange={(people) => void patch(entry.batch ? { batch: false, people } : { people })}
+            />
+            {entry.kind === 'recipe' && entry.status === 'planned' && (
+              <Button
+                size="sm"
+                variant={entry.batch ? 'dark' : 'outline'}
+                aria-pressed={entry.batch}
+                title="Frees every portion: made for the freezer, so it counts towards nobody's calories"
+                className="ml-auto"
+                onClick={() => void patch({ batch: !entry.batch })}
+              >
+                Batch cook
+              </Button>
+            )}
+          </div>
         </div>
       )}
       {moving ? (
