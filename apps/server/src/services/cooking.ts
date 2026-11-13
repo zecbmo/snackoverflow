@@ -10,6 +10,7 @@ import {
   type CookPlanLineDto,
   type CookResultDto,
   orderForUse,
+  scaledLine,
   type StockItemDto,
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
@@ -61,9 +62,12 @@ export async function planCook(db: Db, auth: Auth, recipeId: string, servings: n
       takes.push({ ...base, grams: take, fraction: null, availableGrams: round(available) });
       left = round(left! - take);
     }
+    const measured = candidates.filter((c) => c.item.remainingGrams !== null);
     return {
       recipeIngredientId: line.id,
-      text: line.text,
+      text: scaledLine(line.text, line.amount, recipe.serves, servings),
+      originalText: scaledLine(line.text, line.amount, recipe.serves, recipe.serves),
+      inStockGrams: measured.length ? round(measured.reduce((s, c) => s + (c.item.remainingGrams ?? 0), 0)) : candidates.length ? null : 0,
       ingredientName: line.ingredientName ?? line.productName,
       optional: line.optional,
       unit: (() => {

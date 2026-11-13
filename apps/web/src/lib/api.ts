@@ -60,13 +60,19 @@ export function errorMessage(e: unknown): string {
 
 /** Fetch a file (e.g. a receipt photo) with the right sign-in, as an object URL for <img>. */
 export async function fetchObjectUrl(url: string): Promise<string | null> {
+  return (await fetchObject(url))?.url ?? null;
+}
+
+/** A signed-in file as an object URL, with its type (an image or a PDF). Null if it can't be fetched. */
+export async function fetchObject(url: string): Promise<{ url: string; type: string } | null> {
   const headers: Record<string, string> = {};
   const token = deviceToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   try {
     const res = await fetch(apiUrl(url), { credentials: 'same-origin', headers });
     if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
+    const blob = await res.blob();
+    return { url: URL.createObjectURL(blob), type: blob.type };
   } catch {
     return null;
   }

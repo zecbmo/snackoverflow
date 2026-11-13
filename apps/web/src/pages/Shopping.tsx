@@ -1,11 +1,12 @@
 /**
- * The one shared shopping list, grouped by aisle, rounded to real packs, with what each thing is
- * for. Type to add, tick things off in the shop, then put them away.
+ * The one shared shopping list in two parts: "For your plan", which keeps itself in step with the
+ * plan and stock (whole packs, and what each thing is for), and things added by hand. Type at the
+ * bottom to add, tick things off in the shop, then put them away.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { addDays, FOOD_GROUPS, formatPence, type ShoppingItemDto } from '@snackoverflow/shared';
+import { FOOD_GROUPS, type FoodGroup, formatPence, type ShoppingItemDto } from '@snackoverflow/shared';
 import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
 import { type Column, ColumnsMenu, DataTable, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
@@ -13,6 +14,7 @@ import { MenuButton, useMe } from '../components/Layout';
 import { SuggestSheet } from '../components/OptimiserSheets';
 import { useToast } from '../components/Toast';
 import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
+import { Menu } from '../components/Menu';
 import { Button, EmptyState, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useIngredients, useRunningLow, useShopping, useSurplus, useUsers } from '../lib/queries';
@@ -70,11 +72,10 @@ export function ShoppingPage() {
     await api.del(`/api/shopping/${i.id}`).catch(() => {});
     await refresh();
   };
-  const build = async () => {
+  const setCategory = async (i: ShoppingItemDto, foodGroup: FoodGroup | null) => {
     try {
-      const r = await api.post<{ added: number; updated: number; covered: number }>('/api/shopping/build', { from: me.today, to: addDays(me.today, 6) });
+      await api.patch(`/api/shopping/${i.id}`, { foodGroup });
       await refresh();
-      toast.show(r.added + r.updated ? `Updated from the next 7 days of the plan.` : 'Nothing to add: stock covers the plan.');
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     }
@@ -97,47 +98,94 @@ export function ShoppingPage() {
 
   const columns: Column<ShoppingItemDto>[] = [
     { key: 'got', header: <span className="sr-only">Got it</span>, hideable: false, className: 'w-8 pr-0', cell: (i) => <GotBox item={i} onTick={tick} /> },
-    { key: 'item', header: 'Item', hideable: false, cell: (i) => <span className={`font-semibold ${i.checked ? 'text-muted line-through' : 'text-ink'}`}>{i.text}</span> },
-    { key: 'category', header: 'Category', className: 'whitespace-nowrap', cell: (i) => i.foodGroup ?? '' },
+    { key: 'item', header: 'Item', hideable: false, className: 'min-w-[12rem]', cell: (i) => <span className={`font-semibold ${i.checked ? 'text-muted line-through' : 'text-ink'}`}>{i.text}</span> },
+    {
+      key: 'for',
+      label: 'For',
+      header: <Explained help="The planned meals that need it">For</Explained>,
+      className: 'max-w-[16rem] truncate',
+      cell: (i) => i.forMeals ?? (i.reason === 'running-low' ? 'Running low' : ''),
+    },
+    { key: 'category', header: <Explained help="Its food group. Change it from the row's menu">Category</Explained>, label: 'Category', className: 'w-44 whitespace-nowrap', cell: (i) => i.foodGroup ?? '' },
     {
       key: 'need',
       label: 'Needed',
-      header: <span title="How much the planned meals are short by">Needed</span>,
+      header: <Explained help="How much the planned meals are short by, after what's in stock">Needed</Explained>,
       align: 'right',
-      className: 'whitespace-nowrap tabular-nums',
+      className: 'w-28 whitespace-nowrap tabular-nums',
       cell: (i) => (i.needLabel ? <span className="text-ink">{i.needLabel}</span> : ''),
     },
     {
       key: 'buy',
       label: 'To buy',
-      header: <span title="Whole packs, as the shops sell them">To buy</span>,
-      className: 'whitespace-nowrap',
+      header: <Explained help="Whole packs, as the shops sell them">To buy</Explained>,
+      align: 'right',
+      className: 'w-32 whitespace-nowrap tabular-nums',
       cell: (i) => (i.packLabel ? `${i.packs} × ${i.packLabel}` : i.packs > 1 ? `× ${i.packs}` : '1'),
     },
   ];
   if (pricing) {
-    columns.push({ key: 'price', header: 'Price', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (i) => (i.pricePence !== null ? formatPence(i.pricePence) : '') });
+    columns.push({
+      key: 'price',
+      label: 'Price',
+      header: <Explained help="Estimated from your receipts and Open Prices">Price</Explained>,
+      align: 'right',
+      className: 'w-24 whitespace-nowrap tabular-nums',
+      cell: (i) => (i.pricePence !== null ? formatPence(i.pricePence) : ''),
+    });
   }
   const shown = items.filter((i) => (show === 'all' || (show === 'got' ? i.checked : !i.checked)) && (!q || matchesSearch(`${i.text} ${i.forMeals ?? ''} ${i.aisle}`, q)));
-  const groups =
+  // Two parts: what the plan needs (kept up to date for you), then what's been added by hand.
+  const sections = [
+    { key: 'plan', label: 'For your plan', rows: shown.filter((i) => i.reason === 'plan') },
+    { key: 'added', label: 'Added by hand', rows: shown.filter((i) => i.reason !== 'plan') },
+  ];
+  const groups = sections.flatMap((sec) =>
     group === 'category'
-      ? groupRows(shown, (i) => i.foodGroup ?? 'Other', [...FOOD_GROUPS, 'Other']).map((g) => ({ key: g.key, label: g.key, rows: g.rows }))
-      : undefined;
+      ? groupRows(sec.rows, (i) => i.foodGroup ?? 'Other', [...FOOD_GROUPS, 'Other']).map((g) => ({ key: `${sec.key}:${g.key}`, label: `${sec.label} · ${g.key}`, rows: g.rows }))
+      : sec.rows.length || sec.key === 'added'
+        ? [{ key: sec.key, label: sec.label, rows: sec.rows }]
+        : [],
+  );
   const putAwayButton =
     ticked.length > 0 ? (
       <Button variant="primary" onClick={() => void putAway()}>
         Put away {ticked.length} ticked item{ticked.length === 1 ? '' : 's'}
       </Button>
     ) : null;
-  const removeButton = (i: ShoppingItemDto) => (
-    <button
-      type="button"
-      aria-label={`Remove ${i.text}`}
-      onClick={() => void remove(i)}
-      className="inline-flex size-10 items-center justify-center rounded-lg text-muted hover:bg-card-muted hover:text-ink lg:size-7 lg:rounded-md"
-    >
-      <Icon name="close" className="size-4" />
-    </button>
+  /** The row's menu (category) and, for things added by hand, remove. Plan items come off by themselves. */
+  const rowActions = (i: ShoppingItemDto) => (
+    <>
+      <Menu
+        label={`Options for ${i.text}`}
+        items={[
+          {
+            label: 'Category',
+            icon: 'tag',
+            hint: i.foodGroup ?? 'None',
+            onSelect: () => {},
+            submenu: [
+              ...FOOD_GROUPS.map((g) => ({ label: g, checked: i.foodGroup === g, onSelect: () => void setCategory(i, g) })),
+              'divider' as const,
+              { label: "The food's own", onSelect: () => void setCategory(i, null) },
+            ],
+          },
+          ...(i.reason === 'plan' ? [{ heading: 'Comes off by itself once the plan is covered' }] : []),
+        ]}
+      />
+      {i.reason !== 'plan' ? (
+        <button
+          type="button"
+          aria-label={`Remove ${i.text}`}
+          onClick={() => void remove(i)}
+          className="inline-flex size-10 items-center justify-center rounded-lg text-muted hover:bg-card-muted hover:text-ink lg:size-7 lg:rounded-md"
+        >
+          <Icon name="close" className="size-4" />
+        </button>
+      ) : (
+        <span aria-hidden className="inline-block size-10 lg:size-7" />
+      )}
+    </>
   );
 
   return (
@@ -180,9 +228,6 @@ export function ShoppingPage() {
           ]}
         />
         <span aria-hidden className="mx-1 hidden h-5 w-px bg-line lg:block" />
-        <Button size="sm" variant="ghost" onClick={() => void build()}>
-          <Icon name="calendar" className="size-4" /> Update from plan
-        </Button>
         <Link to="/receipts" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold hover:bg-card-muted lg:min-h-8 lg:rounded-md lg:px-2.5">
           <Icon name="receipt" className="size-4" /> Add from receipt
         </Link>
@@ -232,7 +277,6 @@ export function ShoppingPage() {
       <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
       {ideasFor && <SuggestSheet open onClose={() => setIdeasFor(null)} defaultDate={me.today} ingredient={ideasFor} servings={people} />}
 
-      <QuickAdd />
       <ErrorNote error={list.error} />
       {list.isPending ? (
         <Spinner />
@@ -241,11 +285,10 @@ export function ShoppingPage() {
           <DataTable
             label="Shopping list"
             columns={columns}
-            rows={groups ? undefined : shown}
             groups={groups}
             hidden={hiddenColumns}
             rowKey={(i) => i.id}
-            actions={removeButton}
+            actions={rowActions}
             phone={(i) => ({
               lead: <GotBox item={i} onTick={tick} />,
               title: <span className={i.checked ? 'text-muted line-through' : ''}>{itemTitle(i)}</span>,
@@ -253,16 +296,17 @@ export function ShoppingPage() {
               badge: (
                 <span className="flex shrink-0 items-center gap-1">
                   {pricing && i.pricePence !== null && <span className="text-sm font-semibold tabular-nums text-muted">{formatPence(i.pricePence)}</span>}
-                  {removeButton(i)}
+                  {rowActions(i)}
                 </span>
               ),
             })}
             empty={
               <EmptyState title="The list is empty">
-                <p>Plan some meals and use “Update from plan”, or type something above.</p>
+                <p>Plan some meals and what they need shows up here by itself, or type something below.</p>
               </EmptyState>
             }
           />
+          <QuickAdd />
         </div>
       )}
       {putAwayButton && <div className="fixed inset-x-4 bottom-24 z-20 mx-auto max-w-xl lg:hidden [&>button]:w-full [&>button]:shadow-lg">{putAwayButton}</div>}
@@ -283,6 +327,16 @@ export function ShoppingPage() {
         )}
       </Sheet>
     </>
+  );
+}
+
+/** A column header with a short explanation on hover (and for screen readers). */
+function Explained({ help, children }: { help: string; children: ReactNode }) {
+  return (
+    <span title={help} className="cursor-help underline decoration-muted/60 decoration-dotted underline-offset-4">
+      {children}
+      <span className="sr-only">: {help}</span>
+    </span>
   );
 }
 
@@ -324,7 +378,7 @@ function QuickAdd() {
   };
   return (
     <form
-      className="mb-3"
+      className="mt-2"
       onSubmit={(e) => {
         e.preventDefault();
         if (text.trim()) void add(match ? { ingredientId: match.id } : { text: text.trim() });

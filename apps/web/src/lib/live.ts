@@ -24,6 +24,8 @@ export function connectLive(queryClient: QueryClient): () => void {
         const msg = JSON.parse(String(ev.data)) as LiveMessage;
         if (msg.type === 'invalidate') {
           for (const topic of msg.topics) void queryClient.invalidateQueries({ queryKey: [topic] });
+          // The list's "For your plan" part follows the plan and stock, so it may have changed too.
+          if (msg.topics.some((t) => t === 'plan' || t === 'stock') && !msg.topics.includes('shopping')) void queryClient.invalidateQueries({ queryKey: ['shopping'] });
         }
       } catch {
         // Ignore anything we don't understand.

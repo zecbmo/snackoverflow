@@ -265,3 +265,145 @@ describe('shopping list', () => {
     expect((await api.get<RunningLowDto[]>('/api/running-low'))[0]!.onList).toBe(true);
   });
 });
+
+describe('people on a meal', () => {
+  const porridge = () =>
+    api.post<RecipeDto>('/api/recipes', {
+      title: 'Porridge',
+      serves: 2,
+      ingredients: [{ text: '100g oats', amount: 100, unit: 'g', ingredientId: ing.oats!.id }],
+    });
+  const day = (c: Client) => c.get<PlanDto>('/api/plan?from=2026-11-12&to=2026-11-12').then((p) => p.days[0]!);
+
+  it('counts only your own portions, and shows meals with free portions to everyone', async () => {
+    const sam = await invite('Sam');
+    const r = await porridge();
+    // One serving, mine: on my calendar only.
+    await api.post('/api/plan', { date: '2026-11-12', slot: 'breakfast', kind: 'recipe', recipeId: r.id, servings: 1, people: [{ userId: me.user.id, portions: 1 }] });
+    // Three servings, one mine and two free: Sam sees it (to know it's being cooked) with no calories.
+    await api.post('/api/plan', { date: '2026-11-12', slot: 'dinner', kind: 'recipe', recipeId: r.id, servings: 3, people: [{ userId: me.user.id, portions: 1 }] });
+    const mine = await day(api);
+    expect(mine.entries.map((e) => e.kcal)).toEqual([188, 188]);
+    expect(mine.kcal).toBe(376);
+    const sams = await day(sam);
+    expect(sams.entries).toHaveLength(1);
+    expect(sams.entries[0]).toMatchObject({ slot: 'dinner', kcal: 0, servings: 3, people: [{ name: 'Alex', portions: 1 }] });
+    expect(sams.kcal).toBe(0);
+    // Nobody named: every portion is free, and nobody gets the calories.
+    await api.post('/api/plan', { date: '2026-11-12', slot: 'lunch', kind: 'recipe', recipeId: r.id, servings: 2 });
+    expect((await day(api)).kcal).toBe(376);
+    expect((await day(sam)).entries).toHaveLength(2);
+  });
+
+  it("lets members take a free portion or give theirs back, but not hand out anyone else's", async () => {
+    const sam = await invite('Sam');
+    const samId = (await sam.get<SessionDto>('/api/session')).user.id;
+    const r = await porridge();
+    const e = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'dinner', kind: 'recipe', recipeId: r.id, servings: 3, people: [{ userId: me.user.id, portions: 1 }] });
+    // Sam takes one of the free portions.
+    const taken = await sam.patch<PlanEntryDto>(`/api/plan/${e.id}`, {
+      people: [
+        { userId: me.user.id, portions: 1 },
+        { userId: samId, portions: 1 },
+      ],
+    });
+    expect(taken.people.map((p) => p.name)).toEqual(['Alex', 'Sam']);
+    expect((await day(sam)).kcal).toBe(188);
+    // Sam can't take Alex's portion, or more than there are.
+    expect((await sam.raw('PATCH', `/api/plan/${e.id}`, { people: [{ userId: samId, portions: 2 }] })).statusCode).toBe(403);
+    expect(
+      (
+        await sam.raw('PATCH', `/api/plan/${e.id}`, {
+          people: [
+            { userId: me.user.id, portions: 1 },
+            { userId: samId, portions: 3 },
+          ],
+        })
+      ).statusCode,
+    ).toBe(400);
+    // Giving it back.
+    await sam.patch(`/api/plan/${e.id}`, { people: [{ userId: me.user.id, portions: 1 }] });
+    expect((await day(sam)).kcal).toBe(0);
+    // Fewer servings than portions handed out: the extra come back off the last people.
+    await api.patch(`/api/plan/${e.id}`, {
+      people: [
+        { userId: me.user.id, portions: 1 },
+        { userId: samId, portions: 2 },
+      ],
+    });
+    const trimmed = await api.patch<PlanEntryDto>(`/api/plan/${e.id}`, { servings: 2 });
+    expect(trimmed.people.map((p) => [p.name, p.portions])).toEqual([
+      ['Alex', 1],
+      ['Sam', 1],
+    ]);
+  });
+
+  it("makes a batch cook nobody's calories, on everyone's calendar", async () => {
+    const sam = await invite('Sam');
+    const r = await porridge();
+    const e = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'dinner', kind: 'recipe', recipeId: r.id, servings: 6, people: [{ userId: me.user.id, portions: 1 }] });
+    const batch = await api.patch<PlanEntryDto>(`/api/plan/${e.id}`, { batch: true });
+    expect(batch).toMatchObject({ batch: true, people: [] });
+    expect((await day(api)).entries[0]).toMatchObject({ batch: true, kcal: 0 });
+    expect((await day(sam)).entries[0]).toMatchObject({ batch: true, kcal: 0 });
+    // Only recipes are batch cooked.
+    const note = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'lunch', kind: 'text', text: 'Soup' });
+    expect((await api.raw('PATCH', `/api/plan/${note.id}`, { batch: true })).statusCode).toBe(400);
+  });
+
+  it('gives food logged as already eaten to the person logging it', async () => {
+    const e = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'lunch', kind: 'text', text: 'Sandwich', kcalPerServing: 400, eaten: true });
+    expect(e.people.map((p) => p.userId)).toEqual([me.user.id]);
+    expect((await day(api)).kcal).toBe(400);
+  });
+});
+
+describe('the list follows the plan', () => {
+  it('adds what the plan needs on its own, and takes it off when the plan changes', async () => {
+    const pie = await fishPie();
+    const e = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-13', slot: 'dinner', kind: 'recipe', recipeId: pie.id, servings: 2 });
+    // No "build" step: reading the list brings it up to date.
+    const list = await api.get<ShoppingItemDto[]>('/api/shopping');
+    expect(list).toEqual([expect.objectContaining({ text: 'Potatoes', reason: 'plan', packs: 1, forMeals: 'Fish pie' })]);
+    // Ticked (bought, not put away yet) still counts as coming: no second item.
+    await api.patch(`/api/shopping/${list[0]!.id}`, { checked: true });
+    expect(await api.get<ShoppingItemDto[]>('/api/shopping')).toHaveLength(1);
+    await api.patch(`/api/shopping/${list[0]!.id}`, { checked: false });
+    // Take the meal off the plan and the potatoes come off the list; things added by hand stay.
+    await api.post('/api/shopping', { text: 'Kitchen roll' });
+    await api.del(`/api/plan/${e.id}`);
+    expect((await api.get<ShoppingItemDto[]>('/api/shopping')).map((i) => i.text)).toEqual(['Kitchen roll']);
+  });
+
+  it("lets an item's category be set on the list", async () => {
+    await api.post('/api/shopping', { text: 'Birthday candles' });
+    const [item] = await api.get<ShoppingItemDto[]>('/api/shopping');
+    expect(item!.foodGroup).toBeNull();
+    await api.patch(`/api/shopping/${item!.id}`, { foodGroup: 'Sweets & Confectionery' });
+    expect((await api.get<ShoppingItemDto[]>('/api/shopping'))[0]!.foodGroup).toBe('Sweets & Confectionery');
+    expect((await api.raw('PATCH', `/api/shopping/${item!.id}`, { foodGroup: 'Not a group' })).statusCode).toBe(400);
+    await api.patch(`/api/shopping/${item!.id}`, { foodGroup: null });
+    expect((await api.get<ShoppingItemDto[]>('/api/shopping'))[0]!.foodGroup).toBeNull();
+  });
+});
+
+describe('cook plan', () => {
+  it('scales each line to the servings being cooked and says what is in stock', async () => {
+    const pie = await api.post<RecipeDto>('/api/recipes', {
+      title: 'Apple pie',
+      serves: 2,
+      ingredients: [
+        { text: '1 unit(s) Apple', amount: 1, unit: 'count', ingredientId: ing.apples!.id },
+        { text: '450 grams Potatoes', amount: 450, unit: 'g', ingredientId: ing.potatoes!.id },
+      ],
+    });
+    await api.post<ScanAddResult>('/api/scan/add', { barcode: '3002' });
+    const plan = await api.get<CookPlanDto>(`/api/recipes/${pie.id}/cook-plan?servings=4`);
+    expect(plan.lines.map((l) => [l.text, l.originalText])).toEqual([
+      ['2 Apple', '1 Apple'],
+      ['900 grams Potatoes', '450 grams Potatoes'],
+    ]);
+    expect(plan.lines[0]!.inStockGrams).toBe(0);
+    expect(plan.lines[1]).toMatchObject({ neededGrams: 900, inStockGrams: 2500 });
+  });
+});

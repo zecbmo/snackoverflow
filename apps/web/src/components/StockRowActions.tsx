@@ -5,6 +5,9 @@ import { Menu, type MenuEntry } from './Menu';
 import { useStockActions } from './StockActions';
 import { Button } from './ui';
 
+/** Freeze and Defrost share a width, so Use and Bin line up down the table. */
+const SAME_WIDTH = 'min-w-[5rem]';
+
 export function StockRowActions({
   item,
   name,
@@ -32,7 +35,7 @@ export function StockRowActions({
         Use
       </Button>
       {frozen ? (
-        <Button size={size} aria-label={`Defrost ${name}`} onClick={() => void actions.defrost(item)}>
+        <Button size={size} aria-label={`Defrost ${name}`} onClick={() => void actions.defrost(item)} className={SAME_WIDTH}>
           Defrost
         </Button>
       ) : (
@@ -42,6 +45,7 @@ export function StockRowActions({
           disabled={item.actions.freeze !== null}
           title={item.actions.freeze ?? undefined}
           onClick={() => void actions.freeze(item)}
+          className={SAME_WIDTH}
         >
           Freeze
         </Button>

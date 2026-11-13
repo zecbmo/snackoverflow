@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { amountText, type PlanEntryDto, type RecipeSummaryDto, type StockItemDto } from '@snackoverflow/shared';
 import { dateLabel, toneClasses, toneFor } from '../lib/format';
 import { useRecipes, useRecipeScores, useStock } from '../lib/queries';
-import { inRecipeTab, RECIPE_TABS, type RecipeTab, sortForTab } from '../pages/Recipes';
+import { inMeal, inRecipeTab, MEAL_CHOICES, type MealChoice, RECIPE_TABS, type RecipeTab, sortForTab } from '../pages/Recipes';
 import { groupStock, type StockGroup } from '../lib/stockGroups';
 import { matchesSearch } from '../lib/table';
 import { AddToPlanSheet, type PlanTarget } from './AddToPlanSheet';
@@ -65,6 +65,7 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
   const [over, setOver] = useState(false);
   const [place, setPlace] = useState('all');
   const [recipeTab, setRecipeTab] = useState<RecipeTab>('all');
+  const [meal, setMeal] = useState<MealChoice>('any');
   const scores = useRecipeScores().data;
   const byId = useMemo(() => new Map((scores?.scores ?? []).map((s) => [s.recipeId, s])), [scores]);
   // While a planned meal is dragged, show the tab it came from.
@@ -111,8 +112,8 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
   );
   const leftovers = useMemo(() => (stock ?? []).filter((s) => s.isMeal && (!q || matchesSearch(s.productName, q))), [stock, q]);
   const recipeList = useMemo(
-    () => sortForTab((recipes ?? []).filter((r) => inRecipeTab(byId.get(r.id), recipeTab) && (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q))), byId, recipeTab),
-    [recipes, q, recipeTab, byId],
+    () => sortForTab((recipes ?? []).filter((r) => inRecipeTab(byId.get(r.id), recipeTab) && inMeal(r, meal) && (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q))), byId, recipeTab),
+    [recipes, q, recipeTab, meal, byId],
   );
 
   if (collapsed) {
@@ -209,6 +210,9 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
               ))}
             </div>
             <p className="mt-1.5 text-xs text-muted">{RECIPE_TABS.find((t) => t.id === recipeTab)?.help}</p>
+            <div className="mt-2">
+              <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_CHOICES.map((m) => ({ ...m, label: m.value === 'any' ? 'Any' : m.label }))} />
+            </div>
           </div>
         )}
         <SearchBox value={q} onChange={setQ} placeholder={`Search ${tab}`} label={`Search ${tab}`} />

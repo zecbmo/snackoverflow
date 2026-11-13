@@ -1,6 +1,7 @@
 /**
  * The receipt review screen: every line with its match, quantity, place and
- * best-before. Uncertain matches are highlighted; non-food is already left out.
+ * best-before, with the photo of the receipt beside them on wide screens.
+ * Uncertain matches are highlighted; non-food is already left out.
  * One tap adds it all to stock, ticks the list and saves the prices.
  */
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,26 +11,42 @@ import { formatPence, formatShortDate, parseReceiptText, type ReceiptDto, type R
 import { BackButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
 import { Button, Card, ErrorNote, Field, PageHeader, Select, Sheet, Spinner, TextInput } from '../components/ui';
-import { api, errorMessage, fetchObjectUrl } from '../lib/api';
+import { api, errorMessage, fetchObject } from '../lib/api';
 import { useIngredients, useLocations, useProducts, useReceipt } from '../lib/queries';
 import { STATUS_LABEL } from './Receipts';
 
-function ReceiptImage({ id }: { id: string }) {
-  const [url, setUrl] = useState<string | null>(null);
+/** The photo (or PDF) of the receipt, when it's still kept. */
+function ReceiptImage({ id, tall = false }: { id: string; tall?: boolean }) {
+  const [file, setFile] = useState<{ url: string; type: string } | null>(null);
   useEffect(() => {
     let alive = true;
     let made: string | null = null;
-    void fetchObjectUrl(`/api/receipts/${id}/file`).then((u) => {
-      made = u;
-      if (alive) setUrl(u);
+    void fetchObject(`/api/receipts/${id}/file`).then((f) => {
+      made = f?.url ?? null;
+      if (alive) setFile(f);
     });
     return () => {
       alive = false;
       if (made) URL.revokeObjectURL(made);
     };
   }, [id]);
-  if (!url) return null;
-  return <img src={url} alt="The receipt" className="max-h-96 w-full rounded-lg border border-line object-contain" />;
+  if (!file) return null;
+  const size = tall ? 'max-h-[calc(100vh-8rem)]' : 'max-h-96';
+  if (file.type === 'application/pdf') {
+    return (
+      <div className="flex flex-col gap-2">
+        <iframe src={file.url} title="The receipt" className={`h-[70vh] w-full rounded-lg border border-line bg-card ${size}`} />
+        <a href={file.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-accent-text hover:underline">
+          Open the PDF
+        </a>
+      </div>
+    );
+  }
+  return (
+    <a href={file.url} target="_blank" rel="noreferrer" title="Open the photo full size">
+      <img src={file.url} alt="The receipt" className={`w-full rounded-lg border border-line bg-card object-contain ${size}`} />
+    </a>
+  );
 }
 
 export function ReceiptReviewPage() {
@@ -101,6 +118,7 @@ export function ReceiptReviewPage() {
         subtitle={[STATUS_LABEL[r.status], r.purchasedOn ? formatShortDate(r.purchasedOn) : null, r.totalPence !== null ? formatPence(r.totalPence) : null].filter(Boolean).join(' · ')}
         left={<BackButton to="/receipts" />}
       />
+      <div className={r.status === 'review' && r.hasFile ? 'lg:grid lg:grid-cols-[minmax(0,48rem)_minmax(16rem,26rem)] lg:items-start lg:gap-6' : ''}>
       <div className="flex max-w-3xl flex-col gap-4 pb-28">
         {(r.status === 'reading' || r.status === 'waiting' || r.status === 'failed') && (
           <Card className="flex flex-col gap-3 p-5">
@@ -139,12 +157,22 @@ export function ReceiptReviewPage() {
             {r.lines.map((l) => (
               <LineCard key={l.id} line={l} onChange={(body) => void patchLine(l, body)} />
             ))}
-            {r.hasFile && <ReceiptImage id={id} />}
+            {r.hasFile && (
+              <div className="lg:hidden">
+                <ReceiptImage id={id} />
+              </div>
+            )}
           </>
         )}
         <button type="button" className="min-h-11 self-start font-semibold text-danger" onClick={() => setConfirmDelete(true)}>
           Delete this receipt
         </button>
+      </div>
+      {r.status === 'review' && r.hasFile && (
+        <aside aria-label="The receipt" className="sticky top-4 hidden lg:block">
+          <ReceiptImage id={id} tall />
+        </aside>
+      )}
       </div>
 
       {r.status === 'review' && (

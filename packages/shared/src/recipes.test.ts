@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmount, isoDurationMinutes, parseIngredientLine, recipeNutrition, scaleAmount } from './recipes';
+import { formatAmount, isoDurationMinutes, parseIngredientLine, recipeMeals, recipeNutrition, scaleAmount, scaledLine, tidyLine } from './recipes';
 
 describe('parseIngredientLine', () => {
   it.each([
@@ -68,5 +68,36 @@ describe('recipeNutrition', () => {
     expect(r.perServing.kcal).toBe(312.5);
     expect(r.perServing.protein).toBe(27.5);
     expect(r.coverage).toBe(0.5);
+  });
+});
+
+describe('scaledLine', () => {
+  it('scales the leading amount and keeps the wording', () => {
+    expect(scaledLine('400g chopped tomatoes', 400, 4, 2)).toBe('200g chopped tomatoes');
+    expect(scaledLine('2 onions, chopped', 2, 4, 6)).toBe('3 onions, chopped');
+    expect(scaledLine('1½ tsp cumin', 1.5, 2, 4)).toBe('3 tsp cumin');
+    expect(scaledLine('1 x 400g tin chopped tomatoes', 400, 4, 2)).toBe('200g tin chopped tomatoes');
+    expect(scaledLine('1 tbsp olive oil', 1, 4, 2)).toBe('½ tbsp olive oil');
+    expect(scaledLine('450 grams Potatoes', 450, 2, 4)).toBe('900 grams Potatoes');
+  });
+
+  it('drops "unit(s)" import noise', () => {
+    expect(scaledLine('1 unit(s) Apple', 1, 2, 4)).toBe('2 Apple');
+    expect(scaledLine('2 unit(s) Garlic Clove', 2, 2, 2)).toBe('2 Garlic Clove');
+    expect(tidyLine('1 sachet(s) Mixed Herbs')).toBe('1 sachet(s) Mixed Herbs');
+  });
+
+  it('leaves lines without amounts alone', () => {
+    expect(scaledLine('Salt and pepper', null, 4, 2)).toBe('Salt and pepper');
+    expect(scaledLine('400g tomatoes', 400, 4, 4)).toBe('400g tomatoes');
+  });
+});
+
+describe('recipeMeals', () => {
+  it('reads meals from tags, ignoring case', () => {
+    expect(recipeMeals(['Breakfast', 'quick'])).toEqual(['breakfast']);
+    expect(recipeMeals(['main course', 'german'])).toEqual(['dinner']);
+    expect(recipeMeals(['lunch', 'dinner'])).toEqual(['lunch', 'dinner']);
+    expect(recipeMeals(['quick'])).toEqual([]);
   });
 });

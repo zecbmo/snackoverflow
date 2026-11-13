@@ -81,3 +81,6 @@ playwright-report/
 
 # Local screenshot specs
 apps/web/e2e/*.tmp.spec.ts
+
+# Review recordings (screen captures; never commit)
+reviews/

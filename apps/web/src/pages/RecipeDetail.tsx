@@ -2,7 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import type { RecipeDto } from '@snackoverflow/shared';
+import { type RecipeDto, scaledLine } from '@snackoverflow/shared';
 import { BackButton } from '../components/Layout';
 import { Menu } from '../components/Menu';
 import { useToast } from '../components/Toast';
@@ -11,7 +11,6 @@ import { Button, Card, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { minutesLabel } from '../lib/format';
 import { useRecipe } from '../lib/queries';
-import { scaledLine } from '../lib/recipeText';
 import { RecipeImage } from './Recipes';
 
 export function recipeMeta(r: RecipeDto): string {
@@ -54,7 +53,7 @@ export function RecipeIngredients({ recipe: r, servings: n, onServings }: { reci
                 className={`mt-1.5 size-2 shrink-0 rounded-full ${l.ingredientId === null ? 'bg-transparent' : enough ? 'bg-fresh-green' : 'border border-muted bg-transparent'}`}
               />
               <span className="flex-1">
-                {scaledLine(l.text, l.amount, l.unit, r.serves, n)}
+                {scaledLine(l.text, l.amount, r.serves, n)}
                 {l.optional && <span className="text-muted"> (optional)</span>}
                 {l.ingredientId && <span className="sr-only">{enough ? ' (in stock)' : ' (not enough in stock)'}</span>}
               </span>
@@ -189,7 +188,7 @@ export function RecipeDetailPage() {
         </Card>
       </div>
 
-      <BatchSheet open={batchOpen} serves={r.serves} onClose={() => setBatchOpen(false)} onGo={(x) => navigate(`/recipes/${r.id}/cook?servings=${r.serves * x}&batch=1`)} />
+      <BatchSheet open={batchOpen} serves={r.serves} onClose={() => setBatchOpen(false)} onGo={(portions) => navigate(`/recipes/${r.id}/cook?servings=${portions}&batch=1`)} />
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this recipe?">
         <p className="mb-4 text-muted">{r.title} will be gone for everyone. Leftovers already in stock stay.</p>
         <div className="grid grid-cols-2 gap-3">
@@ -203,20 +202,30 @@ export function RecipeDetailPage() {
   );
 }
 
-function BatchSheet({ open, serves, onClose, onGo }: { open: boolean; serves: number; onClose: () => void; onGo: (multiplier: number) => void }) {
-  const [x, setX] = useState(3);
+/** Batch cook: how many portions to make. The cook page then works exactly like a normal cook. */
+export function BatchSheet({ open, serves, onClose, onGo }: { open: boolean; serves: number; onClose: () => void; onGo: (portions: number) => void }) {
+  const [n, setN] = useState(serves * 3);
+  const step = 'inline-flex size-11 items-center justify-center rounded-full border border-line text-xl disabled:opacity-40';
+  const times = n / serves;
   return (
     <Sheet open={open} onClose={onClose} title="Batch cook">
-      <p className="mb-4 text-muted">Make several times the recipe in one go and keep the portions in the fridge and freezer.</p>
-      <div className="mb-4 grid grid-cols-4 gap-2" role="group" aria-label="How many times the recipe">
-        {[2, 3, 4, 6].map((m) => (
-          <Button key={m} variant={x === m ? 'dark' : 'outline'} aria-pressed={x === m} onClick={() => setX(m)}>
-            ×{m}
-          </Button>
-        ))}
+      <p className="mb-4 text-muted">Make lots in one go and keep the portions in the fridge and freezer.</p>
+      <div className="mb-2 flex items-center justify-center gap-4" role="group" aria-label="Portions">
+        <button type="button" aria-label="Fewer portions" disabled={n <= 1} onClick={() => setN(n - 1)} className={step}>
+          −
+        </button>
+        <span className="min-w-28 text-center text-lg font-semibold" aria-live="polite">
+          {n} {n === 1 ? 'portion' : 'portions'}
+        </span>
+        <button type="button" aria-label="More portions" onClick={() => setN(n + 1)} className={step}>
+          +
+        </button>
       </div>
-      <p className="mb-4 font-semibold">{serves * x} portions</p>
-      <Button variant="primary" className="w-full" onClick={() => onGo(x)}>
+      <p className="mb-4 text-center text-sm text-muted">
+        The recipe serves {serves}
+        {Number.isInteger(times) && times > 1 ? `, so that's ${times} times the recipe` : ''}.
+      </p>
+      <Button variant="primary" className="w-full" onClick={() => onGo(n)}>
         Continue
       </Button>
     </Sheet>

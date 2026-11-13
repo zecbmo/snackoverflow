@@ -82,11 +82,56 @@ export function slotForTime(hour: number): MealSlot {
   return 'snack';
 }
 
+type Portion = { userId: string; portions: number };
+
 /**
- * Share of a planned meal each person eats. People listed with portions get
- * those; a meal with nobody listed is the household's, split evenly.
+ * How much of a planned meal a person eats: the portions assigned to them. Portions nobody has
+ * been given (and batch cooks) count for no one, so they never add to anyone's calories.
  */
-export function portionShare(servings: number, people: { userId: string; portions: number }[], userId: string, householdSize: number): number {
-  if (people.length === 0) return householdSize > 0 ? servings / householdSize : 0;
+export function portionShare(people: Portion[], userId: string): number {
   return people.find((p) => p.userId === userId)?.portions ?? 0;
+}
+
+/** Servings of a planned meal not assigned to anyone yet. */
+export function freePortions(servings: number, people: Portion[]): number {
+  const taken = people.reduce((n, p) => n + p.portions, 0);
+  return Math.max(0, Math.round((servings - taken) * 1000) / 1000);
+}
+
+/**
+ * Whether a planned meal shows on a person's calendar: theirs, or with portions still free
+ * (so others can see something is being cooked). A meal fully given to other people doesn't.
+ */
+export function onCalendarOf(servings: number, people: Portion[], userId: string): boolean {
+  return portionShare(people, userId) > 0 || freePortions(servings, people) > 0;
+}
+
+/**
+ * One slot per serving for the person icons under a meal: whose it is, or null when it's free.
+ * Part portions round to the nearest whole one (at least one each), and the list stops at `max`.
+ */
+export function portionSlots(servings: number, people: Portion[], max = 8): (string | null)[] {
+  const slots: (string | null)[] = [];
+  for (const p of people) for (let i = 0; i < Math.max(1, Math.round(p.portions)); i++) slots.push(p.userId);
+  while (slots.length < Math.ceil(servings - 0.001)) slots.push(null);
+  return slots.slice(0, max);
+}
+
+/**
+ * Give one icon's portion to someone (or free it, with null): the people list after the change.
+ * `slot` indexes `portionSlots`. Portions stay whole where they were whole.
+ */
+export function assignSlot(servings: number, people: Portion[], slot: number, to: string | null): Portion[] {
+  const slots = portionSlots(servings, people, 1000);
+  if (slot < 0 || slot >= slots.length) return people;
+  const from = slots[slot]!;
+  if (from === to) return people;
+  const next = new Map(people.map((p) => [p.userId, p.portions]));
+  if (from !== null) {
+    const left = (next.get(from) ?? 0) - 1;
+    if (left > 0.001) next.set(from, left);
+    else next.delete(from);
+  }
+  if (to !== null) next.set(to, (next.get(to) ?? 0) + 1);
+  return [...next.entries()].map(([userId, portions]) => ({ userId, portions: Math.round(portions * 1000) / 1000 }));
 }

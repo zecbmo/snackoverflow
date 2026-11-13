@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signIn, typeBarcode } from './helpers';
 
-/** Phase 4 key flow: plan a meal, build the shopping list in whole packs, tick it off and put it away; log a snack in Eat mode. */
+/** Phase 4 key flow: plan a meal, see the shopping list fill itself in whole packs, tick it off and put it away; log a snack in Eat mode. */
 test('plan a dinner, shop for it and put it away', async ({ page }, info) => {
   const title = `Pasta bake ${info.project.name}`;
   await signIn(page);
@@ -23,9 +23,10 @@ test('plan a dinner, shop for it and put it away', async ({ page }, info) => {
   await expect(page.getByText('Added to the plan.')).toBeVisible();
   await expect(page.getByRole('button', { name: new RegExp(title) }).first()).toBeVisible();
 
-  // Build the list: sold in 500g packs.
-  await page.getByRole('button', { name: 'Build shopping list' }).click();
+  // The list fills itself from the plan, in whole packs: no build step.
+  await page.goto('/shop');
   await expect(page).toHaveURL(/\/shop$/);
+  await expect(page.getByText('For your plan')).toBeVisible();
   // Whole packs (the size depends on everything planned this week), with its category and what the plan is short by.
   const item = page.getByRole('checkbox', { name: /Got Pasta, \d/ });
   await expect(item).toBeVisible();

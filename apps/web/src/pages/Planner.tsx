@@ -1,6 +1,7 @@
 /**
  * The planner: each person's week as meal slots with calories. Plan recipes,
- * leftovers, products or a note; log what was eaten; build the shopping list.
+ * leftovers, products or a note; log what was eaten. Each meal shows one icon per
+ * serving (yours, someone else's, or free); only your own portions count for your calories.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -18,6 +19,7 @@ import { amountLabel } from '../lib/format';
 import { useIngredients, usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
 import { PlanWeekSheet, SuggestSheet } from '../components/OptimiserSheets';
 import { CalendarPane, type CalendarDrag, DRAG_TYPE, readDrag, startDrag } from '../components/CalendarPane';
+import { PortionDots, PortionPicker, portionsSummary, showPortions } from '../components/PortionIcons';
 import { amountText } from '@snackoverflow/shared';
 
 const SLOT_LABEL: Record<MealSlot, string> = {
@@ -59,11 +61,12 @@ export function PlannerPage() {
   const [from, setFrom] = useState(() => weekStart(params.get('date') ?? me.today));
   const to = addDays(from, 6);
   const [person, setPerson] = useState('me');
+  /** Whose calendar this is: new meals are theirs, and their portions show in the accent colour. */
+  const viewerId = person === 'me' ? me.user.id : person;
   const plan = usePlan(from, to, person);
   const members = useUsers().data ?? [];
   const qc = useQueryClient();
   const toast = useToast();
-  const navigate = useNavigate();
   // "+ Add" on Today's week strip opens the add sheet for that dinner straight away.
   const [adding, setAdding] = useState<{
     date: CalendarDate;
@@ -94,22 +97,6 @@ export function PlannerPage() {
       return p;
     });
   }, [entryParam, setParams]);
-
-  const build = async () => {
-    try {
-      const start = from < me.today ? me.today : from;
-      const r = await api.post<{
-        added: number;
-        updated: number;
-        covered: number;
-      }>('/api/shopping/build', { from: start, to });
-      await qc.invalidateQueries({ queryKey: ['shopping'] });
-      toast.show(r.added + r.updated ? `Added ${r.added + r.updated} thing${r.added + r.updated === 1 ? '' : 's'} to the list.` : 'Nothing to buy: stock covers this plan.');
-      if (r.added + r.updated) navigate('/shop');
-    } catch (e) {
-      toast.show(errorMessage(e), { tone: 'error' });
-    }
-  };
 
   const [dropAt, setDropAt] = useState<string | null>(null);
   const [dragging, setDragging] = useState<PlanEntryDto | null>(null);
@@ -174,7 +161,9 @@ export function PlannerPage() {
           date,
           slot,
           kind: d.kind,
-          servings: d.kind === 'recipe' ? Math.max(1, members.length) : 1,
+          // One serving, for whoever's calendar this is. More servings show as free portions.
+          servings: 1,
+          people: [{ userId: viewerId, portions: 1 }],
           ...(d.kind === 'recipe' ? { recipeId: d.id } : d.kind === 'product' ? { productId: d.id } : { stockItemId: d.id }),
         });
         await refresh();
@@ -187,7 +176,8 @@ export function PlannerPage() {
     }
   };
 
-  const people = [{ value: 'me', label: 'You' }, ...(isAdmin ? members.filter((m) => m.id !== me.user.id).map((m) => ({ value: m.id, label: m.name })) : []), { value: 'everyone', label: 'Everyone' }];
+  // One person at a time: each calendar is someone's own (admins can open other people's).
+  const people = [{ value: 'me', label: 'You' }, ...(isAdmin ? members.filter((m) => m.id !== me.user.id).map((m) => ({ value: m.id, label: m.name })) : [])];
   const thisWeek = weekStart(me.today);
   const addLabel = (date: CalendarDate, slot: MealSlot) => `Add to ${slot} on ${dayLabel(date, me.today, true)}`;
   const entryButton = (e: PlanEntryDto, compact: boolean) => (
@@ -201,11 +191,22 @@ export function PlannerPage() {
       }
     >
       <span aria-hidden className={`mt-1 size-2 shrink-0 rounded-full ${e.status === 'cooked' ? 'bg-fresh-green' : e.status === 'skipped' ? 'bg-transparent' : 'border border-muted'} ${compact ? '' : 'mt-0'}`} />
-      <span className={`min-w-0 flex-1 ${compact ? 'line-clamp-2' : 'text-[1.0625rem]'} ${e.status === 'skipped' ? 'text-muted line-through' : ''}`}>{e.title}</span>
+      <span className="min-w-0 flex-1">
+        <span className={`${compact ? 'line-clamp-2' : 'block text-[1.0625rem]'} ${e.status === 'skipped' ? 'text-muted line-through' : ''}`}>{e.title}</span>
+        {e.batch ? (
+          <span className={`mt-0.5 block font-medium text-accent-text ${compact ? 'text-[0.6875rem]' : 'text-sm'}`}>Batch cook</span>
+        ) : (
+          showPortions(e, viewerId) && (
+            <span className="mt-1 block">
+              <PortionDots entry={e} viewerId={viewerId} meId={me.user.id} members={members} />
+            </span>
+          )
+        )}
+      </span>
       {compact ? (
         <span className="shrink-0 text-right text-[0.6875rem] leading-tight text-muted tabular-nums">
           {shortAmount(e) && <span className="block font-medium text-ink/70">{shortAmount(e)}</span>}
-          {e.kcal !== null && <span className="block">{e.kcal}</span>}
+          {e.kcal ? <span className="block">{e.kcal}</span> : null}
         </span>
       ) : (
         <span className="whitespace-nowrap text-[0.9375rem] text-muted">{[shortAmount(e), e.detail, e.kcal !== null ? `${e.kcal} kcal` : null].filter((x) => x !== null && x !== '').join(' · ')}</span>
@@ -247,9 +248,12 @@ export function PlannerPage() {
           <Button size="sm" onClick={() => setPlanningWeek(true)}>
             Plan my week
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => void build()}>
-            <Icon name="cart" className="size-4" /> Build shopping list
-          </Button>
+          <Link
+            to="/shop"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold hover:bg-card-muted lg:min-h-8 lg:rounded-md lg:px-2.5"
+          >
+            <Icon name="cart" className="size-4" /> Shopping list
+          </Link>
         </Toolbar>
         {hint && (
           <button
@@ -384,12 +388,12 @@ export function PlannerPage() {
             ))}
           </div>
         )}
-        {adding && <AddSheet target={adding} members={members} onClose={() => setAdding(null)} />}
+        {adding && <AddSheet target={adding} members={members} personId={viewerId} onClose={() => setAdding(null)} />}
         {suggesting && <SuggestSheet open onClose={() => setSuggesting(null)} defaultDate={firstFreeDinner(plan.data?.days ?? [], me.today)} ingredient={suggesting.ingredient} servings={Math.max(1, members.length)} />}
         <PlanWeekSheet open={planningWeek} onClose={() => setPlanningWeek(false)} from={from} to={to} defaultServings={Math.max(1, members.length)} />
-        {open && <EntrySheet entry={open} onClose={() => setOpen(null)} />}
+        {open && <EntrySheet entry={open} viewerId={viewerId} members={members} onClose={() => setOpen(null)} />}
       </div>
-      {desktop && <CalendarPane servings={Math.max(1, members.length)} removing={dragging} onRemove={(id) => void remove(id)} />}
+      {desktop && <CalendarPane servings={1} removing={dragging} onRemove={(id) => void remove(id)} />}
     </div>
   );
 }
@@ -401,14 +405,14 @@ function firstFreeDinner(days: { date: CalendarDate; entries: PlanEntryDto[] }[]
 
 type Tab = 'recipe' | 'stock' | 'product' | 'text';
 
-function AddSheet({ target, members, onClose }: { target: { date: CalendarDate; slot: MealSlot }; members: UserDto[]; onClose: () => void }) {
+function AddSheet({ target, members, personId, onClose }: { target: { date: CalendarDate; slot: MealSlot }; members: UserDto[]; personId: string; onClose: () => void }) {
   const me = useMe();
   const qc = useQueryClient();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('recipe');
   const [q, setQ] = useState('');
-  const [servings, setServings] = useState(target.slot === 'dinner' ? Math.max(1, members.length) : 1);
-  const [eaters, setEaters] = useState<Set<string>>(new Set(members.length > 1 ? [] : [me.user.id]));
+  const [servings, setServings] = useState(1);
+  const [eaters, setEaters] = useState<Set<string>>(new Set([personId]));
   const [text, setText] = useState('');
   const [kcal, setKcal] = useState('');
   const recipes = useRecipes().data ?? [];
@@ -418,10 +422,9 @@ function AddSheet({ target, members, onClose }: { target: { date: CalendarDate; 
 
   const add = async (body: Record<string, unknown>) => {
     try {
-      const people = [...eaters].map((userId) => ({
-        userId,
-        portions: servings / Math.max(1, eaters.size),
-      }));
+      // One portion each for the people picked; any servings left over are free for others to take.
+      const each = eaters.size > servings ? servings / eaters.size : 1;
+      const people = [...eaters].map((userId) => ({ userId, portions: Math.round(each * 1000) / 1000 }));
       await api.post('/api/plan', {
         date: target.date,
         slot: target.slot,
@@ -479,7 +482,7 @@ function AddSheet({ target, members, onClose }: { target: { date: CalendarDate; 
       </div>
       {members.length > 1 && (
         <fieldset className="mb-3">
-          <legend className="mb-1 text-sm font-medium">Who's eating? (optional)</legend>
+          <legend className="mb-1 text-sm font-medium">Who's eating?</legend>
           <div className="flex flex-wrap gap-2">
             {members.map((m) => (
               <label key={m.id} className={`flex min-h-11 items-center gap-2 rounded-full border px-3 ${eaters.has(m.id) ? 'border-strong bg-strong text-strong-ink' : 'border-line'}`}>
@@ -500,7 +503,13 @@ function AddSheet({ target, members, onClose }: { target: { date: CalendarDate; 
               </label>
             ))}
           </div>
-          <p className="mt-1 text-sm text-muted">{eaters.size ? `Split ${servings} between ${eaters.size}.` : 'Nobody picked: it’s for the household.'}</p>
+          <p className="mt-1 text-sm text-muted">
+            {eaters.size === 0
+              ? 'Nobody picked: every portion is free, and nobody gets the calories yet.'
+              : eaters.size > servings
+                ? `${servings} split between ${eaters.size}.`
+                : `One portion each${servings > eaters.size ? `, ${servings - eaters.size} free for anyone to take` : ''}.`}
+          </p>
         </fieldset>
       )}
 
@@ -593,7 +602,7 @@ function amountWords(e: PlanEntryDto): string {
 }
 
 /** How much of it: servings for a recipe; items or a weight for food and leftovers. */
-function AmountEditor({ entry }: { entry: PlanEntryDto }) {
+function AmountEditor({ entry, onSaved }: { entry: PlanEntryDto; onSaved?: (e: PlanEntryDto) => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const canWeigh = entry.kind !== 'recipe' && entry.unitGrams !== null;
@@ -605,7 +614,8 @@ function AmountEditor({ entry }: { entry: PlanEntryDto }) {
   const valid = Number.isFinite(number) && number > 0 && servings <= 100;
   const save = async () => {
     try {
-      await api.patch(`/api/plan/${entry.id}`, { servings: Math.round(servings * 1000) / 1000 });
+      const updated = await api.patch<PlanEntryDto>(`/api/plan/${entry.id}`, { servings: Math.round(servings * 1000) / 1000 });
+      onSaved?.(updated);
       await qc.invalidateQueries({ queryKey: ['plan'] });
       toast.show('Amount changed.');
     } catch (e) {
@@ -649,8 +659,10 @@ function AmountEditor({ entry }: { entry: PlanEntryDto }) {
   );
 }
 
-function EntrySheet({ entry, onClose }: { entry: PlanEntryDto; onClose: () => void }) {
+function EntrySheet({ entry: initial, viewerId, members, onClose }: { entry: PlanEntryDto; viewerId: string; members: UserDto[]; onClose: () => void }) {
   const me = useMe();
+  const [entry, setEntry] = useState(initial);
+  const isAdmin = me.user.role === 'admin';
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
@@ -671,15 +683,50 @@ function EntrySheet({ entry, onClose }: { entry: PlanEntryDto; onClose: () => vo
     }
   };
 
+  /** Change who has portions, or make it a batch cook; stays open so several icons can be set. */
+  const patch = async (body: { people?: { userId: string; portions: number }[]; batch?: boolean }) => {
+    const before = entry;
+    // Show the change straight away; the server's answer (names, calories) follows.
+    if (body.batch !== undefined) setEntry({ ...entry, batch: body.batch, people: body.batch ? [] : entry.people });
+    try {
+      const updated = await api.patch<PlanEntryDto>(`/api/plan/${entry.id}`, body);
+      setEntry(updated);
+      await qc.invalidateQueries({ queryKey: ['plan'] });
+    } catch (e) {
+      setEntry(before);
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
+
   return (
     <Sheet open onClose={onClose} title={entry.title}>
       <p className="mb-4 text-muted">
         {SLOT_LABEL[entry.slot]}
         {amountWords(entry) ? ` · ${amountWords(entry)}` : ''}
-        {entry.kcal !== null ? ` · ${entry.kcal} kcal` : ''}
-        {entry.people.length ? ` · ${entry.people.map((p) => (p.userId === me.user.id ? 'you' : p.name)).join(' + ')}` : ''}
+        {entry.kcalPerServing !== null && !entry.batch ? ` · ${entry.kcalPerServing} kcal a serving` : ''}
       </p>
-      {!moving && entry.kind !== 'text' && <AmountEditor key={`${entry.id}-${entry.servings}`} entry={entry} />}
+      {!moving && entry.kind !== 'text' && <AmountEditor key={`${entry.id}-${entry.servings}`} entry={entry} onSaved={setEntry} />}
+      {!moving && entry.kind !== 'text' && (
+        <div className="mb-4 flex flex-col gap-2 rounded-lg bg-card-muted p-3">
+          <p className="text-sm font-medium">Who's eating?</p>
+          {entry.batch ? (
+            <p className="text-sm text-muted">Nobody: it's a batch cook for the freezer, so it doesn't count towards anyone's calories.</p>
+          ) : (
+            <>
+              <PortionPicker entry={entry} viewerId={viewerId} meId={me.user.id} isAdmin={isAdmin} members={members} onChange={(people) => void patch({ people })} />
+              <p className="text-xs text-muted">
+                {portionsSummary(entry, me.user.id)}. Only your own portions count towards your calories. Tap an icon to {isAdmin ? 'give it to someone' : 'take it or give it back'}.
+              </p>
+            </>
+          )}
+          {entry.kind === 'recipe' && entry.status === 'planned' && (
+            <label className="flex min-h-11 items-center gap-2 text-sm lg:min-h-8">
+              <input type="checkbox" className="size-5 accent-[var(--accent)] lg:size-4" checked={entry.batch} onChange={(e) => void patch({ batch: e.target.checked })} />
+              Batch cook (portions go into stock, nobody eats it now)
+            </label>
+          )}
+        </div>
+      )}
       {moving ? (
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
@@ -727,7 +774,7 @@ function EntrySheet({ entry, onClose }: { entry: PlanEntryDto; onClose: () => vo
         <div className="grid grid-cols-2 gap-3">
           {entry.status !== 'cooked' &&
             (entry.kind === 'recipe' && entry.recipeId ? (
-              <Button variant="primary" size="lg" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}`)}>
+              <Button variant="primary" size="lg" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}${entry.batch ? '&batch=1' : ''}`)}>
                 Cooked it
               </Button>
             ) : (

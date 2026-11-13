@@ -76,7 +76,7 @@ export async function listShopping(db: Db, auth: Auth, pricing = false, now: Dat
         if (!g || g < 1) return null;
         return amountText(g, catalog.ingredients.get(ingredientId!));
       })(),
-      foodGroup: (r.productId ? productsById.get(r.productId)?.foodGroup : null) ?? (() => {
+      foodGroup: r.foodGroup ?? (r.productId ? productsById.get(r.productId)?.foodGroup : null) ?? (() => {
         const ingredientId = r.ingredientId ?? (r.productId ? (productsById.get(r.productId)?.ingredientId ?? null) : null);
         return ingredientId ? (catalog.ingredients.get(ingredientId)?.foodGroup ?? null) : null;
       })(),
@@ -153,7 +153,7 @@ export async function addItem(
   return row!.id;
 }
 
-export async function updateItem(db: Db, auth: Auth, id: string, patch: { checked?: boolean; packs?: number; text?: string }, now: Date) {
+export async function updateItem(db: Db, auth: Auth, id: string, patch: { checked?: boolean; packs?: number; text?: string; foodGroup?: string | null }, now: Date) {
   const set: Partial<ItemRow> = { ...patch };
   if (patch.checked !== undefined) set.checkedAt = patch.checked ? now : null;
   const r = await db
@@ -169,8 +169,12 @@ export async function deleteItems(db: Db, auth: Auth, ids: string[] | 'checked')
   await db.delete(shoppingItems).where(ids === 'checked' ? and(base, eq(shoppingItems.checked, true)) : and(base, inArray(shoppingItems.id, ids)));
 }
 
-/** Build list items for what the plan between `from` and `to` needs. Existing plan items are recalculated. */
-export async function buildFromPlan(db: Db, auth: Auth, from: CalendarDate, to: CalendarDate, now: Date): Promise<BuildListResultDto> {
+/**
+ * Build list items for what the plan between `from` and `to` needs (no `to`: everything planned
+ * from `from` on). Existing plan items are recalculated. With `tidy`, plan items for food the plan
+ * no longer needs come off the list too: that's the automatic "For your plan" section.
+ */
+export async function buildFromPlan(db: Db, auth: Auth, from: CalendarDate, to: CalendarDate | undefined, now: Date, tidy = false): Promise<BuildListResultDto> {
   const today = todayIn(auth.household.timeZone, now);
   const catalog = await loadCatalog(db, auth.household.id);
   const needs = await earmarks(db, auth, from, to);
@@ -179,20 +183,32 @@ export async function buildFromPlan(db: Db, auth: Auth, from: CalendarDate, to: 
   const stock = await onHand(db, auth.household.id);
   for (const e of earlier) stock.set(e.ingredientId, Math.max(0, (stock.get(e.ingredientId) ?? 0) - e.grams));
 
-  const items = await db.select().from(shoppingItems).where(and(eq(shoppingItems.householdId, auth.household.id), eq(shoppingItems.checked, false)));
+  // Ticked items are bought but not put away yet: they count as coming, like anything else on the list.
+  const items = await db.select().from(shoppingItems).where(eq(shoppingItems.householdId, auth.household.id));
   const result: BuildListResultDto = { added: 0, updated: 0, covered: 0, surplus: [] };
+  const needed = new Set(needs.map((n) => n.ingredientId));
+  const stale: string[] = [];
+  for (const i of items) {
+    if (i.reason === 'plan' && !i.checked && tidy && (!i.ingredientId || !needed.has(i.ingredientId))) stale.push(i.id);
+  }
   for (const need of needs) {
     const ing = catalog.ingredients.get(need.ingredientId);
     if (!ing) continue;
     const mine = items.filter((i) => i.ingredientId === ing.id);
-    const planItem = mine.find((i) => i.reason === 'plan');
+    const planItems = mine.filter((i) => i.reason === 'plan' && !i.checked);
+    const planItem = planItems[0];
+    // A second open plan item for the same food (two phones at once) is folded into the first.
+    stale.push(...planItems.slice(1).map((i) => i.id));
     // Other items already on the list for this ingredient are "coming".
-    const coming = mine.filter((i) => i !== planItem).reduce((g, i) => g + (i.packGrams ?? 0) * i.packs, 0);
+    const coming = mine.filter((i) => !planItems.includes(i)).reduce((g, i) => g + (i.packGrams ?? 0) * i.packs, 0);
     const short = Math.round((need.grams - (stock.get(ing.id) ?? 0) - coming) * 10) / 10;
     const meals = [...new Set(need.meals.map((m) => m.title))].join(', ');
     if (short <= 0) {
       result.covered++;
-      if (planItem) await db.delete(shoppingItems).where(eq(shoppingItems.id, planItem.id));
+      if (planItem) {
+        await db.delete(shoppingItems).where(eq(shoppingItems.id, planItem.id));
+        result.removed = (result.removed ?? 0) + 1;
+      }
       continue;
     }
     const choice = choosePacks(short, await packSizes(db, auth.household.id, ing))!;
@@ -205,16 +221,33 @@ export async function buildFromPlan(db: Db, auth: Auth, from: CalendarDate, to: 
       text: ing.name,
     };
     if (planItem) {
-      await db.update(shoppingItems).set(values).where(eq(shoppingItems.id, planItem.id));
-      result.updated++;
+      const same = planItem.grams === values.grams && planItem.packs === values.packs && planItem.packGrams === values.packGrams && planItem.forMeals === values.forMeals && planItem.text === values.text;
+      if (!same) {
+        await db.update(shoppingItems).set(values).where(eq(shoppingItems.id, planItem.id));
+        result.updated++;
+      }
     } else {
       await db.insert(shoppingItems).values({ ...values, householdId: auth.household.id, ingredientId: ing.id, reason: 'plan', addedBy: auth.user.id });
       result.added++;
     }
     if (choice.surplusGrams >= 50) result.surplus.push({ ingredientId: ing.id, name: ing.name, grams: choice.surplusGrams });
   }
+  if (stale.length) {
+    await db.delete(shoppingItems).where(inArray(shoppingItems.id, stale));
+    result.removed = (result.removed ?? 0) + stale.length;
+  }
   result.surplus.sort((a, b) => b.grams - a.grams);
   return result;
+}
+
+/**
+ * Keep the "For your plan" part of the list in step with the plan and stock: what every planned
+ * meal from today on is short of, in whole packs. Runs whenever the list is read. True if it changed.
+ */
+export async function syncPlanItems(db: Db, auth: Auth, now: Date): Promise<boolean> {
+  const today = todayIn(auth.household.timeZone, now);
+  const r = await buildFromPlan(db, auth, today, undefined, now, true);
+  return r.added + r.updated + (r.removed ?? 0) > 0;
 }
 
 /** Staples flagged "track running low" that are gone or will be within a few days at the usual rate. */

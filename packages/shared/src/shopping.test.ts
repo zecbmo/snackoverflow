@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { choosePacks, estimateRunOut, portionShare, slotForTime } from './shopping';
+import { assignSlot, choosePacks, estimateRunOut, freePortions, onCalendarOf, portionShare, portionSlots, slotForTime } from './shopping';
 
 describe('choosePacks', () => {
   it('rounds up to the pack that wastes least', () => {
@@ -68,9 +68,38 @@ describe('meal slots and shares', () => {
     expect(slotForTime(23)).toBe('snack');
   });
 
-  it('splits household meals evenly and respects named portions', () => {
-    expect(portionShare(4, [], 'a', 2)).toBe(2);
-    expect(portionShare(2, [{ userId: 'a', portions: 1.5 }, { userId: 'b', portions: 0.5 }], 'a', 3)).toBe(1.5);
-    expect(portionShare(2, [{ userId: 'b', portions: 2 }], 'a', 3)).toBe(0);
+  it('counts only the portions given to a person', () => {
+    expect(portionShare([], 'a')).toBe(0);
+    expect(portionShare([{ userId: 'a', portions: 1.5 }, { userId: 'b', portions: 0.5 }], 'a')).toBe(1.5);
+    expect(portionShare([{ userId: 'b', portions: 2 }], 'a')).toBe(0);
+  });
+
+  it('works out free portions and who sees a meal', () => {
+    expect(freePortions(3, [{ userId: 'a', portions: 1 }])).toBe(2);
+    expect(freePortions(1, [{ userId: 'a', portions: 1 }])).toBe(0);
+    expect(freePortions(2, [])).toBe(2);
+    // One serving for me: only on my calendar.
+    expect(onCalendarOf(1, [{ userId: 'a', portions: 1 }], 'a')).toBe(true);
+    expect(onCalendarOf(1, [{ userId: 'a', portions: 1 }], 'b')).toBe(false);
+    // Three servings, one mine: everyone sees it (two are free).
+    expect(onCalendarOf(3, [{ userId: 'a', portions: 1 }], 'b')).toBe(true);
+    // Fully given to other people: not on mine.
+    expect(onCalendarOf(2, [{ userId: 'a', portions: 1 }, { userId: 'c', portions: 1 }], 'b')).toBe(false);
+  });
+
+  it('lays out one icon per serving and reassigns them', () => {
+    expect(portionSlots(3, [{ userId: 'a', portions: 1 }])).toEqual(['a', null, null]);
+    expect(portionSlots(2, [{ userId: 'a', portions: 0.5 }, { userId: 'b', portions: 1.5 }])).toEqual(['a', 'b', 'b']);
+    expect(portionSlots(20, [], 8)).toHaveLength(8);
+    // Claim a free one, free my own, hand one to someone else.
+    expect(assignSlot(3, [{ userId: 'a', portions: 1 }], 1, 'b')).toEqual([
+      { userId: 'a', portions: 1 },
+      { userId: 'b', portions: 1 },
+    ]);
+    expect(assignSlot(3, [{ userId: 'a', portions: 1 }], 0, null)).toEqual([]);
+    expect(assignSlot(2, [{ userId: 'a', portions: 2 }], 1, 'b')).toEqual([
+      { userId: 'a', portions: 1 },
+      { userId: 'b', portions: 1 },
+    ]);
   });
 });

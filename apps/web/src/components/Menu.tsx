@@ -25,6 +25,11 @@ export interface MenuItem {
 
 export type MenuEntry = MenuItem | { heading: string } | 'divider';
 
+/** Inside a modal dialog everything else is inert, so a menu opened there has to live in the dialog. */
+function portalTarget(from: HTMLElement | null): Element {
+  return from?.closest('dialog[open]') ?? document.body;
+}
+
 export function Menu({
   label,
   items,
@@ -187,7 +192,7 @@ export function Menu({
           >
             {renderItems(items, false)}
           </div>,
-          document.body,
+          portalTarget(button.current),
         )}
       {open &&
         sub &&
@@ -206,7 +211,7 @@ export function Menu({
             >
               {renderItems(parent.submenu, true)}
             </div>,
-            document.body,
+            portalTarget(button.current),
           );
         })()}
     </>

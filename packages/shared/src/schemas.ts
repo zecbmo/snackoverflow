@@ -276,8 +276,10 @@ export const planEntryInput = z
     text: z.string().trim().max(200).nullish(),
     servings: z.number().positive().max(100).default(1),
     kcalPerServing: z.number().min(0).max(10_000).nullish(),
-    /** Who's eating it; leave out for the whole household. */
+    /** Who's eating it and how many portions each; servings nobody has are free (no one's calories). */
     people: people.default([]),
+    /** A batch cook for the freezer: nobody eats it now. */
+    batch: z.boolean().default(false),
     /** Log it as eaten straight away (e.g. adding a banana you just had). */
     eaten: z.boolean().default(false),
   })
@@ -297,6 +299,7 @@ export const updatePlanEntryInput = z.object({
   servings: z.number().positive().max(100).optional(),
   status: z.enum(['planned', 'cooked', 'skipped']).optional(),
   people: people.optional(),
+  batch: z.boolean().optional(),
 });
 
 /** Eating planned leftovers or a product takes it out of stock. */
@@ -318,6 +321,8 @@ export const updateShoppingItemInput = z.object({
   checked: z.boolean().optional(),
   packs: z.number().int().min(1).max(99).optional(),
   text: z.string().trim().min(1).max(200).optional(),
+  /** This item's category on the list; null goes back to the food's own. */
+  foodGroup: z.enum(FOOD_GROUPS).nullable().optional(),
 });
 
 export const buildListInput = z.object({ from: calendarDate, to: calendarDate });

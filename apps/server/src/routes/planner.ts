@@ -23,7 +23,7 @@ import { barcodesFor, loadCatalog, productDto } from '../services/catalog';
 import { createEntry, deleteEntry, earmarks, eatEntry, getEntry, listPlan, logEaten, updateEntry } from '../services/planner';
 import { resolveBarcode } from '../services/scan';
 import { pricingOn } from '../services/pricing';
-import { addItem, buildFromPlan, deleteItems, listShopping, putAway, runningLow, updateItem } from '../services/shopping';
+import { addItem, buildFromPlan, deleteItems, listShopping, putAway, runningLow, syncPlanItems, updateItem } from '../services/shopping';
 import { getStockItem, type StockDeps } from '../services/stock';
 
 const planQuery = z.object({
@@ -105,6 +105,9 @@ export async function plannerRoutes(app: FastifyInstance) {
   // --- Shopping list -------------------------------------------------------------------
   app.get('/api/shopping', async (req) => {
     const auth = requireAuth(req);
+    // The plan's part of the list follows the plan and stock on its own.
+    const changed = await ctx.db.transaction((tx) => syncPlanItems(tx, auth, ctx.now()));
+    if (changed) ctx.live.publish(auth.household.id, 'shopping');
     return listShopping(ctx.db, auth, pricingOn(ctx, auth.household), ctx.now());
   });
 

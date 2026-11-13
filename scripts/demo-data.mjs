@@ -268,18 +268,20 @@ async function main() {
   const kcal = (title) => (recipes[title]?.kcalPerServing ?? 600);
   const dinners = ['Chicken & spinach curry', 'Beef chilli', 'Pasta bake', 'Salmon traybake', 'Red lentil dahl', 'Sausage & mash', 'Prawn pesto pasta'];
   const lunches = [['Tuna & chickpea salad', 420], ['Cheese & tomato toastie', 480], ['Leftover chilli', 560], ['Soup and bread', 390]];
+  // Household meals: one portion each, so everyone gets their own calories.
+  const each = people.map((p) => ({ userId: p.id, portions: 1 }));
   let eaten = 0;
   for (let d = 14; d >= 1; d--) {
     const date = addDays(today, -d);
     const dinner = dinners[d % dinners.length];
-    await post('/api/plan', { date, slot: 'dinner', kind: 'text', text: dinner, kcalPerServing: kcal(dinner) + (d % 3) * 40, servings: 3, eaten: true });
-    await post('/api/plan', { date, slot: 'breakfast', kind: 'text', text: d % 7 === 0 ? 'Full English' : 'Porridge with banana', kcalPerServing: d % 7 === 0 ? 780 : 360, servings: 3, eaten: true });
+    await post('/api/plan', { date, slot: 'dinner', kind: 'text', text: dinner, kcalPerServing: kcal(dinner) + (d % 3) * 40, servings: 3, people: each, eaten: true });
+    await post('/api/plan', { date, slot: 'breakfast', kind: 'text', text: d % 7 === 0 ? 'Full English' : 'Porridge with banana', kcalPerServing: d % 7 === 0 ? 780 : 360, servings: 3, people: each, eaten: true });
     const [lunch, lk] = lunches[d % lunches.length];
-    await post('/api/plan', { date, slot: 'lunch', kind: 'text', text: lunch, kcalPerServing: lk, servings: 3, eaten: true });
+    await post('/api/plan', { date, slot: 'lunch', kind: 'text', text: lunch, kcalPerServing: lk, servings: 3, people: each, eaten: true });
     if (d % 2 === 0) await post('/api/plan', { date, slot: 'snack', kind: 'text', text: d % 4 === 0 ? 'Ice cream' : 'Greek yogurt', kcalPerServing: d % 4 === 0 ? 270 : 130, people: [{ userId: people[d % 3].id, portions: 1 }], eaten: true });
     eaten += 3;
   }
-  await post('/api/plan', { date: today, slot: 'breakfast', kind: 'text', text: 'Porridge with banana', kcalPerServing: 360, servings: 3, eaten: true });
+  await post('/api/plan', { date: today, slot: 'breakfast', kind: 'text', text: 'Porridge with banana', kcalPerServing: 360, servings: 3, people: each, eaten: true });
   console.log(`Meals eaten: ${eaten + 1} over the last two weeks`);
 
   // The week ahead.

@@ -1,10 +1,10 @@
 /**
  * The recipe library: All / Cook now / Nearly there / Use it up, as a gallery or a table.
- * Clicking a recipe previews it in a side panel with Cook and Add to plan.
+ * Clicking a recipe previews it in a side panel: Cook and Batch cook at the top, Full recipe and Add to plan below.
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import type { RecipeScore, RecipeSummaryDto } from '@snackoverflow/shared';
+import { type MealFilter, recipeMeals, type RecipeScore, type RecipeSummaryDto } from '@snackoverflow/shared';
 import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
 import { type Column, DataTable } from '../components/DataTable';
 import { Icon } from '../components/Icon';
@@ -16,7 +16,7 @@ import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui';
 import { minutesLabel } from '../lib/format';
 import { useRecipe, useRecipes, useRecipeScores } from '../lib/queries';
 import { matchesSearch } from '../lib/table';
-import { RecipeIngredients, recipeMeta } from './RecipeDetail';
+import { BatchSheet, RecipeIngredients, recipeMeta } from './RecipeDetail';
 
 /** Placeholder tints for recipes without a photo; follow the palette (not the freshness colours). */
 const TINTS = ['bg-accent-soft', 'bg-card-muted'];
@@ -45,6 +45,16 @@ export const RECIPE_TABS: { id: RecipeTab; label: string; help: string }[] = [
   { id: 'nearly', label: 'Missing a few', help: 'In stock except for one to three things.' },
   { id: 'use-it-up', label: 'Use it up', help: "Uses food that's going off soon, best first." },
 ];
+/** The meal filter beside the views: any meal, or recipes tagged for breakfast, lunch or dinner. */
+export type MealChoice = 'any' | MealFilter;
+export const MEAL_CHOICES: { value: MealChoice; label: string }[] = [
+  { value: 'any', label: 'Any meal' },
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'dinner', label: 'Dinner' },
+];
+export const inMeal = (r: Pick<RecipeSummaryDto, 'tags'>, m: MealChoice) => m === 'any' || recipeMeals(r.tags).includes(m);
+
 const TAB_HELP = Object.fromEntries(RECIPE_TABS.map((t) => [t.id, t.help])) as Record<Tab, string>;
 
 /** Whether a recipe belongs in a view, from its score. */
@@ -102,6 +112,7 @@ export function RecipesPage() {
   const [q, setQ] = useState('');
   const [tag, setTag] = useState('');
   const [tab, setTab] = useState<Tab>('all');
+  const [meal, setMeal] = useState<MealChoice>('any');
   const [view, setView] = useState<View>(readView);
   const [planning, setPlanning] = useState<PlanTarget | null>(null);
   const [openId, openPanel, closePanel] = usePanelParam();
@@ -118,8 +129,8 @@ export function RecipesPage() {
     }
   };
   const inTab = (r: RecipeSummaryDto, t: Tab) => inRecipeTab(byId.get(r.id), t);
-  const count = (t: Tab) => (recipes.data ?? []).filter((r) => inTab(r, t)).length;
-  let shown = (recipes.data ?? []).filter((r) => (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q)) && (!tag || r.tags.includes(tag)) && inTab(r, tab));
+  const count = (t: Tab) => (recipes.data ?? []).filter((r) => inTab(r, t) && inMeal(r, meal)).length;
+  let shown = (recipes.data ?? []).filter((r) => (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q)) && (!tag || r.tags.includes(tag)) && inTab(r, tab) && inMeal(r, meal));
   shown = sortForTab(shown, byId, tab);
 
   const plan = (r: RecipeSummaryDto) => setPlanning({ kind: 'recipe', id: r.id, title: r.title, servings: r.serves });
@@ -168,7 +179,7 @@ export function RecipesPage() {
           .
         </p>
       ) : (
-        <p>{tab === 'use-it-up' ? 'Nothing in stock is about to go off. Nice.' : 'Try another view, or scan your shopping in.'}</p>
+        <p>{meal !== 'any' ? `No ${meal} recipes in this view. Tag a recipe "${meal}" to see it here.` : tab === 'use-it-up' ? 'Nothing in stock is about to go off. Nice.' : 'Try another view, or scan your shopping in.'}</p>
       )}
     </EmptyState>
   );
@@ -200,7 +211,8 @@ export function RecipesPage() {
           </>
         }
       />
-      <div role="tablist" aria-label="Which recipes" className="no-scrollbar -mx-4 mb-2 flex gap-1 overflow-x-auto border-b border-line px-4 lg:mx-0 lg:px-0">
+      <div className="no-scrollbar -mx-4 mb-2 flex items-end gap-1 overflow-x-auto border-b border-line px-4 lg:mx-0 lg:px-0">
+        <div role="tablist" aria-label="Which recipes" className="flex gap-1">
         {RECIPE_TABS.map(({ id: t, label }) => (
           <button
             key={t}
@@ -213,6 +225,10 @@ export function RecipesPage() {
             {label} <span className="font-normal text-muted">{count(t)}</span>
           </button>
         ))}
+        </div>
+        <span className="mb-1 ml-auto pl-2">
+          <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_CHOICES} />
+        </span>
       </div>
       <Toolbar search={<SearchBox value={q} onChange={setQ} placeholder="Search recipes" label="Search recipes" />}>
         {tags.length > 0 && (
@@ -273,7 +289,7 @@ export function RecipesPage() {
           })}
         </ul>
       )}
-      <RecipePanel id={openId} onClose={closePanel} onPlan={plan} onCook={cook} score={openId ? byId.get(openId) : undefined} on={on} />
+      <RecipePanel id={openId} onClose={closePanel} onPlan={plan} score={openId ? byId.get(openId) : undefined} on={on} />
       <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
     </>
   );
@@ -283,36 +299,49 @@ function RecipePanel({
   id,
   onClose,
   onPlan,
-  onCook,
   score,
   on,
 }: {
   id: string | null;
   onClose: () => void;
   onPlan: (r: RecipeSummaryDto) => void;
-  onCook: (r: RecipeSummaryDto) => void;
   score?: RecipeScore;
   on: string;
 }) {
   const r = useRecipe(id ?? '').data;
+  const navigate = useNavigate();
   const [servings, setServings] = useState<number | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
   const uses = score && on ? usesLine(score, on) : null;
+  const n = r ? (servings ?? r.serves) : 1;
   return (
     <SidePanel
       open={Boolean(id)}
       onClose={onClose}
       title={r?.title ?? 'Loading…'}
       subtitle={r ? recipeMeta(r) || undefined : undefined}
+      headerActions={
+        r && (
+          <>
+            <Button size="sm" variant="primary" onClick={() => navigate(`/recipes/${r.id}/cook?servings=${n}`)}>
+              Cook
+            </Button>
+            <Button size="sm" onClick={() => setBatchOpen(true)}>
+              Batch cook
+            </Button>
+          </>
+        )
+      }
       footer={
         r && (
           <>
-            <Button variant="primary" onClick={() => onCook(r)}>
-              Cook now
-            </Button>
-            <Button onClick={() => onPlan(r)}>Add to plan</Button>
-            <Link to={`/recipes/${r.id}`} className="ml-auto inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent-text hover:underline lg:min-h-8">
+            <Link
+              to={`/recipes/${r.id}`}
+              className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-ink hover:brightness-110 lg:min-h-8 lg:rounded-md lg:px-3"
+            >
               Full recipe <Icon name="chevronRight" className="size-4" />
             </Link>
+            <Button onClick={() => onPlan(r)}>Add to plan</Button>
           </>
         )
       }
@@ -326,7 +355,7 @@ function RecipePanel({
               {missingLine(score) && <p className="text-muted">{missingLine(score)}</p>}
             </div>
           )}
-          <RecipeIngredients recipe={r} servings={servings ?? r.serves} onServings={setServings} />
+          <RecipeIngredients recipe={r} servings={n} onServings={setServings} />
           {r.steps.length > 0 && (
             <section>
               <h2 className="mb-2 font-bold">Method</h2>
@@ -337,6 +366,7 @@ function RecipePanel({
               </ol>
             </section>
           )}
+          <BatchSheet open={batchOpen} serves={r.serves} onClose={() => setBatchOpen(false)} onGo={(portions) => navigate(`/recipes/${r.id}/cook?servings=${portions}&batch=1`)} />
         </div>
       ) : (
         <Spinner />

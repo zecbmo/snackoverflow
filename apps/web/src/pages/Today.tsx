@@ -267,7 +267,7 @@ function ShoppingSummary() {
   );
 }
 
-/** Tonight's meal: "Tonight · Chicken curry" with Cooked it / Skip / Move. */
+/** Tonight's meal: "Tonight · Chicken curry" with Cooked it / Skip; the title opens it in the calendar. */
 function TonightCard({ entry }: { entry: PlanEntryDto }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -291,7 +291,11 @@ function TonightCard({ entry }: { entry: PlanEntryDto }) {
     <section aria-label="Today's meal" className="mb-5 flex flex-col gap-3 rounded-xl border border-line bg-card p-4 lg:flex-row lg:items-center lg:rounded-lg lg:py-3">
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-accent-text">{label}</p>
-        <h2 className="truncate text-lg font-bold">{entry.title}</h2>
+        <h2 className="truncate text-lg font-bold">
+          <Link to={`/calendar?entry=${entry.id}&date=${entry.date}`} className="hover:underline" title="Open in the calendar">
+            {entry.title}
+          </Link>
+        </h2>
         <p className="text-sm text-muted">{meta}</p>
       </div>
       <div className="flex gap-2">
@@ -299,7 +303,6 @@ function TonightCard({ entry }: { entry: PlanEntryDto }) {
           Cooked it
         </Button>
         <Button onClick={() => void skip()}>Skip</Button>
-        <Button onClick={() => navigate(`/calendar?entry=${entry.id}&date=${entry.date}`)}>Move</Button>
       </div>
     </section>
   );

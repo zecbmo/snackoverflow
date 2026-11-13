@@ -213,6 +213,27 @@ export interface NutritionTotal {
   coverage: number;
 }
 
+const LEADING_AMOUNT =
+  /^(about\s+)?(\d+(?:[.,]\d+)?(?:\s*[½¼¾⅓⅔⅛])?|[½¼¾⅓⅔⅛])(?:\s+\d+\/\d+|\/\d+)?(?:\s*(?:-|–|to)\s*\d+(?:[.,]\d+)?)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)?/i;
+
+/** Import noise some recipe sites add ("1 unit(s) Apple" becomes "1 Apple"). */
+export function tidyLine(text: string): string {
+  return text.replace(/\s*\bunits?\s*\(s\)/gi, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+/**
+ * A recipe line with its amount scaled to the servings chosen, keeping the
+ * recipe's own wording: "400g chopped tomatoes" for 4 becomes "200g chopped tomatoes" for 2.
+ */
+export function scaledLine(text: string, amount: number | null, from: number, to: number): string {
+  const tidy = tidyLine(text);
+  if (amount === null || from === to || from <= 0) return tidy;
+  const scaled = formatAmount(scaleAmount(amount, from, to)!);
+  const m = tidy.match(LEADING_AMOUNT);
+  if (!m) return `${scaled} × ${tidy}`;
+  return `${scaled}${tidy.slice(m[0].length)}`;
+}
+
 /** Nutrition per serving from each line's grams and per-100g values. Lines with no data are skipped and lower the coverage. */
 export function recipeNutrition(lines: NutritionLine[], serves: number): NutritionTotal {
   const total: Record<string, number> = {};
@@ -239,4 +260,18 @@ export function isoDurationMinutes(value: string | null | undefined): number | n
   if (!m) return null;
   const minutes = Number(m[1] ?? 0) * 1440 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) + Math.round(Number(m[4] ?? 0) / 60);
   return minutes > 0 ? minutes : null;
+}
+
+export type MealFilter = 'breakfast' | 'lunch' | 'dinner';
+
+const MEAL_TAGS: Record<MealFilter, string[]> = {
+  breakfast: ['breakfast', 'brunch'],
+  lunch: ['lunch', 'light meal', 'light lunch', 'sandwich', 'salad', 'soup'],
+  dinner: ['dinner', 'supper', 'main', 'main course', 'mains', 'main dish', 'tea'],
+};
+
+/** Which meals a recipe suits, from its tags ("main course" counts as dinner). Untagged recipes suit none. */
+export function recipeMeals(tags: string[]): MealFilter[] {
+  const t = new Set(tags.map((x) => x.trim().toLowerCase()));
+  return (Object.keys(MEAL_TAGS) as MealFilter[]).filter((m) => MEAL_TAGS[m].some((w) => t.has(w)));
 }

@@ -29,6 +29,14 @@ function fromPlan(plan: CookPlanDto): Line[] {
   }));
 }
 
+/** "Potatoes · 1.6kg in stock", "Prunes · none in stock". */
+function stockLine(l: Line): string {
+  const name = l.ingredientName ?? 'This';
+  if (l.inStockGrams === null) return `${name} · some in stock`;
+  if (l.inStockGrams <= 0) return `${name} · none in stock`;
+  return `${name} · ${amountText(l.inStockGrams, l.unit)} in stock`;
+}
+
 export function CookPage() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
@@ -124,7 +132,9 @@ export function CookPage() {
             }
           : undefined,
       });
-      navigate(`/recipes/${id}`);
+      // Back to wherever the cook started (Today, the calendar, the recipe).
+      if (((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0) navigate(-1);
+      else navigate(`/recipes/${id}`);
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     } finally {
@@ -147,10 +157,14 @@ export function CookPage() {
                 <div className="flex items-start gap-3">
                   <div className="flex-1">
                     <p className="font-semibold">{l.text}</p>
+                    {p.servings !== p.serves && l.originalText !== l.text && (
+                      <p className="text-sm text-muted">
+                        Recipe for {p.serves} uses {l.originalText}
+                      </p>
+                    )}
                     <p className="text-sm text-muted">
-                      {l.neededGrams !== null ? `Needs ${amountText(l.neededGrams, l.unit)}` : 'Not tracked'}
-                      {l.ingredientName ? ` · ${l.ingredientName}` : ''}
-                      {!l.skipped && (l.shortGrams ?? 0) > 0 && ` · short by ${amountText(l.shortGrams ?? 0, l.unit)}`}
+                      {l.neededGrams === null ? 'Not tracked' : stockLine(l)}
+                      {!l.skipped && (l.shortGrams ?? 0) > 0 && <span className="text-fresh-red-text"> · short by {amountText(l.shortGrams ?? 0, l.unit)}</span>}
                     </p>
                   </div>
                   {l.takes.length > 0 && (

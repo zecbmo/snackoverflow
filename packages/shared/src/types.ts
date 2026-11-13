@@ -307,7 +307,12 @@ export interface RecipeIngredientInputDraft {
 /** The cook screen: what each line will take from stock, earliest-expiring first. */
 export interface CookPlanLineDto {
   recipeIngredientId: string;
+  /** The recipe line scaled to the servings being cooked ("900 grams Potatoes"). */
   text: string;
+  /** The line as the recipe has it, for its own number of servings. */
+  originalText: string;
+  /** All of this food in stock right now (before this cook), when it is measured. */
+  inStockGrams: number | null;
   ingredientName: string | null;
   optional: boolean;
   /** How the ingredient is measured, so amounts can be shown in ml for liquids. */
@@ -364,9 +369,12 @@ export interface PlanEntryDto {
   displayUnit: 'g' | 'ml' | 'count';
   status: 'planned' | 'cooked' | 'skipped';
   source: 'plan' | 'scan';
+  /** Who has portions of it. Servings beyond these are free: nobody's yet. */
   people: { userId: string; name: string; portions: number }[];
+  /** A batch cook for the freezer: nobody is eating it, so no one gets its calories. */
+  batch: boolean;
   kcalPerServing: number | null;
-  /** Calories for the person being viewed (their share), or for the whole entry. */
+  /** Calories for the person being viewed (their portions only), or for the whole entry. */
   kcal: number | null;
 }
 
@@ -430,6 +438,8 @@ export interface BuildListResultDto {
   updated: number;
   /** Food the plan needs that's already covered by stock. */
   covered: number;
+  /** Plan items taken off the list: covered now, or no longer planned. */
+  removed?: number;
   surplus: { ingredientId: string; name: string; grams: number }[];
 }
 

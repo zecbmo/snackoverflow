@@ -472,6 +472,8 @@ export const mealPlanEntries = pgTable(
     servings: doublePrecision('servings').notNull().default(1),
     /** Calories per serving for free-text entries, if someone knows. */
     kcalPerServing: doublePrecision('kcal_per_serving'),
+    /** A batch cook: made for the freezer, eaten by nobody now, so no one gets its calories. */
+    batch: boolean('batch').notNull().default(false),
     status: planStatusEnum('status').notNull().default('planned'),
     /** How it got here: planned ahead, or logged by scanning in Eat mode. */
     source: text('source').notNull().default('plan'),
@@ -516,6 +518,8 @@ export const shoppingItems = pgTable(
     /** Grams left over after this plan once the packs are bought. */
     surplusGrams: doublePrecision('surplus_grams'),
     reason: shoppingReasonEnum('reason').notNull().default('manual'),
+    /** Category set on the list by hand (free-text items, or to override the food's own). */
+    foodGroup: text('food_group'),
     /** What the plan needs it for ("Fish pie, roast veg"). */
     forMeals: text('for_meals'),
     checked: boolean('checked').notNull().default(false),

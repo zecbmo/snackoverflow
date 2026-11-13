@@ -42,6 +42,8 @@ function Inner({ target, onClose }: { target: PlanTarget; onClose: () => void })
         date,
         slot,
         servings,
+        // One portion is yours; the rest are free for others in the household to take.
+        people: [{ userId: me.user.id, portions: Math.min(1, servings) }],
         kind: target.kind,
         ...(target.kind === 'recipe' ? { recipeId: target.id } : target.kind === 'product' ? { productId: target.id } : { stockItemId: target.id }),
       });
