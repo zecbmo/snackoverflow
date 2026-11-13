@@ -92,7 +92,7 @@ export function MealsPage() {
             title: m.productName,
             meta: `${m.locationName} · ${amountLabel(m)}`,
             badge: pill(m),
-            actions: <StockRowActions item={m} name={m.productName} onDetails={() => openPanel(m.id)} compact />,
+            trailing: <StockRowActions item={m} name={m.productName} onDetails={() => openPanel(m.id)} compact />,
           })}
           empty={
             <EmptyState title="No leftovers or portions">

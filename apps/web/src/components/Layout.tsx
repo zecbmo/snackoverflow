@@ -132,6 +132,7 @@ function Logo() {
 function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const me = useMe();
   const sections = useMenuSections();
+  const main = useMainLinks();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const location = useLocation();
@@ -157,6 +158,19 @@ function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
             </span>
           </span>
         </Link>
+        {/* Like the desktop sidebar: Scan and the main pages first (the bottom bar has them too). */}
+        <Link to="/scan" className="mb-2 flex min-h-12 items-center justify-center gap-2 rounded-lg bg-accent font-semibold text-accent-ink">
+          <Icon name="scan" className="size-5" /> Scan items
+        </Link>
+        <div className="mb-3">
+          {main.map((l) => (
+            <Link key={l.to} to={l.to} className="flex min-h-12 items-center gap-3 rounded-lg px-2 text-[1.0625rem] hover:bg-card-muted">
+              <Icon name={l.icon} className="size-5 text-muted" />
+              <span className="flex-1">{l.label}</span>
+              {l.badge && <span className="text-sm font-semibold text-muted">{l.badge}</span>}
+            </Link>
+          ))}
+        </div>
         {sections.map((s) => (
           <div key={s.title} className="mb-3">
             <p className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</p>
@@ -246,17 +260,31 @@ function SideLink({ to, label, icon, badge, collapsed, end, also }: MenuLink & {
   );
 }
 
-function Sidebar() {
-  const me = useMe();
-  const sections = useMenuSections();
+/** The main pages: the top of the sidebar, and of the phone's menu (as well as the bottom bar). */
+function useMainLinks(): MenuLink[] {
   const stockCount = useStock().data?.length;
-  const [collapsed, toggle] = useSidebarCollapsed();
-  const main: MenuLink[] = [
+  return [
     { to: '/', label: 'Today', icon: 'home' },
     { to: '/stock', label: 'Stock', icon: 'box', badge: stockCount !== undefined ? String(stockCount) : undefined },
     { to: '/calendar', label: 'Calendar', icon: 'calendar', also: ['/plan'] },
     { to: '/shop', label: 'Shopping list', icon: 'cart' },
   ];
+}
+
+/** A new page starts at the top (the window keeps its scroll otherwise). Opening a panel (?open=) doesn't count. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
+function Sidebar() {
+  const me = useMe();
+  const sections = useMenuSections();
+  const [collapsed, toggle] = useSidebarCollapsed();
+  const main = useMainLinks();
   return (
     <aside
       aria-label="Main"
@@ -459,6 +487,7 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
           <Outlet />
         ) : (
           <div className="flex min-h-screen">
+            <ScrollToTop />
             <Sidebar />
             <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 pb-32 pt-[env(safe-area-inset-top)] sm:px-6 lg:max-w-none lg:px-6 lg:pb-10">
               <OfflineBanner />

@@ -77,7 +77,10 @@ export interface PhoneRow {
   badge?: ReactNode;
   /** A thin coloured bar or icon at the start of the row. */
   lead?: ReactNode;
+  /** Buttons on a line of their own under the row. */
   actions?: ReactNode;
+  /** Buttons at the end of the row itself, for one-line rows like a table's. */
+  trailing?: ReactNode;
 }
 
 export interface TableGroup<T> {
@@ -286,7 +289,7 @@ function Phone<T>({ label, groups, rowKey, onOpen, openLabel, phone, activeKey }
                     </>
                   );
                   return (
-                    <li key={k} className={`border-b border-line px-3 py-2.5 last:border-b-0 ${activeKey === k ? 'bg-accent-soft/60' : ''}`}>
+                    <li key={k} className={`border-b border-line px-3 last:border-b-0 ${r.trailing ? 'py-1' : 'py-2.5'} ${activeKey === k ? 'bg-accent-soft/60' : ''}`}>
                       <div className="flex items-center gap-3">
                         {r.lead}
                         {onOpen ? (
@@ -297,6 +300,7 @@ function Phone<T>({ label, groups, rowKey, onOpen, openLabel, phone, activeKey }
                           <div className="min-w-0 flex-1">{body}</div>
                         )}
                         {r.badge}
+                        {r.trailing && <div className="-mr-1 flex shrink-0 items-center gap-0.5">{r.trailing}</div>}
                       </div>
                       {r.actions && <div className={`mt-1.5 flex flex-wrap items-center gap-2 ${r.lead ? 'pl-4' : ''}`}>{r.actions}</div>}
                     </li>

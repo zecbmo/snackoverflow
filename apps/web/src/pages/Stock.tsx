@@ -324,7 +324,7 @@ export function StockPage() {
               </>
             ),
             badge: datePill(g),
-            actions: <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} compact />,
+            trailing: <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} compact />,
           })}
           empty={
             <EmptyState title={q || filter !== 'all' || place !== 'all' || category ? 'Nothing matches' : 'Nothing in stock yet'}>

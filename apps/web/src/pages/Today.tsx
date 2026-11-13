@@ -111,7 +111,7 @@ export function TodayPage() {
                   title: i.productName,
                   meta: `${i.locationName}${i.state === 'opened' ? ' · opened' : ''} · ${amountLabel(i)}`,
                   badge: <Pill className={toneClasses[toneFor(i, me.today)].pill}>{dateLabel(i.bestBefore, me.today)}</Pill>,
-                  actions: <StockRowActions item={i} name={i.productName} onDetails={() => open(i)} compact />,
+                  trailing: <StockRowActions item={i} name={i.productName} onDetails={() => open(i)} compact />,
                 })}
                 empty={
                   <EmptyState title="Nothing going off in the next 3 days">

@@ -59,16 +59,26 @@ export function Menu({
     const below = window.innerHeight - r.bottom - 8;
     const above = r.top - 8;
     const up = below < 220 && above > below;
+    // Always placed by its left edge and kept on screen, using the menu's real width once it's drawn
+    // (a menu at the edge of a phone screen used to open half off it).
+    const vw = document.documentElement.clientWidth;
+    const width = list.current?.offsetWidth ?? 224;
+    const wanted = align === 'end' ? r.right - width : r.left;
     setPos({
       top: up ? Math.max(8, r.top - Math.min(above, 360) - 4) : r.bottom + 4,
       maxHeight: Math.min(up ? above : below, 360),
-      ...(align === 'end' ? { right: Math.max(8, window.innerWidth - r.right) } : { left: Math.max(8, r.left) }),
+      left: Math.max(8, Math.min(wanted, vw - width - 8)),
     });
   }, [align]);
 
   useLayoutEffect(() => {
     if (open) place();
   }, [open, place]);
+  // Once the menu is on screen its width is known: place it again so it fits.
+  useLayoutEffect(() => {
+    if (open && pos && list.current) place();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, Boolean(pos)]);
 
   useEffect(() => {
     if (!open) return;

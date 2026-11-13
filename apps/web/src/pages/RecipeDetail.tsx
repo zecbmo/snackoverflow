@@ -11,6 +11,7 @@ import { Button, Card, ErrorNote, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { minutesLabel } from '../lib/format';
 import { useRecipe } from '../lib/queries';
+import { useIsDesktop } from '../lib/useMedia';
 import { RecipeImage } from './Recipes';
 
 export function recipeMeta(r: RecipeDto): string {
@@ -75,6 +76,8 @@ export function RecipeDetailPage() {
   const [servings, setServings] = useState<number | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [fullTitle, setFullTitle] = useState(false);
+  const desktop = useIsDesktop();
 
   if (recipe.isPending) return <Spinner />;
   if (recipe.error || !recipe.data) return <ErrorNote error={recipe.error ?? 'Not found'} />;
@@ -92,43 +95,66 @@ export function RecipeDetailPage() {
     }
   };
 
+  const cookLink = (
+    <Link
+      to={`/recipes/${r.id}/cook?servings=${n}`}
+      className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-ink hover:brightness-110 lg:min-h-8 lg:rounded-md lg:px-3"
+    >
+      Cook
+    </Link>
+  );
+  const moreMenu = (
+    <Menu
+      label="More for this recipe"
+      items={[
+        ...(desktop ? [{ label: 'Batch cook…', onSelect: () => setBatchOpen(true) }] : []),
+        { label: 'Edit', icon: 'edit', onSelect: () => navigate(`/recipes/${r.id}/edit`) },
+        ...(r.sourceUrl ? [{ label: 'Original recipe', icon: 'external' as const, onSelect: () => window.open(r.sourceUrl!, '_blank', 'noreferrer') }] : []),
+        'divider',
+        { label: 'Delete recipe', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) },
+      ]}
+    />
+  );
+
   return (
     <>
-      <PageTop
-        title={r.title}
-        subtitle={recipeMeta(r) || undefined}
-        left={<BackButton to="/recipes" />}
-        actions={
-          <>
-            <Link
-              to={`/recipes/${r.id}/cook?servings=${n}`}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-ink hover:brightness-110 lg:min-h-8 lg:rounded-md lg:px-3"
-            >
-              Cook
-            </Link>
-            <span className="hidden sm:contents">
+      {desktop ? (
+        <PageTop
+          title={r.title}
+          subtitle={recipeMeta(r) || undefined}
+          left={<BackButton to="/recipes" />}
+          actions={
+            <>
+              {cookLink}
               <Button onClick={() => setBatchOpen(true)}>Batch cook</Button>
-            </span>
-            <Menu
-              label="More for this recipe"
-              items={[
-                { label: 'Batch cook…', onSelect: () => setBatchOpen(true) },
-                { label: 'Edit', icon: 'edit', onSelect: () => navigate(`/recipes/${r.id}/edit`) },
-                ...(r.sourceUrl ? [{ label: 'Original recipe', icon: 'external' as const, onSelect: () => window.open(r.sourceUrl!, '_blank', 'noreferrer') }] : []),
-                'divider',
-                { label: 'Delete recipe', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) },
-              ]}
-            />
-          </>
-        }
-      />
+              {moreMenu}
+            </>
+          }
+        />
+      ) : (
+        // Phones: Cook and Batch cook stay in reach while scrolling; the title gets the full width
+        // under them (two lines, tap for the rest).
+        <header className="sticky top-0 z-20 -mx-4 mb-3 border-b border-line bg-bg/95 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="flex items-center gap-2">
+            <BackButton to="/recipes" />
+            <span className="flex-1" />
+            {cookLink}
+            <Button onClick={() => setBatchOpen(true)}>Batch cook</Button>
+            {moreMenu}
+          </div>
+          <button type="button" onClick={() => setFullTitle((f) => !f)} aria-expanded={fullTitle} className="mt-2 block w-full text-left">
+            <h1 className={`text-xl font-bold leading-tight ${fullTitle ? '' : 'line-clamp-2'}`}>{r.title}</h1>
+            {recipeMeta(r) && <p className="mt-0.5 text-sm text-muted">{recipeMeta(r)}</p>}
+          </button>
+        </header>
+      )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <RecipeImage recipe={r} className="h-40 w-full rounded-xl lg:h-44 lg:rounded-lg" />
-          <Card className="p-4">
+          <Card className="p-4 max-lg:order-2">
             <RecipeIngredients recipe={r} servings={n} onServings={setServings} />
           </Card>
-          <Card className="p-4">
+          <Card className="p-4 max-lg:order-1">
             <h2 className="mb-2 font-bold">Per serving</h2>
             {nutrition.kcal != null ? (
               <dl className="grid grid-cols-4 gap-2 text-center">
@@ -152,7 +178,7 @@ export function RecipeDetailPage() {
             {r.nutritionCoverage < 1 && nutrition.kcal != null && <p className="mt-2 text-xs text-muted">Based on {Math.round(r.nutritionCoverage * 100)}% of the ingredients.</p>}
           </Card>
           {r.tags.length > 0 && (
-            <p className="flex flex-wrap gap-1.5">
+            <p className="flex flex-wrap gap-1.5 max-lg:order-3">
               {r.tags.map((t) => (
                 <span key={t} className="rounded-full bg-card-muted px-2.5 py-0.5 text-xs font-medium">
                   {t}

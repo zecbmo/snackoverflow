@@ -4,7 +4,7 @@
  * serving (yours, someone else's, or free); only your own portions count for your calories.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { addDays, type CalendarDate, MEAL_SLOTS, type MealSlot, type PlanEntryDto, type UserDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
@@ -18,7 +18,7 @@ import { api, errorMessage } from '../lib/api';
 import { amountLabel } from '../lib/format';
 import { useIngredients, usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
 import { PlanWeekSheet, SuggestSheet } from '../components/OptimiserSheets';
-import { CalendarPane, type CalendarDrag, DRAG_TYPE, readDrag, startDrag } from '../components/CalendarPane';
+import { CalendarPane, type CalendarDrag, DRAG_TYPE, FoodBrowser, type FoodTab, readDrag, startDrag } from '../components/CalendarPane';
 import { PortionDots, PortionPicker, showPortions } from '../components/PortionIcons';
 import { amountText } from '@snackoverflow/shared';
 
@@ -187,7 +187,7 @@ export function PlannerPage() {
       className={
         compact
           ? `flex w-full items-start gap-1.5 rounded-md border border-line bg-card px-1.5 py-1 text-left text-[0.8125rem] leading-snug hover:border-accent/50 hover:bg-accent-soft/40 ${e.status === 'skipped' ? 'opacity-60' : ''}`
-          : 'flex min-h-11 w-full items-center gap-3 text-left'
+          : 'flex min-h-12 w-full items-start gap-2.5 rounded-lg border border-line bg-card px-3 py-2 text-left hover:border-accent/50 hover:bg-accent-soft/40'
       }
     >
       <span aria-hidden className={`mt-1 size-2 shrink-0 rounded-full ${e.status === 'cooked' ? 'bg-fresh-green' : e.status === 'skipped' ? 'bg-transparent' : 'border border-muted'} ${compact ? '' : 'mt-0'}`} />
@@ -248,9 +248,10 @@ export function PlannerPage() {
           <Button size="sm" onClick={() => setPlanningWeek(true)}>
             Plan my week
           </Button>
+          {/* Desktop only: phones have Shop in the bottom bar, and this pushed the toolbar off narrow screens. */}
           <Link
             to="/shop"
-            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold hover:bg-card-muted lg:min-h-8 lg:rounded-md lg:px-2.5"
+            className="hidden min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold hover:bg-card-muted lg:inline-flex lg:min-h-8 lg:rounded-md lg:px-2.5"
           >
             <Icon name="cart" className="size-4" /> Shopping list
           </Link>
@@ -376,9 +377,13 @@ export function PlannerPage() {
                           <Icon name="plus" className="size-5" />
                         </button>
                       </div>
-                      <ul>
+                      <ul className="flex flex-col gap-1.5 pb-1">
                         {entries.map((e) => (
-                          <li key={e.id}>{entryButton(e, false)}</li>
+                          <li key={e.id}>
+                            <SwipeToRemove onRemove={() => void remove(e.id)}>
+                              {entryButton(e, false)}
+                            </SwipeToRemove>
+                          </li>
                         ))}
                       </ul>
                     </section>
@@ -388,12 +393,66 @@ export function PlannerPage() {
             ))}
           </div>
         )}
-        {adding && <AddSheet target={adding} members={members} personId={viewerId} onClose={() => setAdding(null)} />}
+        {adding && <AddSheet target={adding} members={members} personId={viewerId} phone={!desktop} onClose={() => setAdding(null)} />}
         {suggesting && <SuggestSheet open onClose={() => setSuggesting(null)} defaultDate={firstFreeDinner(plan.data?.days ?? [], me.today)} ingredient={suggesting.ingredient} servings={Math.max(1, members.length)} />}
         <PlanWeekSheet open={planningWeek} onClose={() => setPlanningWeek(false)} from={from} to={to} defaultServings={Math.max(1, members.length)} />
         {open && <EntrySheet entry={open} viewerId={viewerId} members={members} onClose={() => setOpen(null)} />}
       </div>
       {desktop && <CalendarPane servings={1} removing={dragging} onRemove={(id) => void remove(id)} />}
+    </div>
+  );
+}
+
+/**
+ * Phones: swipe a meal left to take it off the calendar (with Undo, from `onRemove`). A short or
+ * mostly vertical move is left alone, and a swipe never counts as a tap on the meal.
+ */
+function SwipeToRemove({ onRemove, children }: { onRemove: () => void; children: React.ReactNode }) {
+  const [dx, setDx] = useState(0);
+  const start = useRef<{ x: number; y: number; swiping: boolean } | null>(null);
+  const moved = useRef(false);
+  const THRESHOLD = 96;
+  return (
+    <div className="relative overflow-hidden rounded-lg">
+      <div aria-hidden className={`absolute inset-0 flex items-center justify-end rounded-lg px-4 text-sm font-semibold ${dx < -THRESHOLD ? 'bg-danger text-white' : 'bg-card-muted text-muted'}`}>
+        Remove
+      </div>
+      <div
+        className="relative"
+        style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: start.current ? 'none' : 'transform 150ms' }}
+        onTouchStart={(e) => {
+          const t = e.touches[0]!;
+          start.current = { x: t.clientX, y: t.clientY, swiping: false };
+          moved.current = false;
+        }}
+        onTouchMove={(e) => {
+          const s0 = start.current;
+          if (!s0) return;
+          const t = e.touches[0]!;
+          const mx = t.clientX - s0.x;
+          const my = t.clientY - s0.y;
+          if (!s0.swiping && Math.abs(mx) > 12 && Math.abs(mx) > Math.abs(my) * 1.5) s0.swiping = true;
+          if (s0.swiping) {
+            moved.current = true;
+            setDx(Math.min(0, mx));
+          }
+        }}
+        onTouchEnd={() => {
+          const remove = dx < -THRESHOLD;
+          start.current = null;
+          setDx(0);
+          if (remove) onRemove();
+        }}
+        onClickCapture={(e) => {
+          if (moved.current) {
+            e.stopPropagation();
+            e.preventDefault();
+            moved.current = false;
+          }
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -405,7 +464,23 @@ function firstFreeDinner(days: { date: CalendarDate; entries: PlanEntryDto[] }[]
 
 type Tab = 'recipe' | 'stock' | 'product' | 'text';
 
-function AddSheet({ target, members, personId, onClose }: { target: { date: CalendarDate; slot: MealSlot }; members: UserDto[]; personId: string; onClose: () => void }) {
+/** Phone tabs map onto the sheet's own: the same Stock / Recipes / Leftovers browser as the desktop pane, plus a note. */
+const PHONE_BROWSE: Partial<Record<Tab, FoodTab>> = { product: 'stock', recipe: 'recipes', stock: 'leftovers' };
+
+function AddSheet({
+  target,
+  members,
+  personId,
+  phone = false,
+  onClose,
+}: {
+  target: { date: CalendarDate; slot: MealSlot };
+  members: UserDto[];
+  personId: string;
+  /** Phones browse like the desktop's right-hand pane (tabs, views, meal filter) and tap to add. */
+  phone?: boolean;
+  onClose: () => void;
+}) {
   const me = useMe();
   const qc = useQueryClient();
   const toast = useToast();
@@ -448,12 +523,19 @@ function AddSheet({ target, members, personId, onClose }: { target: { date: Cale
     <Sheet open onClose={onClose} title={title}>
       <div role="tablist" aria-label="What to add" className="mb-3 grid grid-cols-4 gap-1 rounded-xl bg-card-muted p-1">
         {(
-          [
-            ['recipe', 'Recipe'],
-            ['stock', 'Leftovers'],
-            ['product', 'Food'],
-            ['text', 'Note'],
-          ] as const
+          phone
+            ? ([
+                ['product', 'Stock'],
+                ['recipe', 'Recipes'],
+                ['stock', 'Leftovers'],
+                ['text', 'Note'],
+              ] as const)
+            : ([
+                ['recipe', 'Recipe'],
+                ['stock', 'Leftovers'],
+                ['product', 'Food'],
+                ['text', 'Note'],
+              ] as const)
         ).map(([t, label]) => (
           <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className={`min-h-11 rounded-lg text-sm font-semibold ${tab === t ? 'bg-card shadow-sm' : 'text-muted'}`}>
             {label}
@@ -513,8 +595,16 @@ function AddSheet({ target, members, personId, onClose }: { target: { date: Cale
         </fieldset>
       )}
 
-      {tab !== 'text' && tab !== 'stock' && <TextInput aria-label="Search" placeholder={tab === 'recipe' ? 'Search recipes' : 'Search food'} value={q} onChange={(e) => setQ(e.target.value)} className="mb-2" />}
-      {tab === 'recipe' && (
+      {phone && PHONE_BROWSE[tab] && (
+        <FoodBrowser
+          pick
+          tab={PHONE_BROWSE[tab]!}
+          servings={servings}
+          onPick={(t) => void add(t.kind === 'recipe' ? { kind: 'recipe', recipeId: t.id } : t.kind === 'product' ? { kind: 'product', productId: t.id } : { kind: 'stock', stockItemId: t.id })}
+        />
+      )}
+      {!phone && tab !== 'text' && tab !== 'stock' && <TextInput aria-label="Search" placeholder={tab === 'recipe' ? 'Search recipes' : 'Search food'} value={q} onChange={(e) => setQ(e.target.value)} className="mb-2" />}
+      {!phone && tab === 'recipe' && (
         <ul className="flex flex-col divide-y divide-line">
           {shownRecipes.map((r) => (
             <li key={r.id}>
@@ -527,7 +617,7 @@ function AddSheet({ target, members, personId, onClose }: { target: { date: Cale
           {!shownRecipes.length && <li className="py-3 text-muted">No recipes found.</li>}
         </ul>
       )}
-      {tab === 'stock' && (
+      {!phone && tab === 'stock' && (
         <ul className="flex flex-col divide-y divide-line">
           {meals.map((m) => (
             <li key={m.id}>
@@ -542,7 +632,7 @@ function AddSheet({ target, members, personId, onClose }: { target: { date: Cale
           {!meals.length && <li className="py-3 text-muted">No leftovers or batch portions in stock.</li>}
         </ul>
       )}
-      {tab === 'product' && (
+      {!phone && tab === 'product' && (
         <ul className="flex flex-col divide-y divide-line">
           {products
             .filter((p) => p.name)

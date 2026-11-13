@@ -16,6 +16,7 @@ import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui';
 import { minutesLabel } from '../lib/format';
 import { useRecipe, useRecipes, useRecipeScores } from '../lib/queries';
 import { matchesSearch } from '../lib/table';
+import { useIsDesktop } from '../lib/useMedia';
 import { BatchSheet, RecipeIngredients, recipeMeta } from './RecipeDetail';
 
 /** Placeholder tints for recipes without a photo; follow the palette (not the freshness colours). */
@@ -115,7 +116,10 @@ export function RecipesPage() {
   const [meal, setMeal] = useState<MealChoice>('any');
   const [view, setView] = useState<View>(readView);
   const [planning, setPlanning] = useState<PlanTarget | null>(null);
-  const [openId, openPanel, closePanel] = usePanelParam();
+  const [openId, openPanelParam, closePanel] = usePanelParam();
+  const desktop = useIsDesktop();
+  // Phones skip the side panel and open the full recipe, which reads better on a small screen.
+  const openPanel = (id: string) => (desktop ? openPanelParam(id) : navigate(`/recipes/${id}`));
   const tags = useMemo(() => [...new Set((recipes.data ?? []).flatMap((r) => r.tags))].sort(), [recipes.data]);
   const byId = useMemo(() => new Map((scores.data?.scores ?? []).map((s) => [s.recipeId, s])), [scores.data]);
   const on = scores.data?.on ?? '';

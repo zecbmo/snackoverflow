@@ -12,14 +12,17 @@ export function StockRowActions({
   item,
   name,
   onDetails,
-  compact: _compact = false,
+  compact = false,
   size = 'xs',
 }: {
   item: StockItemDto;
   /** For the buttons' accessible names: "Use Semi Skimmed Milk". */
   name: string;
   onDetails?: () => void;
-  /** Kept for callers; the row is the same on phones now (Move is always in the menu). */
+  /**
+   * Phones: just Use and "⋯" on the row (Freeze or Defrost, Move and Bin are in the menu), so
+   * each item takes one line, like a table.
+   */
   compact?: boolean;
   size?: 'xs' | 'sm' | 'md';
 }) {
@@ -29,6 +32,23 @@ export function StockRowActions({
   more.push({ label: 'Move…', icon: 'move', onSelect: () => actions.move(item) });
   if (item.actions.open === null) more.push({ label: 'Mark as opened', icon: 'bottle', onSelect: () => void actions.open(item) });
   if (onDetails) more.push({ label: 'Details and history', icon: 'external', onSelect: onDetails });
+  if (compact) {
+    const first: MenuEntry[] = frozen
+      ? [{ label: 'Defrost', onSelect: () => void actions.defrost(item) }]
+      : [{ label: 'Freeze', disabled: item.actions.freeze !== null, hint: item.actions.freeze ?? undefined, onSelect: () => void actions.freeze(item) }];
+    return (
+      <>
+        <Button size="sm" variant="dark" aria-label={`Use ${name}`} onClick={() => actions.use(item)}>
+          Use
+        </Button>
+        <Menu
+          label={`More for ${name}`}
+          items={[...first, ...more, 'divider', { label: 'Bin it', icon: 'trash', danger: true, onSelect: () => void actions.discard(item) }]}
+          triggerClassName="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-card-muted hover:text-ink"
+        />
+      </>
+    );
+  }
   return (
     <>
       <Button size={size} variant="dark" aria-label={`Use ${name}`} onClick={() => actions.use(item)}>

@@ -1,7 +1,8 @@
 /**
  * The Calendar's right-hand pane: stock, recipes and leftovers to drag onto a day and meal.
  * Collapses to a thin rail like the sidebar. Every item also has a "+" button, so planning
- * works without dragging (keyboard, touch).
+ * works without dragging (keyboard, touch). Its browsing part (tabs, filters, search, the list)
+ * is `FoodBrowser`, which phones use in the "+ Add" sheet, picking with a tap instead of a drag.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { amountText, type PlanEntryDto, type RecipeSummaryDto, type StockItemDto } from '@snackoverflow/shared';
@@ -36,7 +37,8 @@ export function startDrag(e: React.DragEvent, drag: CalendarDrag) {
   e.dataTransfer.effectAllowed = drag.type === 'move' ? 'move' : 'copy';
 }
 
-type Tab = 'stock' | 'recipes' | 'leftovers';
+export type FoodTab = 'stock' | 'recipes' | 'leftovers';
+type Tab = FoodTab;
 const KEY = 'so-calendar-pane';
 
 function readCollapsed(): boolean {
@@ -55,19 +57,10 @@ function removeMessage(e: PlanEntryDto): string {
 }
 
 export function CalendarPane({ servings, removing, onRemove }: { servings: number; removing: PlanEntryDto | null; onRemove: (entryId: string) => void }) {
-  const me = useMe();
-  const stock = useStock().data;
-  const recipes = useRecipes().data;
   const [tab, setTab] = useState<Tab>('stock');
-  const [q, setQ] = useState('');
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [planning, setPlanning] = useState<PlanTarget | null>(null);
   const [over, setOver] = useState(false);
-  const [place, setPlace] = useState('all');
-  const [recipeTab, setRecipeTab] = useState<RecipeTab>('all');
-  const [meal, setMeal] = useState<MealChoice>('any');
-  const scores = useRecipeScores().data;
-  const byId = useMemo(() => new Map((scores?.scores ?? []).map((s) => [s.recipeId, s])), [scores]);
   // While a planned meal is dragged, show the tab it came from.
   useEffect(() => {
     if (!removing) return setOver(false);
@@ -106,16 +99,6 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
       return !c;
     });
 
-  const food = useMemo(
-    () => groupStock((stock ?? []).filter((s) => !s.isMeal && (place === 'all' || s.locationType === place))).filter((g) => !q || matchesSearch(`${g.name} ${g.locationName}`, q)),
-    [stock, q, place],
-  );
-  const leftovers = useMemo(() => (stock ?? []).filter((s) => s.isMeal && (!q || matchesSearch(s.productName, q))), [stock, q]);
-  const recipeList = useMemo(
-    () => sortForTab((recipes ?? []).filter((r) => inRecipeTab(byId.get(r.id), recipeTab) && inMeal(r, meal) && (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q))), byId, recipeTab),
-    [recipes, q, recipeTab, meal, byId],
-  );
-
   if (collapsed) {
     return (
       <aside aria-label="Food to plan" className="sticky top-0 hidden h-screen w-11 shrink-0 flex-col items-center gap-2 border-l border-line bg-card pt-3 lg:flex">
@@ -127,40 +110,6 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
     );
   }
 
-  const item = (key: string, drag: CalendarDrag & { type: 'new' }, title: string, meta: React.ReactNode, badge: React.ReactNode, plan: PlanTarget) => (
-    <li key={key}>
-      <div
-        draggable
-        onDragStart={(e) => startDrag(e, drag)}
-        className="group flex cursor-grab items-center gap-2 rounded-md border border-line bg-card px-2 py-1.5 hover:border-accent/50 hover:bg-accent-soft/40 active:cursor-grabbing"
-      >
-        <span aria-hidden className="text-muted/60">
-          <Icon name="more" className="size-4 rotate-90" strokeWidth={3} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{title}</span>
-          {meta && <span className="block truncate text-xs text-muted">{meta}</span>}
-        </span>
-        {badge}
-        <button
-          type="button"
-          aria-label={`Plan ${title}`}
-          onClick={() => setPlanning(plan)}
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted opacity-0 hover:bg-card-muted hover:text-ink focus:opacity-100 group-hover:opacity-100"
-        >
-          <Icon name="plus" className="size-4" />
-        </button>
-      </div>
-    </li>
-  );
-
-  const stockMeta = (g: StockGroup) => {
-    const total = g.packs.every((p) => p.remainingGrams !== null) ? g.packs.reduce((n, p) => n + p.remainingGrams!, 0) : null;
-    return [g.locationName, total !== null ? amountText(total, g.first) : null].filter(Boolean).join(' · ');
-  };
-  const pill = (s: StockItemDto) => <Pill className={toneClasses[toneFor(s, me.today)].pill}>{dateLabel(s.bestBefore, me.today)}</Pill>;
-  const recipeMeta = (r: RecipeSummaryDto) => [r.kcalPerServing ? `${r.kcalPerServing} kcal` : null, r.tags.slice(0, 2).join(', ')].filter(Boolean).join(' · ');
-
   return (
     <aside aria-label="Food to plan" className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-l border-line bg-card lg:flex xl:w-80">
       {dropZone}
@@ -170,19 +119,119 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
           <Icon name="sidebar" className="size-[18px] -scale-x-100" />
         </button>
       </div>
-      <div className="flex flex-col gap-2 px-3 pb-2">
-        <Segmented
-          label="Show"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'stock', label: 'Stock' },
-            { value: 'recipes', label: 'Recipes' },
-            { value: 'leftovers', label: 'Leftovers' },
-          ]}
-        />
+      <FoodBrowser tab={tab} onTab={setTab} servings={servings} onPick={setPlanning} />
+      <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
+    </aside>
+  );
+}
+
+/**
+ * Stock, recipes (with the recipe views and the meal filter) and leftovers, searchable. In the
+ * desktop pane items are dragged (or planned with their "+"); with `pick` (phones) tapping an item
+ * picks it. `onTab` left out hides the tab switch (the caller shows its own).
+ */
+export function FoodBrowser({
+  tab,
+  onTab,
+  servings,
+  onPick,
+  pick = false,
+}: {
+  tab: FoodTab;
+  onTab?: (t: FoodTab) => void;
+  servings: number;
+  onPick: (target: PlanTarget) => void;
+  pick?: boolean;
+}) {
+  const me = useMe();
+  const stock = useStock().data;
+  const recipes = useRecipes().data;
+  const [q, setQ] = useState('');
+  const [place, setPlace] = useState('all');
+  const [recipeTab, setRecipeTab] = useState<RecipeTab>('all');
+  const [meal, setMeal] = useState<MealChoice>('any');
+  const scores = useRecipeScores().data;
+  const byId = useMemo(() => new Map((scores?.scores ?? []).map((s) => [s.recipeId, s])), [scores]);
+
+  const food = useMemo(
+    () => groupStock((stock ?? []).filter((s) => !s.isMeal && (place === 'all' || s.locationType === place))).filter((g) => !q || matchesSearch(`${g.name} ${g.locationName}`, q)),
+    [stock, q, place],
+  );
+  const leftovers = useMemo(() => (stock ?? []).filter((s) => s.isMeal && (!q || matchesSearch(s.productName, q))), [stock, q]);
+  const recipeList = useMemo(
+    () => sortForTab((recipes ?? []).filter((r) => inRecipeTab(byId.get(r.id), recipeTab) && inMeal(r, meal) && (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q))), byId, recipeTab),
+    [recipes, q, recipeTab, meal, byId],
+  );
+
+  const item = (key: string, drag: CalendarDrag & { type: 'new' }, title: string, meta: React.ReactNode, badge: React.ReactNode, plan: PlanTarget) =>
+    pick ? (
+      <li key={key}>
+        <button
+          type="button"
+          onClick={() => onPick(plan)}
+          aria-label={`Add ${title}`}
+          className="flex min-h-12 w-full items-center gap-2 rounded-lg border border-line bg-card px-3 py-2 text-left hover:border-accent/50 hover:bg-accent-soft/40"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">{title}</span>
+            {meta && <span className="block truncate text-sm text-muted">{meta}</span>}
+          </span>
+          {badge}
+          <Icon name="plus" className="size-5 shrink-0 text-accent-text" />
+        </button>
+      </li>
+    ) : (
+      <li key={key}>
+        <div
+          draggable
+          onDragStart={(e) => startDrag(e, drag)}
+          className="group flex cursor-grab items-center gap-2 rounded-md border border-line bg-card px-2 py-1.5 hover:border-accent/50 hover:bg-accent-soft/40 active:cursor-grabbing"
+        >
+          <span aria-hidden className="text-muted/60">
+            <Icon name="more" className="size-4 rotate-90" strokeWidth={3} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{title}</span>
+            {meta && <span className="block truncate text-xs text-muted">{meta}</span>}
+          </span>
+          {badge}
+          <button
+            type="button"
+            aria-label={`Plan ${title}`}
+            onClick={() => onPick(plan)}
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted opacity-0 hover:bg-card-muted hover:text-ink focus:opacity-100 group-hover:opacity-100"
+          >
+            <Icon name="plus" className="size-4" />
+          </button>
+        </div>
+      </li>
+    );
+
+  const stockMeta = (g: StockGroup) => {
+    const total = g.packs.every((p) => p.remainingGrams !== null) ? g.packs.reduce((n, p) => n + p.remainingGrams!, 0) : null;
+    return [g.locationName, total !== null ? amountText(total, g.first) : null].filter(Boolean).join(' · ');
+  };
+  const pill = (s: StockItemDto) => <Pill className={toneClasses[toneFor(s, me.today)].pill}>{dateLabel(s.bestBefore, me.today)}</Pill>;
+  const recipeMeta = (r: RecipeSummaryDto) => [r.kcalPerServing ? `${r.kcalPerServing} kcal` : null, r.tags.slice(0, 2).join(', ')].filter(Boolean).join(' · ');
+
+  return (
+    <>
+      <div className={`flex flex-col gap-2 pb-2 ${pick ? '' : 'px-3'}`}>
+        {onTab && (
+          <Segmented
+            label="Show"
+            value={tab}
+            onChange={onTab}
+            options={[
+              { value: 'stock', label: 'Stock' },
+              { value: 'recipes', label: 'Recipes' },
+              { value: 'leftovers', label: 'Leftovers' },
+            ]}
+          />
+        )}
         {tab === 'stock' && (
           <Segmented
+            stretch={pick}
             label="Where"
             value={place}
             onChange={setPlace}
@@ -203,7 +252,7 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
                   type="button"
                   aria-pressed={recipeTab === t.id}
                   onClick={() => setRecipeTab(t.id)}
-                  className={`min-h-7 rounded-md border px-2 text-xs font-semibold ${recipeTab === t.id ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-muted hover:text-ink'}`}
+                  className={`rounded-md border px-2 text-xs font-semibold ${pick ? 'min-h-10' : 'min-h-7'} ${recipeTab === t.id ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-muted hover:text-ink'}`}
                 >
                   {t.label}
                 </button>
@@ -217,7 +266,7 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
         )}
         <SearchBox value={q} onChange={setQ} placeholder={`Search ${tab}`} label={`Search ${tab}`} />
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-4">
+      <ul className={pick ? 'flex flex-col gap-1.5' : 'flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-4'}>
         {tab === 'stock' &&
           food.map((g) =>
             item(g.key, { type: 'new', kind: 'product', id: g.productId, title: g.name }, g.name, stockMeta(g), pill(g.first), { kind: 'product', id: g.productId, title: g.name, servings: 1 }),
@@ -232,7 +281,6 @@ export function CalendarPane({ servings, removing, onRemove }: { servings: numbe
           <li className="px-1 py-6 text-center text-sm text-muted">{q ? 'Nothing matches.' : tab === 'leftovers' ? 'No leftovers or batch-cook portions.' : `No ${tab} yet.`}</li>
         )}
       </ul>
-      <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
-    </aside>
+    </>
   );
 }
