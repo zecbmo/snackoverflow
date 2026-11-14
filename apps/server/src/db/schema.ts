@@ -174,6 +174,8 @@ export const ingredients = pgTable(
     /** How packs are sold: by weight (g), volume (ml) or count, for showing pack sizes. */
     packUnit: text('pack_unit'),
     trackRunningLow: boolean('track_running_low').notNull().default(false),
+    /** Foods that can stand in for each other in a recipe (broccoli and tenderstem). */
+    swapGroupId: uuid('swap_group_id').references(() => swapGroups.id, { onDelete: 'set null' }),
     closedDays: integer('closed_days'),
     openedDays: integer('opened_days'),
     frozenDays: integer('frozen_days'),
@@ -218,6 +220,8 @@ export const products = pgTable(
     portionSplit: integer('portion_split').notNull().default(1),
     /** Overrides the ingredient's category. */
     foodGroup: text('food_group'),
+    /** When someone here added it to Open Food Facts. */
+    offSharedAt: timestamp('off_shared_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [index('products_household_idx').on(t.householdId), index('products_ingredient_idx').on(t.ingredientId)],
@@ -480,6 +484,8 @@ export const mealPlanEntries = pgTable(
     /** How it got here: planned ahead, or logged by scanning in Eat mode. */
     source: text('source').notNull().default('plan'),
     position: integer('position').notNull().default(0),
+    /** Swaps chosen for a recipe: recipe line id -> the ingredient used instead. */
+    swaps: jsonb('swaps').$type<Record<string, string>>(),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },
@@ -618,4 +624,126 @@ export const prices = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('prices_product_idx').on(t.productId)],
+);
+
+/** Groups of ingredients that can stand in for each other in a recipe ("Broccoli": broccoli, tenderstem). */
+export const swapGroups = pgTable(
+  'swap_groups',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('swap_groups_household_idx').on(t.householdId)],
+);
+
+/**
+ * Pairs of foods that aren't a good swap for each other ("pesto for stock cubes"), so a recipe
+ * never offers one for the other. Either way round; the smaller id is stored first.
+ */
+export const swapExclusions = pgTable(
+  'swap_exclusions',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    ingredientId: uuid('ingredient_id')
+      .notNull()
+      .references(() => ingredients.id, { onDelete: 'cascade' }),
+    otherIngredientId: uuid('other_ingredient_id')
+      .notNull()
+      .references(() => ingredients.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('swap_exclusions_pair').on(t.householdId, t.ingredientId, t.otherIngredientId)],
+);
+
+/** Install-wide secrets set in Settings (AI key, MCP token), encrypted with a key from SESSION_SECRET. */
+export const appSecrets = pgTable('app_secrets', {
+  name: text('name').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Photos of recipes waiting to be read (a cookbook page, both sides of a recipe card). */
+export const recipeScans = pgTable(
+  'recipe_scans',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    /** waiting: to be read; reading: AI is on it; failed; done (became recipeId). */
+    status: text('status').notNull().default('waiting'),
+    error: text('error'),
+    recipeId: uuid('recipe_id').references(() => recipes.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+  },
+  (t) => [index('recipe_scans_household_idx').on(t.householdId)],
+);
+
+export const recipeScanImages = pgTable(
+  'recipe_scan_images',
+  {
+    id: id(),
+    scanId: uuid('scan_id')
+      .notNull()
+      .references(() => recipeScans.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    file: bytea('file').notNull(),
+    fileType: text('file_type').notNull(),
+  },
+  (t) => [index('recipe_scan_images_scan_idx').on(t.scanId)],
+);
+
+/**
+ * Restaurant, takeaway, café and drink chains with their published menu nutrition
+ * (docs/data/chains.csv and docs/data/chain-menus). Install-wide reference data, kept in step
+ * with the seed files on start-up; households don't edit it.
+ */
+export const chains = pgTable('chains', {
+  key: text('key').primaryKey(),
+  name: text('name').notNull(),
+  category: text('category').notNull(),
+  aliases: jsonb('aliases').$type<string[]>().notNull().default([]),
+  notes: text('notes'),
+  /** Where the menu nutrition came from (the chain's own site), and when. */
+  sourceUrl: text('source_url'),
+  retrievedOn: day('retrieved_on'),
+  /** Hash of the chain's seed rows, so start-up skips chains that haven't changed. */
+  seedHash: text('seed_hash'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One menu item as sold, with nutrition per serving exactly as the chain publishes it (blank when it doesn't). */
+export const chainMenuItems = pgTable(
+  'chain_menu_items',
+  {
+    id: id(),
+    chainKey: text('chain_key')
+      .notNull()
+      .references(() => chains.key, { onDelete: 'cascade' }),
+    /** Stable within the chain: from the item name and serving. */
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    section: text('section'),
+    serving: text('serving'),
+    servingG: doublePrecision('serving_g'),
+    kcal: doublePrecision('kcal').notNull(),
+    fat: doublePrecision('fat'),
+    saturates: doublePrecision('saturates'),
+    carbs: doublePrecision('carbs'),
+    sugars: doublePrecision('sugars'),
+    fibre: doublePrecision('fibre'),
+    protein: doublePrecision('protein'),
+    salt: doublePrecision('salt'),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (t) => [uniqueIndex('chain_menu_items_key').on(t.chainKey, t.key), index('chain_menu_items_chain_idx').on(t.chainKey, t.sortOrder)],
 );

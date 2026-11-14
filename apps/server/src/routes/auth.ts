@@ -8,6 +8,7 @@ import { backupsEnabled } from '../backup';
 import type { AppContext, Auth } from '../context';
 import { appLoginCodes, devices, households, invites, users } from '../db/schema';
 import { conflict, forbidden, HttpError, notFound, parse, unauthorized } from '../http';
+import { offContributeEnabled } from '../services/offShare';
 import { createFirstAdmin, getUserByEmail, householdDto, theHousehold, userCount, userDto } from '../services/household';
 
 export function features(ctx: AppContext): SessionDto['features'] {
@@ -25,6 +26,7 @@ export function features(ctx: AppContext): SessionDto['features'] {
     receiptEmail: Boolean(c.RECEIPT_IMAP_HOST),
     ai: Boolean(c.AI_API_KEY),
     mcp: Boolean(c.MCP_TOKEN),
+    offContribute: offContributeEnabled(c),
   };
 }
 

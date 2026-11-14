@@ -23,11 +23,13 @@ import {
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import type { Db } from '../db/client';
-import { cooks, locations, mealPlanEntries, products, recipeIngredients, recipes, shoppingItems, stockItems } from '../db/schema';
+import { cooks, locations, mealPlanEntries, products, recipeIngredients, recipes, shoppingItems, stockItems, users } from '../db/schema';
+import type { WeekContext } from './aiKitchen';
 import { type Catalog, ingredientShelfLife, loadCatalog } from './catalog';
 import { householdSettings } from './household';
 import { earmarks } from './planner';
 import { ingredientPrices } from './pricing';
+import { listRecipes } from './recipes';
 
 export interface MealOption {
   kind: 'stock';
@@ -257,4 +259,82 @@ export async function surplusHints(db: Db, auth: Auth, now: Date, pricingDefault
       topIdea: ideas[0] ? { recipeId: ideas[0].recipeId, title: ideas[0].title, missing: ideas[0].missing.map((m) => m.name) } : null,
     };
   });
+}
+
+/** Food going off within a week that no planned meal will use, earliest first, one entry per ingredient. */
+function goingOffSoon(d: Data, surplus: Lot[]) {
+  const soon = addDays(d.today, 7);
+  const by = new Map<string, { ingredientId: string; grams: number; bestBefore: CalendarDate | null }>();
+  for (const l of surplus) {
+    if (l.frozen || l.coming || !l.bestBefore || l.bestBefore > soon || l.grams < 1) continue;
+    const e = by.get(l.ingredientId) ?? { ingredientId: l.ingredientId, grams: 0, bestBefore: l.bestBefore };
+    e.grams += l.grams;
+    if (l.bestBefore < (e.bestBefore ?? '9999')) e.bestBefore = l.bestBefore;
+    by.set(l.ingredientId, e);
+  }
+  return [...by.values()]
+    .sort((a, b) => (a.bestBefore ?? '').localeCompare(b.bestBefore ?? ''))
+    .slice(0, 10)
+    .map((e) => ({ ingredientId: e.ingredientId, name: d.catalog.ingredients.get(e.ingredientId)?.name ?? 'Food', amount: d.amountText(e.ingredientId, e.grams), bestBefore: e.bestBefore }));
+}
+
+/** What a made-up "use it up" recipe should be built from: food going off, and what else is in. */
+export async function useItUpInputs(db: Db, auth: Auth, now: Date, pricingDefault: boolean) {
+  const d = await gather(db, auth, now, pricingDefault);
+  const surplus = surplusLots(d.lots, d.needs);
+  const goingOff = goingOffSoon(d, surplus);
+  const off = new Set(goingOff.map((g) => g.ingredientId));
+  const alsoHave = [...new Set(surplus.filter((l) => !l.coming && !off.has(l.ingredientId)).map((l) => d.catalog.ingredients.get(l.ingredientId)?.name))].filter(
+    (n): n is string => Boolean(n),
+  );
+  return { today: d.today, catalog: d.catalog, goingOff, alsoHave: alsoHave.slice(0, 60) };
+}
+
+/** Everything the AI needs to plan the empty slots, plus what each recipe is missing (for the review screen). */
+export async function aiWeekInputs(
+  db: Db,
+  auth: Auth,
+  now: Date,
+  pricingDefault: boolean,
+  input: { from: CalendarDate; to: CalendarDate; slots: string[]; request?: string | null },
+): Promise<{ ctx: WeekContext; missingOf: (recipeId: string) => string[] }> {
+  const d = await gather(db, auth, now, pricingDefault);
+  const from = input.from < d.today ? d.today : input.from;
+  const taken = await db
+    .select({ date: mealPlanEntries.date, slot: mealPlanEntries.slot })
+    .from(mealPlanEntries)
+    .where(and(eq(mealPlanEntries.householdId, auth.household.id), gte(mealPlanEntries.date, from), lte(mealPlanEntries.date, input.to)));
+  const slots: { date: CalendarDate; slot: string }[] = [];
+  for (let day = from; day <= input.to; day = addDays(day, 1)) {
+    for (const slot of input.slots) if (!taken.some((t) => t.date === day && t.slot === slot)) slots.push({ date: day, slot });
+  }
+  const surplus = surplusLots(d.lots, d.needs);
+  const scores = new Map(d.recipes.map((r) => [r.id, scoreRecipe(r, surplus, { on: d.today, priceOf: d.priceOf, amountText: d.amountText })]));
+  const kcal = new Map((await listRecipes(db, auth)).map((r) => [r.id, r.kcalPerServing]));
+  const people = await db.select({ name: users.name, kcalTarget: users.kcalTarget }).from(users).where(eq(users.householdId, auth.household.id));
+  const excluded = new Set(d.rules.excludedTags);
+  const ctx: WeekContext = {
+    today: d.today,
+    slots,
+    recipes: d.recipes
+      .filter((r) => !r.tags.some((t) => excluded.has(t)))
+      .map((r) => {
+        const s = scores.get(r.id)!;
+        return {
+          id: r.id,
+          title: r.title,
+          tags: r.tags,
+          kcalPerServing: kcal.get(r.id) ?? null,
+          cookNow: s.cookNow,
+          missing: s.missing.map((m) => m.name),
+          usesGoingOff: s.uses.map((u) => `${u.name}${u.bestBefore ? ` (by ${u.bestBefore})` : ''}`),
+          recentlyHad: d.rules.recent.has(r.id),
+        };
+      }),
+    leftovers: d.meals.map((m) => ({ id: m.stockItemId, title: m.title, portions: m.portions, frozen: m.frozen, bestBefore: m.bestBefore })),
+    goingOff: goingOffSoon(d, surplus).map(({ name, amount, bestBefore }) => ({ name, amount, bestBefore })),
+    people: people.map((p) => ({ name: p.name, kcalTarget: p.kcalTarget })),
+    request: input.request?.trim() || null,
+  };
+  return { ctx, missingOf: (id) => scores.get(id)?.missing.map((m) => m.name) ?? [] };
 }

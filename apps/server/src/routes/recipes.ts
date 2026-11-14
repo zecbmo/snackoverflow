@@ -4,11 +4,26 @@ import { cookInput, recipeInput } from '@snackoverflow/shared';
 import { requireAuth } from '../auth/session';
 import { parse } from '../http';
 import { confirmCook, planCook, recentCooks, undoCook } from '../services/cooking';
+import { getEntry } from '../services/planner';
 import { deleteRecipe, draftLines, getRecipe, listRecipes, saveRecipe } from '../services/recipes';
 import type { StockDeps } from '../services/stock';
 
 const linesInput = z.object({ lines: z.array(z.string().max(300)).max(100) });
-const servingsQuery = z.object({ servings: z.coerce.number().positive().max(500).optional() });
+const servingsQuery = z.object({
+  servings: z.coerce.number().positive().max(500).optional(),
+  /** Cooking a planned meal: use its swaps. */
+  entry: z.uuid().optional(),
+  /** Swaps picked on the recipe page: "lineId:ingredientId,lineId:ingredientId". */
+  swaps: z.string().max(4000).optional(),
+});
+
+const parseSwaps = (s: string | undefined): Record<string, string> =>
+  Object.fromEntries(
+    (s ?? '')
+      .split(',')
+      .map((p) => p.split(':'))
+      .filter((p): p is [string, string] => p.length === 2 && Boolean(p[0]) && Boolean(p[1])),
+  );
 
 export async function recipeRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
@@ -54,9 +69,10 @@ export async function recipeRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/api/recipes/:id/cook-plan', async (req) => {
     const auth = requireAuth(req);
-    const { servings } = parse(servingsQuery, req.query);
+    const q = parse(servingsQuery, req.query);
     const recipe = await getRecipe(ctx.db, auth, req.params.id);
-    return planCook(ctx.db, auth, recipe.id, servings ?? recipe.serves);
+    const fromEntry = q.entry ? Object.fromEntries((await getEntry(ctx.db, auth, q.entry)).swaps.map((x) => [x.recipeIngredientId, x.ingredientId])) : {};
+    return planCook(ctx.db, auth, recipe.id, q.servings ?? recipe.serves, { ...fromEntry, ...parseSwaps(q.swaps) });
   });
 
   app.post<{ Params: { id: string } }>('/api/recipes/:id/cook', async (req) => {

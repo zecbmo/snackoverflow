@@ -1,16 +1,19 @@
 import { and, asc, count, eq, ilike, inArray, isNull, or } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import type { IngredientInput, LocationDto } from '@snackoverflow/shared';
+import type { LocationDto, OffShareResultDto } from '@snackoverflow/shared';
 import { ingredientInput, locationInput, productInput, shelfLifeInput, updateProductInput } from '@snackoverflow/shared';
 import { requireAuth } from '../auth/session';
 import { barcodes, ingredients, locations, products, shelfLifeCategories, stockEvents, stockItems } from '../db/schema';
 import { badRequest, conflict, notFound, parse } from '../http';
+import { shareProductWithOff } from '../services/offShare';
+import { recomputeLineGrams } from '../services/recipes';
 import { latestPrices, pricingOn } from '../services/pricing';
 import {
   barcodesFor,
   categoryDto,
   findProductByBarcode,
   ingredientDto,
+  ingredientValues,
   loadCatalog,
   measuresFor,
   packFields,
@@ -128,11 +131,6 @@ export async function catalogRoutes(app: FastifyInstance) {
       .map((i) => ingredientDto(i, catalog));
   });
 
-  const ingredientValues = (input: Partial<IngredientInput>) => {
-    const { shelfLife, ...rest } = input;
-    return { ...rest, ...(shelfLife ?? {}) };
-  };
-
   app.post('/api/ingredients', async (req) => {
     const auth = requireAuth(req);
     const input = parse(ingredientInput, req.body);
@@ -153,7 +151,10 @@ export async function catalogRoutes(app: FastifyInstance) {
       .where(and(eq(ingredients.id, req.params.id), eq(ingredients.householdId, auth.household.id)))
       .returning();
     if (!i) throw notFound();
-    ctx.live.publish(auth.household.id, 'ingredients', 'stock');
+    // A new weight per item or density changes the grams of the recipe lines that use it.
+    const measures = input.gramsPerCount !== undefined || input.densityGPerMl !== undefined;
+    if (measures) await recomputeLineGrams(ctx.db, auth.household.id, [i.id], ctx.seed.units);
+    ctx.live.publish(auth.household.id, 'ingredients', 'stock', ...(measures ? (['recipes'] as const) : []));
     return ingredientDto(i, await loadCatalog(ctx.db, auth.household.id));
   });
 
@@ -287,6 +288,14 @@ export async function catalogRoutes(app: FastifyInstance) {
     const allCodes = await barcodesFor(ctx.db, [current.id]);
     ctx.live.publish(auth.household.id, 'products', 'stock');
     return productDto(p!, allCodes.get(current.id) ?? [], catalog);
+  });
+
+  /** Add a product this household named to Open Food Facts (when an account is set up). */
+  app.post<{ Params: { id: string } }>('/api/products/:id/off', async (req): Promise<OffShareResultDto> => {
+    const auth = requireAuth(req);
+    const r = await shareProductWithOff(ctx, auth, req.params.id);
+    const [catalog, codes] = await Promise.all([loadCatalog(ctx.db, auth.household.id), barcodesFor(ctx.db, [r.product.id])]);
+    return { product: productDto(r.product, codes.get(r.product.id) ?? [], catalog), added: r.added, alreadyThere: r.alreadyThere };
   });
 
   /** Merge a duplicate into another product: its barcodes and stock move across. */

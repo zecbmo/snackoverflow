@@ -1,3 +1,4 @@
+export * from './barcode';
 export * from './csv';
 export * from './dates';
 export * from './schemas';
@@ -11,3 +12,4 @@ export * from './receipts';
 export * from './optimiser';
 export * from './stats';
 export * from './foodGroups';
+export * from './chains';

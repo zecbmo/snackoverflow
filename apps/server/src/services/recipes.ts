@@ -1,6 +1,7 @@
 /** Recipes: saving, matching lines to ingredients, grams and nutrition. */
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import {
+  amountText,
   normaliseUnit,
   type Nutrition,
   parseIngredientLine,
@@ -11,15 +12,17 @@ import {
   type RecipeInput,
   recipeNutrition,
   type RecipeSummaryDto,
+  type SwapOptionDto,
   toGrams,
   type UnitTable,
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import type { Db } from '../db/client';
-import { products, recipeIngredients, recipes, stockItems } from '../db/schema';
+import { ingredients, products, recipeIngredients, recipes, stockItems } from '../db/schema';
 import { ingredientAliases, type SeedData } from '../db/seed';
 import { notFound } from '../http';
 import { type Catalog, type IngredientRow, loadCatalog, type ProductRow, suggestIngredient } from './catalog';
+import { excludedPairs, pairKey } from './swapGroups';
 
 type RecipeRow = typeof recipes.$inferSelect;
 type LineRow = typeof recipeIngredients.$inferSelect;
@@ -31,6 +34,46 @@ export function lineGrams(amount: number | null | undefined, unit: string | null
   const measures = { densityGPerMl: ingredient?.densityGPerMl ?? null, gramsPerCount: ingredient?.gramsPerCount ?? null };
   const g = toGrams(amount, u, units, measures);
   return g === null ? null : Math.round(g * 10) / 10;
+}
+
+/**
+ * Work out grams again for every recipe line linked to these ingredients, after one gained a
+ * weight per item or a density (or a line was linked to it). Returns how many lines changed.
+ */
+export async function recomputeLineGrams(db: Db, householdId: string, ingredientIds: string[], units: UnitTable): Promise<number> {
+  if (!ingredientIds.length) return 0;
+  const ings = new Map((await db.select().from(ingredients).where(inArray(ingredients.id, ingredientIds))).map((i) => [i.id, i]));
+  const lines = await db
+    .select({ id: recipeIngredients.id, amount: recipeIngredients.amount, unit: recipeIngredients.unit, ingredientId: recipeIngredients.ingredientId, grams: recipeIngredients.grams })
+    .from(recipeIngredients)
+    .innerJoin(recipes, eq(recipes.id, recipeIngredients.recipeId))
+    .where(and(eq(recipes.householdId, householdId), inArray(recipeIngredients.ingredientId, ingredientIds)));
+  let changed = 0;
+  for (const l of lines) {
+    const grams = lineGrams(l.amount, l.unit, ings.get(l.ingredientId!), units);
+    if (grams === l.grams) continue;
+    await db.update(recipeIngredients).set({ grams }).where(eq(recipeIngredients.id, l.id));
+    changed++;
+  }
+  return changed;
+}
+
+/** Fill in amount, unit and ingredient from the text for lines that left them out (assistants, AI). */
+export function completeRecipeLines(input: RecipeInput, catalog: Catalog, seed: SeedData): RecipeInput {
+  return {
+    ...input,
+    ingredients: input.ingredients.map((l) => {
+      if (l.ingredientId && catalog.ingredients.has(l.ingredientId) && l.amount != null) return l;
+      const d = draftLine(l.text, catalog, seed);
+      return {
+        ...l,
+        amount: l.amount ?? d.amount,
+        unit: l.unit ?? d.unit,
+        ingredientId: l.ingredientId && catalog.ingredients.has(l.ingredientId) ? l.ingredientId : d.ingredientId,
+        note: l.note ?? d.note,
+      };
+    }),
+  };
 }
 
 /** Read a line as written and suggest which ingredient it is. */
@@ -107,6 +150,21 @@ export async function saveRecipe(db: Db, auth: Auth, seed: SeedData, input: Reci
     }
     return recipeId!;
   });
+}
+
+/**
+ * Food in stock that could stand in for an ingredient the recipe is short of: `close` from the
+ * same swap group (tenderstem for broccoli), `loose` from the same category (pork for chicken).
+ */
+export function swapOptions(ingredientId: string, stockGrams: Map<string, number>, catalog: Catalog, excluded: Set<string> = new Set()): RecipeIngredientDto['swaps'] {
+  const ing = catalog.ingredients.get(ingredientId);
+  if (!ing) return { close: [], loose: [] };
+  const option = (i: IngredientRow): SwapOptionDto => ({ ingredientId: i.id, name: i.name, inStockGrams: Math.round(stockGrams.get(i.id) ?? 0), amount: amountText(stockGrams.get(i.id) ?? 0, i) });
+  // Pairs the household said aren't swaps (pesto for stock cubes) are never offered.
+  const inStock = [...catalog.ingredients.values()].filter((i) => i.id !== ing.id && (stockGrams.get(i.id) ?? 0) > 0 && !excluded.has(pairKey(ing.id, i.id))).sort((a, b) => (stockGrams.get(b.id) ?? 0) - (stockGrams.get(a.id) ?? 0));
+  const close = ing.swapGroupId ? inStock.filter((i) => i.swapGroupId === ing.swapGroupId) : [];
+  const loose = ing.foodGroup ? inStock.filter((i) => i.foodGroup === ing.foodGroup && !close.includes(i)) : [];
+  return { close: close.slice(0, 4).map(option), loose: loose.slice(0, 4).map(option) };
 }
 
 interface Context {
@@ -190,7 +248,7 @@ export async function getRecipe(db: Db, auth: Auth, id: string): Promise<RecipeD
   const [r] = await db.select().from(recipes).where(and(eq(recipes.id, id), eq(recipes.householdId, auth.household.id)));
   if (!r) throw notFound('No such recipe.');
   const lines = await db.select().from(recipeIngredients).where(eq(recipeIngredients.recipeId, id)).orderBy(asc(recipeIngredients.position));
-  const ctx = await context(db, auth.household.id);
+  const [ctx, excluded] = await Promise.all([context(db, auth.household.id), excludedPairs(db, auth.household.id)]);
   const s = summary(r, lines, ctx);
   const ingredients: RecipeIngredientDto[] = lines.map((l) => ({
     id: l.id,
@@ -206,6 +264,10 @@ export async function getRecipe(db: Db, auth: Auth, id: string): Promise<RecipeD
     optional: l.optional,
     grams: l.grams,
     inStockGrams: l.ingredientId ? (ctx.stockGrams.get(l.ingredientId) ?? 0) : null,
+    swaps:
+      l.ingredientId && l.grams && !l.optional && (ctx.stockGrams.get(l.ingredientId) ?? 0) < l.grams
+        ? swapOptions(l.ingredientId, ctx.stockGrams, ctx.catalog, excluded)
+        : { close: [], loose: [] },
   }));
   const { nutrition, ...rest } = s;
   return {

@@ -81,6 +81,18 @@ const COUNT_WORDS = new Set([
   'leaves',
   'egg',
   'eggs',
+  'sachet',
+  'sachets',
+  'pouch',
+  'pouches',
+  'bag',
+  'bags',
+  'pot',
+  'pots',
+  'carton',
+  'cartons',
+  'bottle',
+  'bottles',
 ]);
 
 const SIZE_WORDS = /\b(small|medium|large|big|extra[- ]large|heaped|level|rounded|generous|good|thick|thin|whole|fresh|ripe)\b/gi;
@@ -116,6 +128,8 @@ export function parseIngredientLine(raw: string): ParsedLine {
     text = text.replace(/\(optional\)|,?\s*optional\s*$|^optional:?\s*/gi, '').trim();
   }
 
+  // Plural markers aren't notes: "1 sachet(s)" is "1 sachets".
+  text = text.replace(/([a-z])\((e?s)\)/gi, '$1$2');
   // Notes after a comma, or in brackets: "2 onions, finely chopped", "1 tin (400g) tomatoes".
   const notes: string[] = [];
   text = text.replace(/\(([^)]*)\)/g, (_m, inner: string) => {
@@ -171,6 +185,21 @@ export function parseIngredientLine(raw: string): ParsedLine {
   const name = text.replace(SIZE_WORDS, ' ').replace(/\s+/g, ' ').trim() || raw.trim();
   const note = notes.filter(Boolean).join('; ') || null;
   return { amount, unit, countWord, name, note, optional };
+}
+
+/**
+ * A key grouping recipe lines that name the same food, however they're written:
+ * "2 Rump Steaks" and "250g rump steak, trimmed" both give "rump steak".
+ */
+export function foodKey(text: string): string {
+  const name = parseIngredientLine(text).name || text;
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(singular)
+    .join(' ');
 }
 
 export function scaleAmount(amount: number | null, fromServes: number, toServes: number): number | null {

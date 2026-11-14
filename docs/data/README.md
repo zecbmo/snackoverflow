@@ -8,6 +8,8 @@ Starting defaults the app ships with. Every value is a **default the user can ov
 | `unit-conversions.csv` | Fixed unit sizes, densities for volume → grams, and typical weights for counted items |
 | `pack-sizes.csv` | Typical UK supermarket pack sizes, used to round shopping-list amounts to whole packs |
 | `ingredients.csv` | The starting ingredient list: aisle, which shelf-life category, density and count keys (from `unit-conversions.csv`), pack-size key, "track running low", alternative names used to match scanned products, and the food group shown as Category (one of the groups listed in `packages/shared/src/foodGroups.ts`). It holds no numbers of its own |
+| `chains.csv` | UK restaurant, takeaway, café and drink chains: key, name, type of food (one of `CHAIN_CATEGORIES` in `packages/shared/src/chains.ts`), nicknames (`;`-separated, used by search), notes, and the official source of its menu nutrition with the date it was taken (`source_url`, `retrieved_on`) |
+| `chain-menus/<key>.csv` | One chain's menu: `item,section,serving,serving_g,kcal,fat_g,sat_fat_g,carbs_g,sugars_g,fibre_g,protein_g,salt_g`, per serving as sold. Only from the chain's own UK website, PDF or menu data, exactly as published: blank where the chain doesn't publish a value, never estimated. A value that is clearly wrong in the source (34g of salt in a cappuccino, macros adding up to three times the calories) is left blank too, and the chain's notes say so. Size variants are separate rows (`Fries (Medium)`). A chain with no file has no menu yet. `pnpm test` checks every file reads cleanly |
 
 ## Safety rules (from UK food-safety guidance — hard-code these, don't make them editable defaults)
 

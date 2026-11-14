@@ -41,6 +41,11 @@ import { ScanPage } from './pages/Scan';
 import { SettingsPage, ShelfLifePage } from './pages/Settings';
 import { StockPage } from './pages/Stock';
 import { TodayPage } from './pages/Today';
+import { UnmatchedPage } from './pages/Unmatched';
+import { RecipePhotosPage } from './pages/RecipePhotos';
+import { UseItUpPage } from './pages/UseItUp';
+import { SwapGroupsPage } from './pages/SwapGroups';
+import { ChainMenuPage, TakeawaysPage } from './pages/Takeaways';
 
 applyTheme();
 
@@ -78,6 +83,8 @@ const router = createBrowserRouter([
       { path: '/recipes', element: <RecipesPage /> },
       { path: '/recipes/new', element: <RecipeNewPage /> },
       { path: '/recipes/import', element: <RecipeImportPage /> },
+      { path: '/recipes/photos', element: <RecipePhotosPage /> },
+      { path: '/recipes/use-it-up', element: <UseItUpPage /> },
       { path: '/recipes/:id', element: <RecipeDetailPage /> },
       { path: '/recipes/:id/edit', element: <RecipeEditPage /> },
       { path: '/recipes/:id/cook', element: <CookPage /> },
@@ -101,6 +108,10 @@ const router = createBrowserRouter([
           { path: '/products', element: <ProductsPage /> },
           { path: '/products/:id', element: <ProductDetailPage /> },
           { path: '/ingredients', element: <IngredientsPage /> },
+          { path: '/unmatched', element: <UnmatchedPage /> },
+          { path: '/swap-groups', element: <SwapGroupsPage /> },
+          { path: '/takeaways', element: <TakeawaysPage /> },
+          { path: '/takeaways/:key', element: <ChainMenuPage /> },
           { path: '/locations', element: <LocationsPage /> },
           { path: '/people', element: <PeoplePage /> },
           { path: '/notifications', element: <NotificationsPage /> },

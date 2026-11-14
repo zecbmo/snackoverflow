@@ -8,7 +8,7 @@ import { type MealFilter, recipeMeals, type RecipeScore, type RecipeSummaryDto }
 import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
 import { type Column, DataTable } from '../components/DataTable';
 import { Icon } from '../components/Icon';
-import { MenuButton } from '../components/Layout';
+import { MenuButton, useMe } from '../components/Layout';
 import { PickerMenu } from '../components/Menu';
 import { SidePanel, usePanelParam } from '../components/SidePanel';
 import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
@@ -17,7 +17,8 @@ import { minutesLabel } from '../lib/format';
 import { useRecipe, useRecipes, useRecipeScores } from '../lib/queries';
 import { matchesSearch } from '../lib/table';
 import { useIsDesktop } from '../lib/useMedia';
-import { BatchSheet, RecipeIngredients, recipeMeta } from './RecipeDetail';
+import { BatchSheet, RecipeIngredients, recipeMeta, type Swaps, swapNote, swapsParam, withSwap } from './RecipeDetail';
+import { useRecipeScans } from './RecipePhotos';
 
 /** Placeholder tints for recipes without a photo; follow the palette (not the freshness colours). */
 const TINTS = ['bg-accent-soft', 'bg-card-muted'];
@@ -107,7 +108,9 @@ function readView(): View {
 }
 
 export function RecipesPage() {
+  const me = useMe();
   const recipes = useRecipes();
+  const waitingPhotos = (useRecipeScans().data ?? []).filter((x) => x.status !== 'done').length;
   const scores = useRecipeScores();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
@@ -137,7 +140,7 @@ export function RecipesPage() {
   let shown = (recipes.data ?? []).filter((r) => (!q || matchesSearch(`${r.title} ${r.tags.join(' ')}`, q)) && (!tag || r.tags.includes(tag)) && inTab(r, tab) && inMeal(r, meal));
   shown = sortForTab(shown, byId, tab);
 
-  const plan = (r: RecipeSummaryDto) => setPlanning({ kind: 'recipe', id: r.id, title: r.title, servings: r.serves });
+  const plan = (r: RecipeSummaryDto, swaps?: Swaps, note?: string | null) => setPlanning({ kind: 'recipe', id: r.id, title: r.title, servings: r.serves, swaps, swapNote: note });
   const cook = (r: RecipeSummaryDto) => navigate(`/recipes/${r.id}/cook?servings=${r.serves}`);
   const actions = (r: RecipeSummaryDto) => (
     <>
@@ -205,6 +208,15 @@ export function RecipesPage() {
               <span className="hidden sm:inline">Import from a link</span>
             </Link>
             <Link
+              to="/recipes/photos"
+              aria-label={`Recipe photos${waitingPhotos ? `, ${waitingPhotos} to read` : ''}`}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-card px-3 text-sm font-semibold hover:bg-card-muted lg:min-h-8 lg:rounded-md"
+            >
+              <Icon name="camera" className="size-4" />
+              <span className="hidden sm:inline">Photos</span>
+              {waitingPhotos > 0 && <span className="rounded-full bg-accent-soft px-1.5 text-xs text-accent-text">{waitingPhotos}</span>}
+            </Link>
+            <Link
               to="/recipes/new"
               aria-label="New recipe"
               className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-card px-3 text-sm font-semibold hover:bg-card-muted lg:min-h-8 lg:rounded-md"
@@ -247,6 +259,14 @@ export function RecipesPage() {
           />
         </span>
       </Toolbar>
+      {tab === 'use-it-up' && me.features.ai && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-card px-3 py-2 text-sm">
+          <span className="flex-1">Nothing here that fits? Have a recipe made up around what’s going off.</span>
+          <Link to="/recipes/use-it-up" className="font-semibold text-accent-text">
+            Make one up with AI
+          </Link>
+        </div>
+      )}
       <ErrorNote error={recipes.error} />
       {recipes.isPending ? (
         <Spinner />
@@ -289,7 +309,7 @@ export function RecipesPage() {
           })}
         </ul>
       )}
-      <RecipePanel id={openId} onClose={closePanel} onPlan={plan} score={openId ? byId.get(openId) : undefined} on={on} />
+      <RecipePanel key={openId ?? ''} id={openId} onClose={closePanel} onPlan={plan} score={openId ? byId.get(openId) : undefined} on={on} />
       <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
     </>
   );
@@ -304,7 +324,7 @@ function RecipePanel({
 }: {
   id: string | null;
   onClose: () => void;
-  onPlan: (r: RecipeSummaryDto) => void;
+  onPlan: (r: RecipeSummaryDto, swaps?: Swaps, note?: string | null) => void;
   score?: RecipeScore;
   on: string;
 }) {
@@ -312,6 +332,7 @@ function RecipePanel({
   const navigate = useNavigate();
   const [servings, setServings] = useState<number | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
+  const [swaps, setSwaps] = useState<Swaps>({});
   const uses = score && on ? usesLine(score, on) : null;
   const n = r ? (servings ?? r.serves) : 1;
   return (
@@ -323,7 +344,7 @@ function RecipePanel({
       headerActions={
         r && (
           <>
-            <Button size="sm" variant="primary" onClick={() => navigate(`/recipes/${r.id}/cook?servings=${n}`)}>
+            <Button size="sm" variant="primary" onClick={() => navigate(`/recipes/${r.id}/cook?servings=${n}${Object.keys(swaps).length ? `&swaps=${swapsParam(swaps)}` : ''}`)}>
               Cook
             </Button>
             <Button size="sm" onClick={() => setBatchOpen(true)}>
@@ -341,7 +362,7 @@ function RecipePanel({
             >
               Full recipe <Icon name="chevronRight" className="size-4" />
             </Link>
-            <Button onClick={() => onPlan(r)}>Add to plan</Button>
+            <Button onClick={() => onPlan(r, swaps, swapNote(r, swaps))}>Add to plan</Button>
           </>
         )
       }
@@ -355,7 +376,7 @@ function RecipePanel({
               {missingLine(score) && <p className="text-muted">{missingLine(score)}</p>}
             </div>
           )}
-          <RecipeIngredients recipe={r} servings={n} onServings={setServings} />
+          <RecipeIngredients recipe={r} servings={n} onServings={setServings} swaps={swaps} onSwap={(line, ing) => setSwaps((s) => withSwap(s, line, ing))} />
           {r.steps.length > 0 && (
             <section>
               <h2 className="mb-2 font-bold">Method</h2>

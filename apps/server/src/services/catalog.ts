@@ -3,6 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import {
   type DisplayUnit,
   type IngredientDto,
+  type IngredientInput,
   type Measures,
   mergeShelfLife,
   type ProductDto,
@@ -22,6 +23,12 @@ export type ProductRow = typeof products.$inferSelect;
 export interface Catalog {
   categories: Map<string, CategoryRow>;
   ingredients: Map<string, IngredientRow>;
+}
+
+/** Ingredient input as table columns: the shelf-life overrides are columns of their own. */
+export function ingredientValues(input: Partial<IngredientInput>) {
+  const { shelfLife, ...rest } = input;
+  return { ...rest, ...(shelfLife ?? {}) };
 }
 
 export async function loadCatalog(db: Db, householdId: string): Promise<Catalog> {
@@ -111,6 +118,7 @@ export function ingredientDto(i: IngredientRow, catalog: Catalog): IngredientDto
     packUnit: i.packUnit,
     foodGroup: i.foodGroup,
     trackRunningLow: i.trackRunningLow,
+    swapGroupId: i.swapGroupId,
     shelfLife: ingredientShelfLife(i, catalog),
     overrides: { closedDays: i.closedDays, openedDays: i.openedDays, frozenDays: i.frozenDays, defrostedDays: i.defrostedDays },
   };
@@ -139,6 +147,7 @@ export function productDto(p: ProductRow, codes: string[], catalog: Catalog, pri
     portionGrams: p.portionGrams,
     foodGroup: p.foodGroup ?? (p.ingredientId ? (catalog.ingredients.get(p.ingredientId)?.foodGroup ?? null) : null),
     ownFoodGroup: p.foodGroup,
+    offSharedAt: p.offSharedAt ? p.offSharedAt.toISOString() : null,
   };
 }
 

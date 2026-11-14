@@ -4,18 +4,23 @@
  */
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router';
-import { useProducts } from '../lib/queries';
+import { useProducts, useUnmatched } from '../lib/queries';
 import { Icon, type IconName } from './Icon';
 
-export const SETTINGS_PATHS = ['/settings', '/shelf-life', '/products', '/ingredients', '/locations', '/people', '/notifications', '/profile'];
+export const SETTINGS_PATHS = ['/settings', '/shelf-life', '/products', '/ingredients', '/unmatched', '/swap-groups', '/takeaways', '/locations', '/people', '/notifications', '/profile'];
 
 export function SettingsShell({ children }: { children: ReactNode }) {
   const unnamed = useProducts('', true).data?.length ?? 0;
-  const links: { to: string; label: string; icon: IconName; badge?: string }[] = [
+  const unmatched = useUnmatched().data?.filter((g) => !g.ignored).length ?? 0;
+  const links: { to: string; label: string; icon: IconName; badge?: string; end?: boolean }[] = [
     { to: '/settings', label: 'General', icon: 'sliders' },
     { to: '/shelf-life', label: 'Shelf life', icon: 'calendar' },
     { to: '/products', label: 'Products & barcodes', icon: 'tag', badge: unnamed ? `${unnamed} new` : undefined },
     { to: '/ingredients', label: 'Ingredients & units', icon: 'leaf' },
+    { to: '/unmatched', label: 'Unmatched ingredients', icon: 'recipe', badge: unmatched ? `${unmatched} to fix` : undefined },
+    { to: '/swap-groups', label: 'Swap groups', icon: 'move' },
+    // Each chain's menu has its own page under /takeaways.
+    { to: '/takeaways', label: 'Fast food & takeaways', icon: 'burger', end: false },
     { to: '/locations', label: 'Locations', icon: 'pin' },
     { to: '/people', label: 'People & roles', icon: 'users' },
     { to: '/notifications', label: 'Notifications', icon: 'bell' },
@@ -30,7 +35,7 @@ export function SettingsShell({ children }: { children: ReactNode }) {
             <li key={l.to}>
               <NavLink
                 to={l.to}
-                end
+                end={l.end ?? true}
                 className={({ isActive }) =>
                   `flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm ${isActive ? 'bg-accent-soft font-semibold text-accent-text' : 'text-ink hover:bg-card-muted'}`
                 }
@@ -49,7 +54,7 @@ export function SettingsShell({ children }: { children: ReactNode }) {
             <NavLink
               key={l.to}
               to={l.to}
-              end
+              end={l.end ?? true}
               className={({ isActive }) =>
                 `-mb-px flex min-h-11 shrink-0 items-center whitespace-nowrap border-b-2 px-2.5 text-sm font-semibold ${isActive ? 'border-accent text-ink' : 'border-transparent text-muted'}`
               }

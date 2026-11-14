@@ -21,6 +21,8 @@ export interface AppContext {
   now: () => Date;
   /** Outbound HTTP (recipe import, AI clean-up); tests pass a fake. Defaults to global fetch. */
   fetch?: typeof fetch;
+  /** AI key, model and MCP token as the environment set them; Settings fills in the rest (services/secrets). */
+  envSecrets?: Record<'AI_API_KEY' | 'AI_MODEL' | 'MCP_TOKEN', string | undefined>;
 }
 
 export interface Auth {

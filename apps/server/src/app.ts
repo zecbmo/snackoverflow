@@ -9,6 +9,7 @@ import type { AppContext } from './context';
 import { HttpError } from './http';
 import { authRoutes } from './routes/auth';
 import { catalogRoutes } from './routes/catalog';
+import { chainRoutes } from './routes/chains';
 import { inboxRoutes } from './routes/inbox';
 import { mcpRoutes } from './routes/mcp';
 import { recipeImportRoutes } from './routes/recipeImport';
@@ -20,6 +21,11 @@ import { receiptRoutes } from './routes/receipts';
 import { recipeRoutes } from './routes/recipes';
 import { peopleRoutes } from './routes/people';
 import { stockRoutes } from './routes/stock';
+import { unmatchedRoutes } from './routes/unmatched';
+import { assistantRoutes } from './routes/assistants';
+import { aiKitchenRoutes } from './routes/aiKitchen';
+import { swapGroupRoutes } from './routes/swapGroups';
+import { applyStoredSecrets } from './services/secrets';
 
 export interface BuildOptions {
   logger?: boolean | object;
@@ -27,6 +33,8 @@ export interface BuildOptions {
 }
 
 export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promise<FastifyInstance> {
+  // The AI key, model and MCP token may also be set in Settings.
+  await applyStoredSecrets(ctx);
   const app = Fastify({
     logger: opts.logger ?? false,
     trustProxy: true,
@@ -71,9 +79,14 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   await app.register(authRoutes);
   await app.register(peopleRoutes);
   await app.register(catalogRoutes);
+  await app.register(chainRoutes);
   await app.register(stockRoutes);
   await app.register(inboxRoutes);
   await app.register(recipeRoutes);
+  await app.register(unmatchedRoutes);
+  await app.register(assistantRoutes);
+  await app.register(aiKitchenRoutes);
+  await app.register(swapGroupRoutes);
   await app.register(plannerRoutes);
   await app.register(optimiserRoutes);
   await app.register(dashboardRoutes);

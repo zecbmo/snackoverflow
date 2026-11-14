@@ -29,6 +29,24 @@ const envSchema = z.object({
   OFF_USER_AGENT: z.string().default('SnackOverflow/0.1 (self-hosted)'),
   OFF_BASE_URL: z.string().default('https://world.openfoodfacts.org'),
   OFF_ENABLED: bool(true),
+  /** Sister databases asked when Open Food Facts doesn't know a barcode (comma-separated; empty for none). */
+  OFF_SISTER_URLS: z
+    .string()
+    .optional()
+    .transform((v) =>
+      (v ?? 'https://world.openproductsfacts.org,https://world.openpetfoodfacts.org,https://world.openbeautyfacts.org')
+        .split(',')
+        .map((u) => u.trim())
+        .filter(Boolean),
+    ),
+  /** An Open Food Facts account (user name, not email) for adding products people name; unset hides the option. */
+  OFF_CONTRIBUTE_USER_ID: optional,
+  OFF_CONTRIBUTE_PASSWORD: optional,
+  /** Where products added to Open Food Facts are sold; empty to leave it out. */
+  OFF_COUNTRY: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? 'en:united-kingdom' : v.trim() || undefined)),
   SMTP_HOST: optional,
   SMTP_PORT: z.coerce.number().int().default(587),
   SMTP_USER: optional,

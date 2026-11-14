@@ -23,7 +23,8 @@ import { addPack, type StockDeps, usePack } from './stock';
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
-export async function planCook(db: Db, auth: Auth, recipeId: string, servings: number): Promise<CookPlanDto> {
+/** What to cook: the recipe at a number of servings, with any swaps (recipe line id -> ingredient used instead). */
+export async function planCook(db: Db, auth: Auth, recipeId: string, servings: number, swaps: Record<string, string> = {}): Promise<CookPlanDto> {
   const recipe = await getRecipe(db, auth, recipeId);
   const factor = servings / recipe.serves;
   const rows = await db
@@ -36,8 +37,13 @@ export async function planCook(db: Db, auth: Auth, recipeId: string, servings: n
   const promised = new Map<string, number>();
   const catalog = await loadCatalog(db, auth.household.id);
 
-  const lines: CookPlanLineDto[] = recipe.ingredients.map((line) => {
-    const needed = line.grams === null ? null : round(line.grams * factor);
+  const lines: CookPlanLineDto[] = recipe.ingredients.map((original) => {
+    const swapTo = original.ingredientId ? swaps[original.id] : undefined;
+    const swapped = swapTo ? catalog.ingredients.get(swapTo) : undefined;
+    const line = swapped ? { ...original, ingredientId: swapped.id, ingredientName: swapped.name, productId: null, productName: null } : original;
+    // A line not linked to any food can't be checked against stock: not "short", just not linked.
+    const linked = line.ingredientId !== null || line.productId !== null;
+    const needed = line.grams === null || !linked ? null : round(line.grams * factor);
     const candidates = orderForUse(
       rows
         .filter((r) => (line.productId ? r.product.id === line.productId : line.ingredientId !== null && r.product.ingredientId === line.ingredientId))
@@ -69,6 +75,7 @@ export async function planCook(db: Db, auth: Auth, recipeId: string, servings: n
       originalText: scaledLine(line.text, line.amount, recipe.serves, recipe.serves),
       inStockGrams: measured.length ? round(measured.reduce((s, c) => s + (c.item.remainingGrams ?? 0), 0)) : candidates.length ? null : 0,
       ingredientName: line.ingredientName ?? line.productName,
+      swappedFrom: swapped ? (original.ingredientName ?? original.text) : null,
       optional: line.optional,
       unit: (() => {
         const ing = line.ingredientId ? catalog.ingredients.get(line.ingredientId) : undefined;

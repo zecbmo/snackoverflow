@@ -1,0 +1,111 @@
+key,name,category,aliases,notes,source_url,retrieved_on
+mcdonalds,McDonald's,Burgers and fried chicken,maccies;mcds;mcdonalds,Cappuccino salt left blank (wrong in the source),https://www.mcdonalds.com/gb/en-gb/menu.html,2026-11-13
+kfc,KFC,Burgers and fried chicken,kentucky fried chicken,,https://www.kfc.co.uk/nutrition,2026-11-13
+burger_king,Burger King,Burgers and fried chicken,bk,Some drinks kcal only; Big King kcal looks high against its macros (as published),https://www.burgerking.co.uk/,2026-11-13
+five_guys,Five Guys,Burgers and fried chicken,,Little Bacon Burger carbs left blank (a typo in the source),https://www.fiveguys.co.uk/wp-content/uploads/sites/30/2026/10/FGUK_FOH_allergen_ingredient_nutrition_MM_shake_DIGITAL_20261013.pdf,2026-11-13
+wendys,Wendy's,Burgers and fried chicken,wendys,BBQ Topped Fries salt left blank (a typo in the source),https://www.wendys.com/sites/default/files/2026-10/United-Kingdom-National-Nutrition-Information---11.3.2026.pdf,2026-11-13
+popeyes,Popeyes,Burgers and fried chicken,,,https://allergensandnutritions.popeyesuk.com/nutritional-information,2026-11-13
+wingstop,Wingstop,Burgers and fried chicken,,No nutrition published in the UK,,
+slim_chickens,Slim Chickens,Burgers and fried chicken,,No nutrition published in the UK,,
+shake_shack,Shake Shack,Burgers and fried chicken,,Calories only; shakes and custard not published,https://www.shakeshack.co.uk/,2026-11-13
+honest_burgers,Honest Burgers,Burgers and fried chicken,honest,,https://menus.tenkites.com/honestburgers/honestburgers,2026-11-13
+gbk,Gourmet Burger Kitchen,Burgers and fried chicken,gbk,,https://menus.tenkites.com/brg/gourmetburgerkitchen,2026-11-13
+byron,Byron,Burgers and fried chicken,,No calories published,,
+chicken_cottage,Chicken Cottage,Burgers and fried chicken,,No nutrition published,,
+morleys,Morley's,Burgers and fried chicken,morleys,No nutrition published,,
+sams_chicken,Sam's Chicken,Burgers and fried chicken,sams chicken,No salt (only sodium published); some placeholder rows left out,https://samschicken.com/,2026-11-13
+dixy_chicken,Dixy Chicken,Burgers and fried chicken,dixy,No nutrition published,,
+dominos,Domino's,Pizza,dominos,Whole pizzas on the classic crust only,https://corporate.dominos.co.uk/allergens-nutritional,2026-11-13
+pizza_hut,Pizza Hut,Pizza,,Restaurant (dine-in) menu; pizzas per slice,https://assets.ctfassets.net/kahtja4ygpol/3lSanvl3X7vbTSxlptqtfx/d3479ac67d929e328d4638b469749a79/DINE-IN_AIN_Booklet_C3_2026_FINAL_V1.pdf,2026-11-13
+papa_johns,Papa John's,Pizza,papa johns,The nutrition PDF blocks automated downloads; not fetched yet,,
+pizza_express,Pizza Express,Pizza,pizzaexpress,,https://content-cdn.pizzaexpress.com/files/lj3txstz/production/13294855200defab10f0dcf4f178a8bae038b910.pdf,2026-11-13
+zizzi,Zizzi,Pizza,,,https://cdn.sanity.io/files/ysupxjc9/production/abb3546d604fabb82945c2b1291c22949e5dc66e.pdf/ZIZZI-UK-NUTRITION-GUIDE_AUTUMN_SEP2026_V1.pdf,2026-11-13
+ask_italian,ASK Italian,Pizza,ask,Calories only,https://www.askitalian.co.uk/menus,2026-11-13
+prezzo,Prezzo,Pizza,,,https://www.prezzo.co.uk/allergens/,2026-11-13
+franco_manca,Franco Manca,Pizza,,Calories only,https://www.francomanca.co.uk/menu/,2026-11-13
+pizza_pilgrims,Pizza Pilgrims,Pizza,,No item calories published,,
+rudys,Rudy's,Pizza,rudys,Nutrients other than kcal left blank for two dishes whose figures don't add up,https://viewthe.menu/5zav,2026-11-13
+greggs,Greggs,"Sandwiches, bakery and grab-and-go",,,https://www.greggs.com/,2026-11-13
+subway,Subway,"Sandwiches, bakery and grab-and-go",,6-inch subs; breads and fillings listed separately,https://www.subway.com/en-gb/menunutrition/nutrition,2026-11-13
+pret,Pret A Manger,"Sandwiches, bakery and grab-and-go",pret,Default milk,https://www.pret.co.uk/en-GB,2026-11-13
+leon,Leon,"Sandwiches, bakery and grab-and-go",,,https://leon.co/allergens,2026-11-13
+gails,Gail's,"Sandwiches, bakery and grab-and-go",gails,No hot drinks or loaves,https://gails.com/,2026-11-13
+upper_crust,Upper Crust,"Sandwiches, bakery and grab-and-go",,No nutrition published,,
+cooplands,Cooplands,"Sandwiches, bakery and grab-and-go",,No nutrition published,,
+birds_bakery,Birds Bakery,"Sandwiches, bakery and grab-and-go",birds,Items published only per 100g are left out,https://www.birdsbakery.com/pages/nutrition-and-allergen-data,2026-11-13
+costa,Costa,Coffee and café,costa coffee,Semi-skimmed milk,https://www.costa.co.uk/menu,2026-11-13
+starbucks,Starbucks,Coffee and café,,Standard build or semi-skimmed milk,https://www.starbucks.co.uk/quick-links/nutrition-info,2026-11-13
+caffe_nero,Caffè Nero,Coffee and café,nero;caffe nero,Semi-skimmed milk,https://www.caffenero.com/uk/menu,2026-11-13
+tim_hortons,Tim Hortons,Coffee and café,timmies,,https://timhortons.co.uk/assets/img/products/Nutrition-20261110-173215-613c.pdf,2026-11-13
+black_sheep_coffee,Black Sheep Coffee,Coffee and café,,Allergens only; calories only in its app,,
+coffee_1,Coffee#1,Coffee and café,coffee 1,Whole milk,https://www.coffee1.co.uk/allergy-advice/,2026-11-13
+blank_street,Blank Street,Coffee and café,,Calories only; London pastries,https://www.blankstreet.com/en-GB/BlankStreetUKAllergenGuideWinter26.pdf,2026-11-13
+joe_and_the_juice,Joe & the Juice,Coffee and café,joe and the juice,Website blocks automated requests; no UK nutrition document found,,
+wagamama,Wagamama,Asian,wagamamas,,https://www.wagamama.com/menu,2026-11-13
+itsu,Itsu,Asian,,,https://www.itsu.com/menu,2026-11-13
+wasabi,Wasabi,Asian,,Calories and portion weight only (other nutrients are published per 100g),https://www.wasabi.uk.com/wp-content/uploads/2026/09/WAS_Nutritional_Guide_210926v3.pdf,2026-11-13
+yo_sushi,Yo! Sushi,Asian,yo sushi,,https://menus.tenkites.com/yosushi/allergenpageyosushi,2026-11-13
+chopstix,Chopstix,Asian,,No drinks,https://chopstixnoodles.co.uk/wp-content/uploads/2026/09/NUTRITIONAL-TABLE-V22-SEPT-26.pdf,2026-11-13
+banana_tree,Banana Tree,Asian,,,https://menus.tenkites.com/thebigtg/bananatree07,2026-11-13
+rosas_thai,Rosa's Thai,Asian,rosas,Calories only,https://menus.tenkites.com/rosasthai/rosasthainationwide,2026-11-13
+giggling_squid,Giggling Squid,Asian,,Calories only,https://menus.tenkites.com/gigsquid/gswebmenus02,2026-11-13
+pho,Pho,Asian,,No salt,https://pho-media.sp.works/wp-content/uploads/2026/04/Pho-Nutritional-Guidelines-2026_web.pdf,2026-11-13
+shoryu,Shoryu,Asian,,No calories published,,
+bundobust,Bundobust,Asian,,No calories published,,
+mowgli,Mowgli Street Food,Asian,mowgli,Calories only,https://mowglistreetfood.com/menus/,2026-11-13
+dishoom,Dishoom,Asian,,Calories not readable from its website,,
+tortilla,Tortilla,Mexican and Tex-Mex,,Per ingredient and size (no whole-burrito totals published),https://loyalty.tortilla.co.uk/menu/nutrition-and-allergens,2026-11-13
+taco_bell,Taco Bell,Mexican and Tex-Mex,,,https://www.tacobell.co.uk/nutrition-information,2026-11-13
+chipotle,Chipotle,Mexican and Tex-Mex,,Per ingredient; typed in from an image-only PDF,https://www.chipotle.co.uk/content/dam/chipotle/menu/nutrition/2026/eu/Allergen-UK270726.pdf,2026-11-13
+barburrito,Barburrito,Mexican and Tex-Mex,,Calories only; per ingredient,https://www.barburrito.co.uk/menu,2026-11-13
+wahaca,Wahaca,Mexican and Tex-Mex,,Calories only,https://www.wahaca.co.uk/wp-content/uploads/2026/10/0377_Main_Estate_Table_Menu_KCAL_Winter_26-27_191026_WEB.pdf,2026-11-13
+las_iguanas,Las Iguanas,Mexican and Tex-Mex,,,https://menus.tenkites.com/thebigtg/lasiguanas202507,2026-11-13
+chiquito,Chiquito,Mexican and Tex-Mex,,,https://menus.tenkites.com/thebigtg/chiquito02,2026-11-13
+german_doner_kebab,German Doner Kebab,Mexican and Tex-Mex,gdk,No nutrition published,,
+nandos,Nando's,"Chicken, peri-peri and grills",nandos,Calories only; sides show the regular size,https://www.nandos.co.uk/food/menu,2026-11-13
+miller_and_carter,Miller & Carter,"Chicken, peri-peri and grills",miller and carter,Calories only; February 2025 menu,https://millerandcarter.co.uk/content/dam/miller-and-carter/pdf/2025/ln25/mac-ln25-mainmenu-pb3.pdf,2026-11-13
+flat_iron,Flat Iron,"Chicken, peri-peri and grills",,Calories only,https://flatironsteak.co.uk/menu/,2026-11-13
+hawksmoor,Hawksmoor,"Chicken, peri-peri and grills",,No calories published,,
+gaucho,Gaucho,"Chicken, peri-peri and grills",,No calories published,,
+frankie_and_bennys,Frankie & Benny's,Casual dining and family restaurants,frankie and bennys,,https://menus.tenkites.com/thebigtg/frankiebennys02,2026-11-13
+tgi_fridays,TGI Fridays,Casual dining and family restaurants,fridays,Calories only,https://menus.tenkites.com/tgifridayuk/tgiswebtemplate,2026-11-13
+bella_italia,Bella Italia,Casual dining and family restaurants,,Green Olives: nutrients other than kcal left blank (they don't add up),https://menus.tenkites.com/thebigtg/mobilemenus04,2026-11-13
+cote,Côte,Casual dining and family restaurants,cote,Nutrients other than kcal left blank for two dishes whose figures don't add up,https://menus.tenkites.com/cote/cote,2026-11-13
+bills,Bill's,Casual dining and family restaurants,bills,Calories only,https://menus.tenkites.com/bills/bills,2026-11-13
+turtle_bay,Turtle Bay,Casual dining and family restaurants,,Calories only,https://turtlebay.co.uk/menu,2026-11-13
+cosy_club,Cosy Club,Casual dining and family restaurants,,Calories only,https://menus.tenkites.com/loungers/cosyclubss2603/,2026-11-13
+carluccios,Carluccio's,Casual dining and family restaurants,carluccios,,https://menus.tenkites.com/brg/carluccios,2026-11-13
+brewdog,BrewDog bars,Casual dining and family restaurants,brewdog,Calories only,https://brewdog.com/pages/food-info-allergens,2026-11-13
+wetherspoon,Wetherspoon,Pubs and carveries,spoons;wetherspoons,Calories only; standard England menu,https://www.jdwetherspoon.com/,2026-11-13
+toby_carvery,Toby Carvery,Pubs and carveries,toby,Carvery plates not published; meats per portion,https://www.tobycarvery.co.uk/menus/carverymenu,2026-11-13
+harvester,Harvester,Pubs and carveries,,,https://www.harvester.co.uk/menus/mainmenu,2026-11-13
+beefeater,Beefeater,Pubs and carveries,,Restaurants closed in September 2026 (site redirects to Premier Inn),,
+brewers_fayre,Brewers Fayre,Pubs and carveries,,Restaurants closed in September 2026 (site redirects to Premier Inn),,
+hungry_horse,Hungry Horse,Pubs and carveries,,Calories only; standard menu,https://www.hungryhorse.co.uk/,2026-11-13
+greene_king,Greene King pubs,Pubs and carveries,greene king,Calories only; standard pub menu,https://www.greeneking.co.uk/,2026-11-13
+vintage_inns,Vintage Inns,Pubs and carveries,,,https://www.vintageinn.co.uk/mainmenu,2026-11-13
+sizzling_pubs,Sizzling Pubs,Pubs and carveries,,,https://www.sizzlingpubs.co.uk/food-menu,2026-11-13
+nicholsons,Nicholson's,Pubs and carveries,nicholsons,,https://www.nicholsonspubs.co.uk/foodmenu,2026-11-13
+oneills,O'Neill's,Pubs and carveries,oneills,,https://www.oneills.co.uk/mainmenu,2026-11-13
+all_bar_one,All Bar One,Pubs and carveries,,,https://www.allbarone.co.uk/foodmenu,2026-11-13
+browns,Browns,Pubs and carveries,,Baked Scallops salt left blank (wrong in the source),https://www.browns-restaurants.co.uk/menus/main-menu,2026-11-13
+harry_ramsdens,Harry Ramsden's,Fish and chips,harry ramsdens,No calories on current menus,,
+papas,Papa's,Fish and chips,papas fish and chips,2018 lab figures for regular portions only,https://papasfishandchips.com/?p=15959,2026-11-13
+krispy_kreme,Krispy Kreme,"Desserts, doughnuts and shakes",,,https://www.krispykreme.co.uk/media/wysiwyg/PDFs/UK_Cinnamon_Allergen_Nutrition_Book_041126.pdf,2026-11-13
+creams,Creams,"Desserts, doughnuts and shakes",,Calories only,https://www.creamscafe.com/brochures/Allergen-Matrix--03-Nov-26.pdf,2026-11-13
+kaspas,Kaspa's,"Desserts, doughnuts and shakes",kaspas,Website blocks automated requests; no other source found,,
+sundaes_gelato,Sundaes Gelato,"Desserts, doughnuts and shakes",sundaes,No website found,,
+heavenly_desserts,Heavenly Desserts,"Desserts, doughnuts and shakes",,No calories published,,
+shakeaway,Shakeaway,"Desserts, doughnuts and shakes",,No calories published,,
+millies_cookies,Millie's Cookies,"Desserts, doughnuts and shakes",millies,Calories only,https://www.milliescookies.com/,2026-11-13
+bens_cookies,Ben's Cookies,"Desserts, doughnuts and shakes",bens cookies,,https://www.benscookies.com/nutritional-information/,2026-11-13
+chatime,Chatime,Bubble tea and drinks,,No UK website found,,
+mooboo,Mooboo,Bubble tea and drinks,,No UK website found,,
+gong_cha,Gong Cha,Bubble tea and drinks,,No nutrition published,,
+boost_juice,Boost Juice,Bubble tea and drinks,boost,No UK nutrition published,,
+crussh,Crussh,Bubble tea and drinks,,No website found,,
+ikea_restaurant,IKEA restaurant,In-store cafés,ikea,,https://www.ikea.com/gb/en/food/salesareas/restaurant/,2026-11-13
+ms_cafe,M&S Café,In-store cafés,marks and spencer cafe;m&s cafe,Menu only in a flipbook; no nutrition page,,
+tesco_cafe,Tesco Café,In-store cafés,,Calories only,https://digitalcontent.api.tesco.com/v2/media/homepage/605ca464-3d1b-4684-94f8-e765539b7bc2/Autumn+2026+GB+Allergen+Matrix+V1.pdf,2026-11-13
+sainsburys_cafe,Sainsbury's Café,In-store cafés,sainsburys cafe,Cafés closed in April 2025,,
+morrisons_cafe,Morrisons Café,In-store cafés,,Calories only; England and Wales menu,https://www.morrisons.com/terms/cafe-menu,2026-11-13

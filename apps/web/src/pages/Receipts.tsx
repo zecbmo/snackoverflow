@@ -10,6 +10,7 @@ import { type Column, DataTable } from '../components/DataTable';
 import { PageTop, Toolbar } from '../components/Toolbar';
 import { Button, EmptyState, ErrorNote, Field, Pill, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
+import { readRaw, shrinkImage } from '../lib/images';
 import { useReceipts } from '../lib/queries';
 
 export const STATUS_LABEL: Record<ReceiptSummaryDto['status'], string> = {
@@ -19,28 +20,6 @@ export const STATUS_LABEL: Record<ReceiptSummaryDto['status'], string> = {
   done: 'Added to stock',
   failed: "Couldn't read",
 };
-
-/** Big photos are slow to send and no easier to read: shrink to a 1600px JPEG first. The receipt keeps this compressed copy. */
-async function shrinkImage(file: File): Promise<{ data: string; type: string }> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const url = canvas.toDataURL('image/jpeg', 0.75);
-  return { data: url.slice(url.indexOf(',') + 1), type: 'image/jpeg' };
-}
-
-async function readRaw(file: File): Promise<{ data: string; type: string }> {
-  const url = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(new Error("Couldn't read that file."));
-    r.readAsDataURL(file);
-  });
-  return { data: url.slice(url.indexOf(',') + 1), type: file.type };
-}
 
 export function ReceiptsPage() {
   const me = useMe();

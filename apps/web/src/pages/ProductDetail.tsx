@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { formatPence, formatShortDate, type PriceDto, type ProductDto } from '@snackoverflow/shared';
+import { formatPence, formatShortDate, type PriceDto, type ProductDto, todayIn } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { BackButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
@@ -9,6 +9,7 @@ import { Button, Card, ErrorNote, Field, PageHeader, Pill, Select, Sheet, Spinne
 import { api, errorMessage } from '../lib/api';
 import { amountLabel, dateLabel, toneClasses, toneFor } from '../lib/format';
 import { parsePounds } from '../lib/money';
+import { canShareWithOff, shareWithOff } from '../lib/off';
 import { useLocations, useProduct, useProductStock, useProducts } from '../lib/queries';
 import { ProductForm } from './ProductForm';
 
@@ -108,6 +109,7 @@ export function ProductDetail({ id, stacked = false, onDeleted }: { id: string; 
             </p>
             <p className="mt-2 text-sm text-muted">Change a pack's date and the app learns it for next time.</p>
           </Card>
+          {me.features.offContribute && !p.isMeal && p.source !== 'off' && <OffCard product={p} />}
           <Card className="flex flex-col items-start gap-2 p-4">
             <h2 className="font-bold">Tidy up</h2>
             <Button onClick={() => setMerging(true)}>Merge into another product…</Button>
@@ -175,6 +177,44 @@ function AddPackSheet({ open, onClose, productId }: { open: boolean; onClose: ()
         </Button>
       </form>
     </Sheet>
+  );
+}
+
+/** Add a product this household named to Open Food Facts, or say when it was. */
+function OffCard({ product: p }: { product: ProductDto }) {
+  const me = useMe();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const canShare = canShareWithOff(p, me.features);
+  const add = async () => {
+    setBusy(true);
+    try {
+      const r = await shareWithOff(p.id);
+      await qc.invalidateQueries({ queryKey: ['products'] });
+      toast.show(r.message);
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="flex flex-col items-start gap-2 p-4">
+      <h2 className="font-bold">Open Food Facts</h2>
+      {p.offSharedAt ? (
+        <p className="text-muted">Added on {formatShortDate(todayIn(me.household.timeZone, new Date(p.offSharedAt)))}. Thanks for helping!</p>
+      ) : canShare && p.name ? (
+        <>
+          <p className="text-muted">Not on Open Food Facts yet. Add its name, brand, pack size and any nutrition so the next person to scan it gets them.</p>
+          <Button disabled={busy} onClick={() => void add()}>
+            Add to Open Food Facts
+          </Button>
+        </>
+      ) : (
+        <p className="text-muted">To add it, it needs a name and the barcode printed on the pack (not a shop's own label).</p>
+      )}
+    </Card>
   );
 }
 

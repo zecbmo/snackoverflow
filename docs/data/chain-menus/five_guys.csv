@@ -1,0 +1,40 @@
+item,section,serving,serving_g,kcal,fat_g,sat_fat_g,carbs_g,sugars_g,fibre_g,protein_g,salt_g
+"Bacon, Egg & Cheese Sandwich",Breakfast,1 portion,,681,39,17,42,7.7,2.0,40,3.80
+"Little Bacon, Egg & Cheese Sandwich",Breakfast,1 portion,,518,27.5,11.4,40,7,1.7,27.7,3
+Little Egg Sandwich,Breakfast,1 portion,,331,14,4.4,39,6.3,1.7,14,0.75
+Little Sausage Sandwich,Breakfast,1 portion,,396,19,6.9,40,8.6,1.7,16,1.36
+"Little Sausage, Egg and Cheese Sandwich",Breakfast,1 portion,,560,31,12,42,9.3,1.9,28,2.32
+"Sausage, Egg & Cheese Sandwich",Breakfast,1 portion,,775,47,20,46,13,2.2,42,4.01
+Bacon Burger,Burgers,1 portion,,761,43,17,36,7.2,3.2,49,2.23
+Bacon Cheeseburger,Burgers,1 portion,,904,55,24,37,8.8,3.5,56,4.07
+Cheeseburger,Burgers,1 portion,,811,49,22,39,8.6,2.8,50,3.01
+Hamburger,Burgers,1 portion,,678,39,16,35,6.8,3.4,42,1.14
+Little Bacon Burger,Burgers,1 portion,,537,27,11,,6.5,1.7,28,1.73
+Little Bacon Cheeseburger,Burgers,1 portion,,588,32,13,36,7.3,2.4,32,2.44
+Little Cheeseburger,Burgers,1 portion,,512,27,12,39,7.0,2.7,27,1.72
+Little Hamburger,Burgers,1 portion,,464,24,9.4,35,6.2,2.0,24,0.99
+Fries (Large),Fries,Large,,1509,89,12,162,2.2,14,23,2.4
+Fries (Little),Fries,Little,,659,39,5.4,70,1.0,6.3,10,1.1
+Fries (Mini),Fries,Mini,,350,21,2.84,37,0.5,3.4,5.0,0.56
+Fries (Regular),Fries,Regular,,1073,63,8.7,115,1.6,10,16,1.7
+Loaded Cajun Fries,Fries,1 portion,,771,42,9.1,79,4,9,15,3.81
+Loaded Fries,Fries,1 portion,,751,41,8.9,77,4.3,8.9,14,3.97
+Bacon Cheese Dog,Hot Dogs,1 portion,,606,38,16,36,7.6,3.1,28,4.36
+Bacon Dog,Hot Dogs,1 portion,,574,35,14,38,7.1,2.1,23,3.68
+Cheese Dog,Hot Dogs,1 portion,,531,34,15,39,7.6,1.8,22,3.54
+Hot Dog,Hot Dogs,1 portion,,483,29,12,35,6.6,2.3,18,2.78
+Americano Black,Hot Drinks,1 drink,,17,0.0,0.0,0.8,0.0,0.0,0.6,0.00
+Americano White,Hot Drinks,1 drink,,0,0,0,0,0.0,0,0,0
+Breakfast Tea,Hot Drinks,1 drink,,6,0.0,0.0,0.0,0.0,0.0,0.2,0.00
+Cappuccino,Hot Drinks,1 drink,,97,3.9,2.5,7.5,4.3,0.0,4.1,0.10
+Double Espresso,Hot Drinks,1 drink,,11,0.1,0.0,0.6,0.0,0.0,0.0,0.02
+Flat White,Hot Drinks,1 drink,,95,5.0,3.0,7.8,5.6,0.0,4.7,0.12
+Latte,Hot Drinks,1 drink,,129,5.8,3.5,9.6,7.1,0.0,5.8,0.15
+Milkshake (Little),Milkshakes,Little,,313,17,11,37,35,0,3.9,0.36
+Milkshake (Regular),Milkshakes,Regular,,625,33,22,75,69,0,7.8,0.71
+BLT,Sandwiches,1 portion,,652,41,9.9,45,8.8,3.6,22,2.67
+Cheese Veggie Sandwich,Sandwiches,1 portion,,428,14,5.9,57,15,5.9,14,2.5
+Grilled Cheese,Sandwiches,1 portion,,434,24,7.6,42,7.3,2.2,12,2.2
+Lettuce Wrap,Sandwiches,1 portion,,246,14,6,5,3.7,1.8,24,0.76
+Veggie Sandwich,Sandwiches,1 portion,,330,7.4,2.4,52,13,5.4,10,1.2
+Hash Browns,Sides,1 portion,,197,12,1.9,20,1.1,1.9,2.0,0.80

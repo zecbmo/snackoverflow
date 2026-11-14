@@ -15,6 +15,10 @@ export interface PlanTarget {
   servings: number;
   date?: CalendarDate;
   slot?: MealSlot;
+  /** Recipes: swaps picked on the recipe (line id -> ingredient used instead), kept on the meal. */
+  swaps?: Record<string, string>;
+  /** The swaps in words, to show before adding. */
+  swapNote?: string | null;
 }
 
 export function dayName(d: CalendarDate, today: CalendarDate): string {
@@ -46,6 +50,7 @@ function Inner({ target, onClose }: { target: PlanTarget; onClose: () => void })
         people: [{ userId: me.user.id, portions: Math.min(1, servings) }],
         kind: target.kind,
         ...(target.kind === 'recipe' ? { recipeId: target.id } : target.kind === 'product' ? { productId: target.id } : { stockItemId: target.id }),
+        ...(target.kind === 'recipe' && target.swaps && Object.keys(target.swaps).length ? { swaps: target.swaps } : {}),
       });
       await qc.invalidateQueries({ queryKey: ['plan'] });
       await qc.invalidateQueries({ queryKey: ['stock'] });
@@ -58,6 +63,7 @@ function Inner({ target, onClose }: { target: PlanTarget; onClose: () => void })
 
   return (
     <Sheet open onClose={onClose} title={`Plan ${target.title}`}>
+      {target.swapNote && <p className="mb-3 text-sm">With swaps: {target.swapNote}.</p>}
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Day">

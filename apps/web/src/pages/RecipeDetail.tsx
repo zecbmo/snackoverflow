@@ -2,7 +2,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { type RecipeDto, scaledLine } from '@snackoverflow/shared';
+import { type RecipeDto, type RecipeIngredientDto, scaledLine, type SwapExclusionDto } from '@snackoverflow/shared';
+import { Icon } from '../components/Icon';
+import { AddToPlanSheet, type PlanTarget } from '../components/AddToPlanSheet';
 import { BackButton } from '../components/Layout';
 import { Menu } from '../components/Menu';
 import { useToast } from '../components/Toast';
@@ -20,10 +22,85 @@ export function recipeMeta(r: RecipeDto): string {
     .join(' · ');
 }
 
-/** The ingredient list with a servings stepper; a filled dot means there's enough in stock. */
-export function RecipeIngredients({ recipe: r, servings: n, onServings }: { recipe: RecipeDto; servings: number; onServings: (n: number) => void }) {
+/** Swaps chosen on a recipe: recipe line id -> the ingredient used instead. */
+export type Swaps = Record<string, string>;
+
+/** Set or clear one line's swap. */
+export function withSwap(swaps: Swaps, lineId: string, ingredientId: string | null): Swaps {
+  const next = { ...swaps };
+  if (ingredientId) next[lineId] = ingredientId;
+  else delete next[lineId];
+  return next;
+}
+
+/** "lineId:ingredientId,..." for the cook page's address. */
+export const swapsParam = (swaps: Swaps) =>
+  Object.entries(swaps)
+    .map(([l, i]) => `${l}:${i}`)
+    .join(',');
+
+/** "Chicken thighs for chicken breasts": what's swapped, in words. */
+export function swapNote(r: RecipeDto, swaps: Swaps): string | null {
+  const parts = Object.entries(swaps).flatMap(([lineId, ingId]) => {
+    const l = r.ingredients.find((x) => x.id === lineId);
+    const o = l && [...l.swaps.close, ...l.swaps.loose].find((x) => x.ingredientId === ingId);
+    return l && o ? [`${o.name} for ${(l.ingredientName ?? l.text).toLowerCase()}`] : [];
+  });
+  return parts.length ? parts.join(', ') : null;
+}
+
+/**
+ * The ingredient list with a servings stepper; a filled dot means there's enough in stock. A line
+ * the house is short of shows a swap button when something else in stock could stand in: yellow
+ * for a close swap (same swap group), orange for a loose one (same category).
+ */
+export function RecipeIngredients({
+  recipe: r,
+  servings: n,
+  onServings,
+  swaps = {},
+  onSwap,
+}: {
+  recipe: RecipeDto;
+  servings: number;
+  onServings: (n: number) => void;
+  swaps?: Swaps;
+  onSwap?: (lineId: string, ingredientId: string | null) => void;
+}) {
   const factor = n / r.serves;
   const step = 'inline-flex size-10 items-center justify-center rounded-lg border border-line text-lg disabled:opacity-40 lg:size-7 lg:rounded-md lg:text-base';
+  // The line whose swaps are open (looked up fresh, so options taken away disappear).
+  const [choosingId, setChoosingId] = useState<string | null>(null);
+  const choosing = choosingId ? (r.ingredients.find((l) => l.id === choosingId) ?? null) : null;
+  const setChoosing = (l: RecipeIngredientDto | null) => setChoosingId(l?.id ?? null);
+  const qc = useQueryClient();
+  const toast = useToast();
+  /** "Pesto isn't a swap for stock cubes": never offer either for the other again (Undo, or Settings → Swap groups). */
+  const notASwap = async (line: RecipeIngredientDto, option: { ingredientId: string; name: string }) => {
+    try {
+      const list = await api.post<SwapExclusionDto[]>('/api/swap-exclusions', { ingredientId: line.ingredientId, otherIngredientId: option.ingredientId });
+      if (swaps[line.id] === option.ingredientId) onSwap?.(line.id, null);
+      // Close the sheet so the toast's Undo can be reached.
+      setChoosingId(null);
+      await qc.invalidateQueries({ queryKey: ['recipes'] });
+      const made = list.find((x) => x.ingredients.some((i) => i.id === option.ingredientId) && x.ingredients.some((i) => i.id === line.ingredientId));
+      const forWhat = (line.ingredientName ?? line.text).toLowerCase();
+      toast.show(`${option.name} won't be offered for ${forWhat} again.`, {
+        action: made
+          ? {
+              label: 'Undo',
+              onClick: async () => {
+                await api.del(`/api/swap-exclusions/${made.id}`);
+                await qc.invalidateQueries({ queryKey: ['recipes'] });
+              },
+            }
+          : undefined,
+      });
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
+  const hasSwaps = r.ingredients.some((l) => l.swaps.close.length || l.swaps.loose.length);
   return (
     <section aria-labelledby="ingredients-heading">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -45,7 +122,11 @@ export function RecipeIngredients({ recipe: r, servings: n, onServings }: { reci
       <ul className="divide-y divide-line text-[0.9375rem] lg:text-sm">
         {r.ingredients.map((l) => {
           const needed = l.grams === null ? null : l.grams * factor;
-          const enough = needed !== null && l.inStockGrams !== null && l.inStockGrams >= needed;
+          const swapped = swaps[l.id] ? [...l.swaps.close, ...l.swaps.loose].find((o) => o.ingredientId === swaps[l.id]) : undefined;
+          const have = swapped ? swapped.inStockGrams : l.inStockGrams;
+          const enough = needed !== null && have !== null && have >= needed;
+          const close = l.swaps.close.length > 0;
+          const canSwap = onSwap && (close || l.swaps.loose.length > 0);
           return (
             <li key={l.id} className="flex items-start gap-2.5 py-2">
               <span
@@ -57,12 +138,94 @@ export function RecipeIngredients({ recipe: r, servings: n, onServings }: { reci
                 {scaledLine(l.text, l.amount, r.serves, n)}
                 {l.optional && <span className="text-muted"> (optional)</span>}
                 {l.ingredientId && <span className="sr-only">{enough ? ' (in stock)' : ' (not enough in stock)'}</span>}
+                {swapped && <span className="block text-sm font-medium text-ink">Using {swapped.name.toLowerCase()} instead</span>}
               </span>
+              {canSwap && (
+                <button
+                  type="button"
+                  onClick={() => setChoosing(l)}
+                  aria-label={`${close ? 'Close' : 'Loose'} swaps for ${l.ingredientName ?? l.text}`}
+                  className={`-my-1 inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold lg:min-h-7 ${
+                    close ? 'bg-swap-close-soft text-swap-close-text' : 'bg-swap-loose-soft text-swap-loose-text'
+                  }`}
+                >
+                  <span aria-hidden className={`size-2 rounded-full ${close ? 'bg-swap-close' : 'bg-swap-loose'}`} />
+                  {swapped ? 'Swapped' : 'Swap'}
+                </button>
+              )}
             </li>
           );
         })}
       </ul>
-      <p className="mt-2 text-xs text-muted">Green dot: you have enough in stock.</p>
+      <p className="mt-2 text-xs text-muted">
+        Green dot: you have enough in stock.
+        {hasSwaps && onSwap && ' Swap: something else you have could stand in (yellow is a close match, orange less so).'}
+      </p>
+      {choosing && onSwap && (
+        <Sheet open onClose={() => setChoosing(null)} title={`Instead of ${(choosing.ingredientName ?? choosing.text).toLowerCase()}`}>
+          <div className="flex flex-col gap-4">
+            {!choosing.swaps.close.length && !choosing.swaps.loose.length && <p className="text-muted">Nothing else you have would do.</p>}
+            {(
+              [
+                ['close', 'Close swaps', choosing.swaps.close],
+                ['loose', 'Same kind of food', choosing.swaps.loose],
+              ] as const
+            ).map(
+              ([kind, title, options]) =>
+                options.length > 0 && (
+                  <section key={kind}>
+                    <h3 className="mb-1.5 flex items-center gap-2 text-sm font-semibold">
+                      <span aria-hidden className={`size-2 rounded-full ${kind === 'close' ? 'bg-swap-close' : 'bg-swap-loose'}`} />
+                      {title}
+                    </h3>
+                    <ul className="flex flex-col gap-2">
+                      {options.map((o) => (
+                        <li key={o.ingredientId} className="flex gap-2">
+                          <Button
+                            className="min-w-0 flex-1 justify-between"
+                            variant={swaps[choosing.id] === o.ingredientId ? 'primary' : 'outline'}
+                            onClick={() => {
+                              onSwap(choosing.id, o.ingredientId);
+                              setChoosing(null);
+                            }}
+                          >
+                            <span className="truncate">{o.name}</span>
+                            <span className="font-normal">{o.amount} in</span>
+                          </Button>
+                          <button
+                            type="button"
+                            aria-label={`${o.name} isn't a swap for ${(choosing.ingredientName ?? choosing.text).toLowerCase()}`}
+                            title="Not a good swap: don't offer it for this again"
+                            onClick={() => void notASwap(choosing, o)}
+                            className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-line text-muted hover:bg-card-muted hover:text-ink lg:size-8 lg:rounded-md"
+                          >
+                            <Icon name="close" className="size-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ),
+            )}
+            <Button
+              variant="ghost"
+              onClick={() => {
+                onSwap(choosing.id, null);
+                setChoosing(null);
+              }}
+            >
+              Use {(choosing.ingredientName ?? choosing.text).toLowerCase()} as the recipe says
+            </Button>
+            <p className="text-sm text-muted">
+              Close swaps come from your{' '}
+              <Link to="/swap-groups" className="font-semibold text-accent-text">
+                swap groups
+              </Link>
+              . Tap ✕ on one that isn&apos;t a good fit and it won&apos;t be offered for this food again.
+            </p>
+          </div>
+        </Sheet>
+      )}
     </section>
   );
 }
@@ -77,6 +240,8 @@ export function RecipeDetailPage() {
   const [batchOpen, setBatchOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fullTitle, setFullTitle] = useState(false);
+  const [swaps, setSwaps] = useState<Swaps>({});
+  const [planning, setPlanning] = useState<PlanTarget | null>(null);
   const desktop = useIsDesktop();
 
   if (recipe.isPending) return <Spinner />;
@@ -97,7 +262,7 @@ export function RecipeDetailPage() {
 
   const cookLink = (
     <Link
-      to={`/recipes/${r.id}/cook?servings=${n}`}
+      to={`/recipes/${r.id}/cook?servings=${n}${Object.keys(swaps).length ? `&swaps=${swapsParam(swaps)}` : ''}`}
       className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-ink hover:brightness-110 lg:min-h-8 lg:rounded-md lg:px-3"
     >
       Cook
@@ -107,6 +272,7 @@ export function RecipeDetailPage() {
     <Menu
       label="More for this recipe"
       items={[
+        { label: 'Add to calendar…', icon: 'calendar', onSelect: () => setPlanning({ kind: 'recipe', id: r.id, title: r.title, servings: n, swaps, swapNote: swapNote(r, swaps) }) },
         ...(desktop ? [{ label: 'Batch cook…', onSelect: () => setBatchOpen(true) }] : []),
         { label: 'Edit', icon: 'edit', onSelect: () => navigate(`/recipes/${r.id}/edit`) },
         ...(r.sourceUrl ? [{ label: 'Original recipe', icon: 'external' as const, onSelect: () => window.open(r.sourceUrl!, '_blank', 'noreferrer') }] : []),
@@ -152,7 +318,7 @@ export function RecipeDetailPage() {
         <div className="flex min-w-0 flex-col gap-4">
           <RecipeImage recipe={r} className="h-40 w-full rounded-xl lg:h-44 lg:rounded-lg" />
           <Card className="p-4 max-lg:order-2">
-            <RecipeIngredients recipe={r} servings={n} onServings={setServings} />
+            <RecipeIngredients recipe={r} servings={n} onServings={setServings} swaps={swaps} onSwap={(line, ing) => setSwaps((s) => withSwap(s, line, ing))} />
           </Card>
           <Card className="p-4 max-lg:order-1">
             <h2 className="mb-2 font-bold">Per serving</h2>
@@ -214,6 +380,7 @@ export function RecipeDetailPage() {
         </Card>
       </div>
 
+      <AddToPlanSheet target={planning} onClose={() => setPlanning(null)} />
       <BatchSheet open={batchOpen} serves={r.serves} onClose={() => setBatchOpen(false)} onGo={(portions) => navigate(`/recipes/${r.id}/cook?servings=${portions}&batch=1`)} />
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this recipe?">
         <p className="mb-4 text-muted">{r.title} will be gone for everyone. Leftovers already in stock stay.</p>

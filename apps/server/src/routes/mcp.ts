@@ -1,5 +1,5 @@
 /**
- * MCP endpoint so Claude (or another assistant) can add and fix recipes directly,
+ * MCP endpoint so Claude (or another assistant) can add and fix recipes (and unmatched recipe lines) directly,
  * e.g. from a photo of a recipe card, doing the clean-up with the user's own
  * assistant, so no API key is needed here. A minimal stateless Streamable HTTP
  * server: JSON-RPC 2.0 over POST /mcp, answered as application/json.
@@ -9,14 +9,18 @@ import { timingSafeEqual } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { type RecipeInput, recipeInput, receiptLinesInput } from '@snackoverflow/shared';
+import { FOOD_GROUPS, type RecipeInput, recipeInput, receiptLinesInput, swapGroupsSaveInput, unmatchedFixInput, unmatchedIgnoreInput } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import { receipts, users } from '../db/schema';
 import { HttpError } from '../http';
-import { draftLine, draftLines, getRecipe, listRecipes, saveRecipe } from '../services/recipes';
+import { completeRecipeLines, draftLines, getRecipe, listRecipes, saveRecipe } from '../services/recipes';
 import { loadCatalog } from '../services/catalog';
 import { theHousehold } from '../services/household';
 import { getReceipt, receiptFromText, setReceiptLines } from '../services/receipts';
+import { applyUnmatchedFixes, listUnmatched, setUnmatchedIgnored } from '../services/unmatched';
+import { listScans, saveScanRecipe, scanImages } from '../services/recipeScans';
+import { listSwapGroups, saveSwapGroups } from '../services/swapGroups';
+import { useItUpInputs } from '../services/optimiser';
 
 /** A tool result that is already MCP content (e.g. an image), not JSON to wrap in text. */
 class RawContent {
@@ -76,6 +80,8 @@ const receiptLineSchema = {
   required: ['text'],
 } as const;
 
+const NUTRITION_SCHEMA = { type: ['object', 'null'], description: 'Per 100g: kcal, and grams of protein, carbs, sugars, fat, saturates, fibre, salt.', properties: { kcal: { type: 'number' }, protein: { type: 'number' }, carbs: { type: 'number' }, sugars: { type: 'number' }, fat: { type: 'number' }, saturates: { type: 'number' }, fibre: { type: 'number' }, salt: { type: 'number' } } };
+
 const TOOLS = [
   {
     name: 'list_ingredients',
@@ -109,6 +115,108 @@ const TOOLS = [
     name: 'update_recipe',
     description: 'Replace an existing recipe completely (send every field, including all ingredients and steps). Returns the saved recipe.',
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, ...recipeProperties }, required: ['id', 'title', 'ingredients', 'steps'] },
+  },
+  {
+    name: 'list_unmatched',
+    description:
+      "List recipe lines the app can't check against stock or put on the shopping list, grouped by food. problem \"unlinked\": not linked to an ingredient; \"noWeight\": counted (\"1 sachet\") but the ingredient has no weight per item. \"noNutrition\": the ingredient has no nutrition, so recipes' calories leave it out (fix with its ingredientId and nutritionPer100g). Also returns the food groups and shelf-life categories for new ingredients. Fix with fix_unmatched, or ignore_unmatched for things never bought (water).",
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'fix_unmatched',
+    description:
+      'Fix groups from list_unmatched. Each fix links lineIds to an existing ingredientId (from list_ingredients) or to newIngredient, which is created (one with the same name as an existing ingredient reuses it). gramsPerCount sets the weight of one item on that ingredient, needed when lines count the food ("1 sachet" of curry powder is about 10g, a rump steak about 225g).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fixes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              lineIds: { type: 'array', items: { type: 'string' } },
+              ingredientId: { type: ['string', 'null'] },
+              newIngredient: {
+                type: ['object', 'null'],
+                properties: {
+                  name: { type: 'string', description: 'Short generic UK name, e.g. "Rump steak".' },
+                  foodGroup: { type: ['string', 'null'], description: 'One of the food groups from list_unmatched.' },
+                  shelfLifeCategoryId: { type: ['string', 'null'] },
+                  aisle: { type: ['string', 'null'] },
+                  gramsPerCount: { type: ['number', 'null'] },
+                  countUnit: { type: ['string', 'null'], description: 'What one item is called, e.g. "sachet".' },
+                  trackRunningLow: { type: 'boolean', description: 'True for staples used a little at a time (spices, oils).' },
+                  nutritionPer100g: NUTRITION_SCHEMA,
+                },
+                required: ['name'],
+              },
+              gramsPerCount: { type: ['number', 'null'] },
+              nutritionPer100g: NUTRITION_SCHEMA,
+            },
+            required: ['lineIds'],
+          },
+        },
+      },
+      required: ['fixes'],
+    },
+  },
+  {
+    name: 'ignore_unmatched',
+    description: 'Leave groups unmatched on purpose (by key from list_unmatched), for things never bought or stocked such as water.',
+    inputSchema: { type: 'object', properties: { keys: { type: 'array', items: { type: 'string' } } }, required: ['keys'] },
+  },
+  {
+    name: 'list_swap_groups',
+    description:
+      "List the household's swap groups (foods that can stand in for each other in a recipe, like broccoli and tenderstem broccoli) and the ingredients in no group yet, with their category. A recipe short of a food then offers the others from its group as close swaps.",
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'save_swap_groups',
+    description:
+      'Make or extend swap groups. Group foods a home cook would use instead of each other weight for weight: varieties, cuts and forms of the same thing (chicken breasts and thighs; cheddar and red leicester; onions and shallots), not just the same category (the app already offers same-category foods as looser swaps). An ingredient is in one group at most; adding it to a group moves it. With id, the foods are added to that group (replace: true makes it exactly these); without id, a group is made, or merged into one of the same name.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        groups: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: ['string', 'null'] },
+              name: { type: 'string', description: 'Short and plain, e.g. "Broccoli", "Hard cheese".' },
+              ingredientIds: { type: 'array', items: { type: 'string' } },
+              replace: { type: 'boolean' },
+            },
+            required: ['name', 'ingredientIds'],
+          },
+        },
+      },
+      required: ['groups'],
+    },
+  },
+  {
+    name: 'list_recipe_photos',
+    description:
+      'List recipe photos the household has added that still need reading (a cookbook page, or both sides of a recipe card; each entry is one recipe). Read each with get_recipe_photos, then save it with save_recipe_from_photos.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_recipe_photos',
+    description: 'Get the photos of one recipe waiting to be read. All the photos are the same recipe.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
+    name: 'save_recipe_from_photos',
+    description:
+      'Save the recipe read from a set of recipe photos (id from list_recipe_photos). Send every ingredient line and step as written; match lines to ingredient ids from list_ingredients where you can (the app matches the rest from the text). Recipe cards often give amounts for 2 and 4 people: use the smallest. The photos are deleted once it is saved.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' }, ...recipeProperties }, required: ['id', 'title', 'ingredients', 'steps'] },
+  },
+  {
+    name: 'list_food_going_off',
+    description:
+      'Food the household has that goes off within a week and no planned meal will use (earliest first), plus what else they have in. Use it to suggest or create_recipe a recipe that uses it up.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'list_receipts_to_read',
@@ -182,23 +290,8 @@ export async function mcpRoutes(app: FastifyInstance) {
     return { user: owner, household };
   }
 
-  /** Fill in amount/unit/ingredient from the text for lines the assistant left them out of. */
   async function completeLines(auth: Auth, input: RecipeInput): Promise<RecipeInput> {
-    const catalog = await loadCatalog(ctx.db, auth.household.id);
-    return {
-      ...input,
-      ingredients: input.ingredients.map((l) => {
-        if (l.ingredientId && l.amount != null) return l;
-        const d = draftLine(l.text, catalog, ctx.seed);
-        return {
-          ...l,
-          amount: l.amount ?? d.amount,
-          unit: l.unit ?? d.unit,
-          ingredientId: l.ingredientId && catalog.ingredients.has(l.ingredientId) ? l.ingredientId : d.ingredientId,
-          note: l.note ?? d.note,
-        };
-      }),
-    };
+    return completeRecipeLines(input, await loadCatalog(ctx.db, auth.household.id), ctx.seed);
   }
 
   async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -232,6 +325,75 @@ export async function mcpRoutes(app: FastifyInstance) {
         const savedId = await saveRecipe(ctx.db, auth, ctx.seed, input, id);
         ctx.live.publish(auth.household.id, 'recipes');
         return getRecipe(ctx.db, auth, savedId);
+      }
+      case 'list_unmatched': {
+        const [groups, catalog] = await Promise.all([listUnmatched(ctx.db, auth, ctx.seed.units), loadCatalog(ctx.db, auth.household.id)]);
+        return {
+          groups: groups
+            .filter((g) => !g.ignored)
+            .map((g) => ({ key: g.key, name: g.name, problem: g.problem, ingredientId: g.ingredientId, ingredientName: g.ingredientName, lines: g.lines.map((l) => ({ id: l.id, recipe: l.recipeTitle, text: l.text })) })),
+          foodGroups: FOOD_GROUPS,
+          shelfLifeCategories: [...catalog.categories.values()].map((c) => ({ id: c.id, name: c.name, examples: c.examples })),
+        };
+      }
+      case 'fix_unmatched': {
+        const parsed = unmatchedFixInput.safeParse(args);
+        if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
+        const result = await applyUnmatchedFixes(ctx.db, auth, ctx.seed.units, parsed.data.fixes);
+        ctx.live.publish(auth.household.id, 'recipes', 'ingredients', 'plan', 'shopping');
+        const left = (await listUnmatched(ctx.db, auth, ctx.seed.units)).filter((g) => !g.ignored).length;
+        return { ...result, groupsLeft: left };
+      }
+      case 'ignore_unmatched': {
+        const parsed = unmatchedIgnoreInput.safeParse({ keys: args.keys, ignored: true });
+        if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
+        await setUnmatchedIgnored(ctx.db, auth, parsed.data.keys, true);
+        ctx.live.publish(auth.household.id, 'recipes', 'household');
+        return { ok: true };
+      }
+      case 'list_swap_groups': {
+        const [groups, catalog] = await Promise.all([listSwapGroups(ctx.db, auth.household.id), loadCatalog(ctx.db, auth.household.id)]);
+        return {
+          groups,
+          ungrouped: [...catalog.ingredients.values()]
+            .filter((i) => !i.swapGroupId)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((i) => ({ id: i.id, name: i.name, category: i.foodGroup })),
+        };
+      }
+      case 'save_swap_groups': {
+        const parsed = swapGroupsSaveInput.safeParse(args);
+        if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
+        const catalog = await loadCatalog(ctx.db, auth.household.id);
+        const unknown = parsed.data.groups.flatMap((g) => g.ingredientIds).filter((id) => !catalog.ingredients.has(id));
+        if (unknown.length) throw new Error(`Not ingredients of this household: ${unknown.join(', ')}. Use ids from list_swap_groups.`);
+        const groups = await saveSwapGroups(ctx.db, auth.household.id, parsed.data.groups);
+        ctx.live.publish(auth.household.id, 'ingredients', 'recipes');
+        return groups;
+      }
+      case 'list_recipe_photos': {
+        const scans = await listScans(ctx.db, auth);
+        return scans.filter((x) => x.status !== 'done').map((x) => ({ id: x.id, photos: x.imageCount, status: x.status, error: x.error, added: x.createdAt }));
+      }
+      case 'get_recipe_photos': {
+        const id = z.string().parse(args.id);
+        const photos = await scanImages(ctx.db, auth.household.id, id);
+        if (!photos.length) throw new Error('Those photos have already been read.');
+        return new RawContent([
+          ...photos.map((p) => ({ type: 'image', data: p.data.toString('base64'), mimeType: p.type })),
+          { type: 'text', text: `These ${photos.length} photo(s) are one recipe. Read it, then call save_recipe_from_photos with id "${id}".` },
+        ]);
+      }
+      case 'save_recipe_from_photos': {
+        const id = z.string().parse(args.id);
+        const parsed = recipeInput.safeParse(args);
+        if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
+        const recipeId = await saveScanRecipe(ctx, auth, id, parsed.data);
+        return getRecipe(ctx.db, auth, recipeId);
+      }
+      case 'list_food_going_off': {
+        const { goingOff, alsoHave, today } = await useItUpInputs(ctx.db, auth, ctx.now(), ctx.config.PRICING_ENABLED);
+        return { today, goingOff: goingOff.map(({ ingredientId, name, amount, bestBefore }) => ({ ingredientId, name, amount, bestBefore })), alsoHave };
       }
       case 'list_receipts_to_read': {
         const rows = await ctx.db
@@ -289,7 +451,7 @@ export async function mcpRoutes(app: FastifyInstance) {
             capabilities: { tools: {} },
             serverInfo: { name: 'snack-overflow', version: '0.1.0' },
             instructions:
-              "Snack Overflow is a household food app. Use list_ingredients and parse_ingredient_lines to match recipe lines to the household's ingredients, then create_recipe to save.",
+              "Snack Overflow is a household food app. Use list_ingredients and parse_ingredient_lines to match recipe lines to the household's ingredients, then create_recipe to save. To tidy up recipe lines that aren't linked to stock, use list_unmatched, then fix_unmatched or ignore_unmatched. To set up swaps (foods that stand in for each other), use list_swap_groups and save_swap_groups. Recipe photos waiting to be read: list_recipe_photos, get_recipe_photos, save_recipe_from_photos.",
           };
           break;
         }

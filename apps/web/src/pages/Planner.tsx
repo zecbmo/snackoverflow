@@ -193,6 +193,12 @@ export function PlannerPage() {
       <span aria-hidden className={`mt-1 size-2 shrink-0 rounded-full ${e.status === 'cooked' ? 'bg-fresh-green' : e.status === 'skipped' ? 'bg-transparent' : 'border border-muted'} ${compact ? '' : 'mt-0'}`} />
       <span className="min-w-0 flex-1">
         <span className={`${compact ? 'line-clamp-2' : 'block text-[1.0625rem]'} ${e.status === 'skipped' ? 'text-muted line-through' : ''}`}>{e.title}</span>
+        {e.swaps.length > 0 && (
+          <span className={`mt-0.5 flex items-center gap-1 text-muted ${compact ? 'text-[0.6875rem]' : 'text-sm'}`}>
+            <Icon name="move" className="size-3 shrink-0" />
+            <span className={compact ? 'line-clamp-1' : ''}>With {e.swaps.map((x) => `${x.to.toLowerCase()} for ${x.from.toLowerCase()}`).join(', ')}</span>
+          </span>
+        )}
         {e.batch ? (
           <span className={`mt-0.5 block font-medium text-accent-text ${compact ? 'text-[0.6875rem]' : 'text-sm'}`}>Batch cook</span>
         ) : (
@@ -894,6 +900,20 @@ function EntrySheet({ entry: initial, viewerId, members, onClose }: { entry: Pla
           </Button>
         </div>
       ) : (
+        <>
+        {entry.swaps.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <Icon name="move" className="size-4 text-muted" />
+            <span className="flex-1">
+              Swapped: {entry.swaps.map((x) => `${x.to} for ${x.from.toLowerCase()}`).join(', ')}.
+            </span>
+            {entry.status !== 'cooked' && (
+              <Button size="sm" variant="ghost" onClick={() => void run(() => api.patch(`/api/plan/${entry.id}`, { swaps: null }), 'Back to the recipe as written.')}>
+                Undo swaps
+              </Button>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           {entry.status !== 'cooked' &&
             (entry.kind === 'recipe' && entry.recipeId ? (
@@ -926,6 +946,7 @@ function EntrySheet({ entry: initial, viewerId, members, onClose }: { entry: Pla
             </Link>
           )}
         </div>
+        </>
       )}
     </Sheet>
   );

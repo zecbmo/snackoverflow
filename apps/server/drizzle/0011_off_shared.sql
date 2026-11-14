@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "off_shared_at" timestamp with time zone;

@@ -6,7 +6,7 @@ import { api, errorMessage } from '../lib/api';
 import { dayName } from './AddToPlanSheet';
 import { useMe } from './Layout';
 import { useToast } from './Toast';
-import { Button, Card, ErrorNote, Field, Select, Sheet, Spinner } from './ui';
+import { Button, Card, ErrorNote, Field, Select, Sheet, Spinner, TextInput, Toggle } from './ui';
 
 interface MealOption {
   stockItemId: string;
@@ -144,12 +144,19 @@ export function PlanWeekSheet({ open, onClose, from, to, defaultServings }: { op
   const [servings, setServings] = useState(defaultServings);
   const [picks, setPicks] = useState<Pick[] | null>(null);
   const [busy, setBusy] = useState(false);
+  // With AI: the plan can follow a wish ("fish twice, something quick on Wednesday").
+  const [withAi, setWithAi] = useState(false);
+  const [wish, setWish] = useState('');
   const start = from < me.today ? me.today : from;
 
   const propose = async () => {
     setBusy(true);
     try {
-      setPicks(await api.post<Pick[]>('/api/optimiser/plan-week', { from: start, to, slots: [...slots], servings }));
+      setPicks(
+        withAi
+          ? await api.post<Pick[]>('/api/optimiser/plan-week-ai', { from: start, to, slots: [...slots], request: wish.trim() || null })
+          : await api.post<Pick[]>('/api/optimiser/plan-week', { from: start, to, slots: [...slots], servings }),
+      );
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     } finally {
@@ -229,6 +236,22 @@ export function PlanWeekSheet({ open, onClose, from, to, defaultServings }: { op
               </button>
             </div>
           </div>
+          {me.features.ai && (
+            <div className="flex flex-col gap-3 rounded-lg border border-line p-3">
+              <div className="flex min-h-11 items-center justify-between gap-3">
+                <span>
+                  <span className="block font-medium">Plan it with AI</span>
+                  <span className="block text-sm text-muted">Weighs what you fancy, calories and variety too.</span>
+                </span>
+                <Toggle checked={withAi} onChange={setWithAi} label="Plan it with AI" />
+              </div>
+              {withAi && (
+                <Field label="Anything you fancy?" hint="Optional, e.g. fish twice, something quick on Wednesday, no curry.">
+                  {(id) => <TextInput id={id} value={wish} maxLength={500} onChange={(e) => setWish(e.target.value)} />}
+                </Field>
+              )}
+            </div>
+          )}
           <Button variant="primary" size="lg" disabled={busy || slots.size === 0} onClick={() => void propose()}>
             {busy ? 'Thinking…' : 'Make a plan'}
           </Button>

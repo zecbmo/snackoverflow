@@ -7,7 +7,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
-import type { RecipeDraftDto } from '@snackoverflow/shared';
+import { FOOD_GROUPS, ingredientInput, type Nutrition, type RecipeDraftDto, type UnmatchedGroupDto, type UnmatchedSuggestionDto } from '@snackoverflow/shared';
 import type { Config } from '../config';
 import { badRequest, HttpError } from '../http';
 import type { Catalog } from './catalog';
@@ -119,6 +119,147 @@ export async function tidyRecipe(config: Config, draft: RecipeDraftDto, catalog:
   return applyTidy(draft, response.parsed_output, catalog);
 }
 
+// --- Unmatched recipe lines -----------------------------------------------------------
+
+/** Typical nutrition per 100g, as the model gives it. */
+export const Per100g = z
+  .object({
+    kcal: z.number(),
+    protein: z.number(),
+    carbs: z.number(),
+    sugars: z.number(),
+    fat: z.number(),
+    saturates: z.number(),
+    fibre: z.number(),
+    salt: z.number(),
+  })
+  .nullable();
+
+const UnmatchedAnswer = z.object({
+  suggestions: z.array(
+    z.object({
+      key: z.string(),
+      action: z.enum(['link', 'create', 'ignore']),
+      ingredientId: z.string().nullable(),
+      newIngredient: z
+        .object({
+          name: z.string(),
+          foodGroup: z.enum(FOOD_GROUPS).nullable(),
+          shelfLifeCategoryId: z.string().nullable(),
+          aisle: z.string().nullable(),
+          gramsPerCount: z.number().nullable(),
+          countUnit: z.string().nullable(),
+          trackRunningLow: z.boolean(),
+          nutritionPer100g: Per100g,
+        })
+        .nullable(),
+      gramsPerCount: z.number().nullable(),
+      nutritionPer100g: Per100g,
+      reason: z.string(),
+    }),
+  ),
+});
+type UnmatchedAnswerT = z.infer<typeof UnmatchedAnswer>;
+
+const UNMATCHED_SYSTEM = [
+  'You fix recipe ingredient lines in a UK household food app so they can be checked against stock and put on the shopping list.',
+  'Each group is lines from the household\'s recipes naming the same food. For each group return one suggestion with its key:',
+  '- problem "unlinked": "link" to an existing ingredient id when it is clearly that food (a cut, brand or variety of it counts: "21 Day Aged British Rump Steaks" is not Beef mince, but "lean minced beef" is), else "create" a new generic ingredient.',
+  '  New ingredients get a short generic UK name ("Rump steak", "Curry powder"), a food group, the closest shelf-life category id, a shop aisle, and for counted things the grams per item and its name ("sachet", "steak").',
+  '  Set trackRunningLow true for cupboard staples used a little at a time (spices, dried herbs, oils, stock cubes).',
+  '- problem "noWeight": the lines count the food ("1 sachet") but the ingredient has no weight per item. "link" to the same ingredient id with gramsPerCount: a typical UK weight for one (a spice sachet about 10g, a rump steak about 225g).',
+  '- problem "noNutrition": "link" to the same ingredient id with nutritionPer100g: typical UK values per 100g as sold (raw for meat and veg), from food labels or McCance and Widdowson.',
+  'New ingredients also get nutritionPer100g. Values: kcal, and grams of protein, carbs, sugars, fat, saturates, fibre and salt.',
+  '- "ignore" only for things never bought or stocked: water, ice, "salt and pepper to taste" when it names two foods, serving suggestions.',
+  'Only use ids from the lists given; never invent ids. Keep "reason" to a few words.',
+].join('\n');
+
+/** Nutrition per 100g that adds up: nothing negative, no more than 100g of anything, at most 900 kcal. */
+export function checkNutrition(n: z.infer<typeof Per100g> | undefined): Nutrition | null {
+  if (!n) return null;
+  const grams = [n.protein, n.carbs, n.sugars, n.fat, n.saturates, n.fibre, n.salt];
+  if (!Number.isFinite(n.kcal) || n.kcal < 0 || n.kcal > 900 || grams.some((g) => !Number.isFinite(g) || g < 0 || g > 100)) return null;
+  if (n.sugars > n.carbs + 0.5 || n.saturates > n.fat + 0.5 || n.protein + n.carbs + n.fat > 101) return null;
+  const r = (x: number) => Math.round(x * 10) / 10;
+  return { kcal: Math.round(n.kcal), protein: r(n.protein), carbs: r(n.carbs), sugars: r(n.sugars), fat: r(n.fat), saturates: r(n.saturates), fibre: r(n.fibre), salt: r(n.salt) };
+}
+
+/** Check the model's suggestions against the groups and catalogue; anything unusable is dropped. */
+export function checkUnmatchedSuggestions(answer: UnmatchedAnswerT, groups: UnmatchedGroupDto[], catalog: Catalog): UnmatchedSuggestionDto[] {
+  const byKey = new Map(groups.map((g) => [g.key, g]));
+  const out: UnmatchedSuggestionDto[] = [];
+  const weight = (n: number | null) => (n !== null && Number.isFinite(n) && n > 0 && n <= 100_000 ? Math.round(n * 10) / 10 : null);
+  for (const s of answer.suggestions) {
+    const g = byKey.get(s.key);
+    if (!g || out.some((o) => o.key === s.key)) continue;
+    const base = { key: s.key, reason: s.reason.trim().slice(0, 200), ingredientId: null, ingredientName: null, newIngredient: null, gramsPerCount: null, nutritionPer100g: null };
+    if (s.action === 'ignore') {
+      out.push({ ...base, action: 'ignore' });
+    } else if (s.action === 'link') {
+      const ing = s.ingredientId ? catalog.ingredients.get(s.ingredientId) : undefined;
+      if (!ing) continue;
+      // A counted food needs a weight per item; keep the one it has unless the model gives one.
+      const gramsPerCount = weight(s.gramsPerCount);
+      const nutrition = checkNutrition(s.nutritionPer100g);
+      if (g.problem === 'noWeight' && (ing.id !== g.ingredientId || !gramsPerCount)) continue;
+      if (g.problem === 'noNutrition' && (ing.id !== g.ingredientId || !nutrition)) continue;
+      out.push({
+        ...base,
+        action: 'link',
+        ingredientId: ing.id,
+        ingredientName: ing.name,
+        gramsPerCount: ing.gramsPerCount ? null : gramsPerCount,
+        nutritionPer100g: ing.nutritionPer100g?.kcal != null ? null : nutrition,
+      });
+    } else if (s.newIngredient && g.problem === 'unlinked') {
+      const n = s.newIngredient;
+      const parsed = ingredientInput.safeParse({
+        name: n.name,
+        foodGroup: n.foodGroup,
+        shelfLifeCategoryId: n.shelfLifeCategoryId && catalog.categories.has(n.shelfLifeCategoryId) ? n.shelfLifeCategoryId : null,
+        aisle: n.aisle?.trim().slice(0, 60) || null,
+        gramsPerCount: weight(n.gramsPerCount),
+        countUnit: n.countUnit?.trim().slice(0, 30) || null,
+        trackRunningLow: n.trackRunningLow,
+        nutritionPer100g: checkNutrition(n.nutritionPer100g),
+      });
+      if (!parsed.success) continue;
+      out.push({ ...base, action: 'create', newIngredient: parsed.data });
+    }
+  }
+  return out;
+}
+
+/** Ask the model how to fix unmatched recipe lines. Nothing is changed: the household reviews and applies. */
+export async function suggestUnmatchedFixes(config: Config, groups: UnmatchedGroupDto[], catalog: Catalog, f?: typeof fetch): Promise<UnmatchedSuggestionDto[]> {
+  if (!config.AI_API_KEY) throw badRequest(NOT_SET_UP);
+  if (!groups.length) return [];
+  const client = new Anthropic({ apiKey: config.AI_API_KEY, timeout: 120_000, maxRetries: 1, ...(f ? { fetch: f } : {}) });
+  const input = {
+    groups: groups.map((g) => ({ key: g.key, problem: g.problem, ingredientId: g.ingredientId, ingredientName: g.ingredientName, lines: g.lines.slice(0, 5).map((l) => l.text) })),
+    ingredients: [...catalog.ingredients.values()].map((i) => ({ id: i.id, name: i.name, foodGroup: i.foodGroup })),
+    shelfLifeCategories: [...catalog.categories.values()].map((c) => ({ id: c.id, name: c.name, examples: c.examples })),
+  };
+  let response;
+  try {
+    response = await client.beta.messages.parse({
+      model: config.AI_MODEL ?? DEFAULT_AI_MODEL,
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: betaZodOutputFormat(UnmatchedAnswer) },
+      system: UNMATCHED_SYSTEM,
+      messages: [{ role: 'user', content: JSON.stringify(input) }],
+    });
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) throw new HttpError(502, 'The AI key was rejected. Check AI_API_KEY.');
+    if (e instanceof Anthropic.RateLimitError) throw new HttpError(502, 'The AI service is busy. Try again in a minute.');
+    throw new HttpError(502, "Couldn't reach the AI service. Nothing was changed; try again later.");
+  }
+  if (response.stop_reason === 'refusal' || !response.parsed_output) throw new HttpError(502, "The AI couldn't suggest fixes. You can still fix these by hand.");
+  return checkUnmatchedSuggestions(response.parsed_output, groups, catalog);
+}
+
 // --- Receipts -----------------------------------------------------------------------
 
 const ReadReceipt = z.object({
@@ -217,4 +358,19 @@ export async function readReceiptTextWithAi(config: Config, text: string, f?: ty
         pricePence: l.pricePence !== null && Number.isFinite(l.pricePence) && l.pricePence >= 0 ? Math.round(l.pricePence) : null,
       })),
   };
+}
+
+// --- Settings ---------------------------------------------------------------------------
+
+/** Check a key works with a model, without spending anything (looks the model up). */
+export async function testAiKey(apiKey: string, model: string, f?: typeof fetch): Promise<void> {
+  const client = new Anthropic({ apiKey, timeout: 20_000, maxRetries: 0, ...(f ? { fetch: f } : {}) });
+  try {
+    await client.models.retrieve(model);
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) throw badRequest('That key was rejected. Check you copied all of it.');
+    if (e instanceof Anthropic.PermissionDeniedError) throw badRequest("That key can't use the API. Check its workspace in the Claude Console.");
+    if (e instanceof Anthropic.NotFoundError) throw badRequest(`The key works, but there's no model called "${model}".`);
+    throw new HttpError(502, "Couldn't reach the AI service to check the key. Try again later.");
+  }
 }

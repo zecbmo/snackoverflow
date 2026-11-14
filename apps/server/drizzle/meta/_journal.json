@@ -78,6 +78,34 @@
       "when": 1794577111795,
       "tag": "0010_review2_portion_split",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794584873607,
+      "tag": "0011_off_shared",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794596437978,
+      "tag": "0012_ai_settings_photos_swaps",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794600606727,
+      "tag": "0013_swap_exclusions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794603096630,
+      "tag": "0014_chains",
+      "breakpoints": true
     }
   ]
 }

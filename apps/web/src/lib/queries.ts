@@ -2,6 +2,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type {
   CalorieStatsDto,
+  ChainDto,
+  ChainMenuItemDto,
   CookPlanDto,
   SpendingDto,
   StatsPeriod,
@@ -25,6 +27,7 @@ import type {
   ShoppingItemDto,
   StockEventDto,
   StockItemDto,
+  UnmatchedGroupDto,
   UserDto,
 } from '@snackoverflow/shared';
 import { api } from './api';
@@ -45,7 +48,8 @@ export const keys = {
   devices: ['users', 'devices'] as const,
   recipes: ['recipes'] as const,
   recipe: (id: string) => ['recipes', id] as const,
-  cookPlan: (id: string, servings: number) => ['stock', 'cook-plan', id, servings] as const,
+  unmatched: ['recipes', 'unmatched'] as const,
+  cookPlan: (id: string, servings: number, extra = '') => ['stock', 'cook-plan', id, servings, extra] as const,
   cooks: ['stock', 'cooks'] as const,
   plan: (from: string, to: string, person: string) => ['plan', from, to, person] as const,
   earmarks: ['plan', 'earmarks'] as const,
@@ -77,10 +81,12 @@ export const useNotificationSettings = () =>
   useQuery({ queryKey: keys.notifications, queryFn: () => api.get<NotificationSettingsDto>('/api/me/notifications') });
 export const useInbox = () => useQuery({ queryKey: keys.inbox, queryFn: () => api.get<NotificationListDto>('/api/notifications') });
 export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api.get<DeviceDto[]>('/api/devices') });
+export const useUnmatched = () => useQuery({ queryKey: keys.unmatched, queryFn: () => api.get<UnmatchedGroupDto[]>('/api/unmatched') });
 export const useRecipes = () => useQuery({ queryKey: keys.recipes, queryFn: () => api.get<RecipeSummaryDto[]>('/api/recipes') });
 export const useRecipe = (id: string) => useQuery({ queryKey: keys.recipe(id), queryFn: () => api.get<RecipeDto>(`/api/recipes/${id}`), enabled: Boolean(id) });
-export const useCookPlan = (id: string, servings: number) =>
-  useQuery({ queryKey: keys.cookPlan(id, servings), queryFn: () => api.get<CookPlanDto>(`/api/recipes/${id}/cook-plan?servings=${servings}`) });
+/** `extra`: "&entry=…" to cook a planned meal with its swaps, or "&swaps=…" picked on the recipe. */
+export const useCookPlan = (id: string, servings: number, extra = '') =>
+  useQuery({ queryKey: keys.cookPlan(id, servings, extra), queryFn: () => api.get<CookPlanDto>(`/api/recipes/${id}/cook-plan?servings=${servings}${extra}`) });
 export interface CookRow {
   id: string;
   recipeId: string | null;
@@ -122,3 +128,22 @@ export const useWasteReport = (period: StatsPeriod) =>
 /** null while pricing is off. Receipts change it, and confirming one refreshes 'stock'. */
 export const useSpending = (period: StatsPeriod) =>
   useQuery({ queryKey: ['stock', 'spending', period], queryFn: () => api.get<SpendingDto | null>(`/api/stats/spending?period=${period}`) });
+
+/** Fast food and takeaway chains: reference data that only changes when the server is updated. */
+const CHAIN_STALE = 60 * 60_000;
+export const useChains = () => useQuery({ queryKey: ['chains'], queryFn: () => api.get<ChainDto[]>('/api/chains'), staleTime: CHAIN_STALE });
+export const useChainMenu = (key: string) =>
+  useQuery({
+    queryKey: ['chains', key],
+    queryFn: () => api.get<{ chain: ChainDto; items: ChainMenuItemDto[] }>(`/api/chains/${encodeURIComponent(key)}`),
+    enabled: Boolean(key),
+    staleTime: CHAIN_STALE,
+  });
+export const useChainSearch = (q: string, limit = 200) =>
+  useQuery({
+    queryKey: ['chains', 'search', q, limit],
+    queryFn: () => api.get<ChainMenuItemDto[]>(`/api/chain-items?q=${encodeURIComponent(q)}&limit=${limit}`),
+    enabled: q.trim().length > 0,
+    staleTime: CHAIN_STALE,
+    placeholderData: (prev) => prev,
+  });

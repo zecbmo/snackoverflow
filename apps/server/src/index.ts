@@ -8,6 +8,7 @@ import { createMailer } from './notify/email';
 import { createPushSender } from './notify/push';
 import { migrationsDir, seedDataDir, webDistDir } from './paths';
 import { startScheduler } from './scheduler';
+import { loadChainSeed, syncChains } from './services/chains';
 import { ensureFirstAdmin } from './services/household';
 import { createOff } from './services/off';
 
@@ -19,7 +20,14 @@ async function main() {
     config,
     seed: loadSeedData(seedDataDir(config.SEED_DATA_DIR)),
     live: new LiveHub(),
-    off: createOff({ baseUrl: config.OFF_BASE_URL, userAgent: config.OFF_USER_AGENT }),
+    off: createOff({
+      baseUrl: config.OFF_BASE_URL,
+      sisterUrls: config.OFF_SISTER_URLS,
+      userAgent: config.OFF_USER_AGENT,
+      contributor:
+        config.OFF_CONTRIBUTE_USER_ID && config.OFF_CONTRIBUTE_PASSWORD ? { userId: config.OFF_CONTRIBUTE_USER_ID, password: config.OFF_CONTRIBUTE_PASSWORD } : null,
+      country: config.OFF_COUNTRY,
+    }),
     mailer: createMailer(config),
     push: createPushSender(config),
     now: () => new Date(),
@@ -31,6 +39,10 @@ async function main() {
   });
 
   await syncSeedData(ctx.db, ctx.seed);
+  const chainSeed = loadChainSeed(seedDataDir(config.SEED_DATA_DIR));
+  for (const p of chainSeed.problems) app.log.warn(`chain menus: ${p}`);
+  const { updated } = await syncChains(ctx.db, chainSeed.chains);
+  if (updated) app.log.info({ updated }, 'updated chain menus');
   const admin = await ensureFirstAdmin(ctx);
   if (admin) app.log.info({ email: admin.email }, 'created the first admin from ADMIN_EMAIL');
 

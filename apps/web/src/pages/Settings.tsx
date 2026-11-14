@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
-import type { BackupDto, HouseholdSettings, ShelfLifeCategoryDto } from '@snackoverflow/shared';
+import type { AssistantSettingsDto, BackupDto, HouseholdSettings, ShelfLifeCategoryDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
@@ -24,23 +24,7 @@ export function SettingsPage() {
           <PricesCard />
           <SuggestionsCard />
           {isAdmin && me.features.backups && <BackupsCard />}
-          <Card className="p-4" id="assistants">
-            <h2 className="mb-2 font-bold">Recipes and assistants</h2>
-            <p className="text-sm">
-              <span className="font-semibold">AI clean-up of imported recipes:</span>{' '}
-              {me.features.ai ? 'on. Use "Tidy up with AI" after importing a link.' : 'off. Set AI_API_KEY on the server to turn it on.'}
-            </p>
-            <p className="mt-2 text-sm">
-              <span className="font-semibold">Claude and other assistants (MCP):</span>{' '}
-              {me.features.mcp ? (
-                <>
-                  on. Connect your assistant to <code className="rounded bg-card-muted px-1">{`${location.origin}/mcp`}</code> with the MCP_TOKEN from the server's settings.
-                </>
-              ) : (
-                'off. Set MCP_TOKEN on the server to let your own assistant add and fix recipes, no API key needed.'
-              )}
-            </p>
-          </Card>
+          <AssistantsCard />
           {isAdmin && (
             <Card className="p-4" id="data">
               <h2 className="font-bold">Your data</h2>
@@ -54,6 +38,172 @@ export function SettingsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/** AI key and model, and the MCP token for your own assistant. Admins set them; everyone sees what's on. */
+function AssistantsCard() {
+  const me = useMe();
+  const isAdmin = me.user.role === 'admin';
+  const qc = useQueryClient();
+  const toast = useToast();
+  const settings = useQuery({ queryKey: ['household', 'assistants'], queryFn: () => api.get<AssistantSettingsDto>('/api/settings/assistants'), enabled: isAdmin });
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const s = settings.data;
+
+  const run = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      await Promise.all([qc.invalidateQueries({ queryKey: ['household', 'assistants'] }), qc.invalidateQueries({ queryKey: keys.session })]);
+      toast.show(done);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveAi = (e: FormEvent) => {
+    e.preventDefault();
+    const body: { apiKey?: string; model?: string | null } = {};
+    if (apiKey.trim()) body.apiKey = apiKey.trim();
+    if (model !== null && s?.ai.modelSource !== 'server') body.model = model.trim() || null;
+    void run(async () => {
+      await api.put('/api/settings/ai', body);
+      setApiKey('');
+      setModel(null);
+    }, 'AI is set up.');
+  };
+  const command = token && s ? `claude mcp add --transport http snack-overflow ${s.mcp.url} --header "Authorization: Bearer ${token}"` : '';
+  const copy = (text: string) => void navigator.clipboard?.writeText(text).then(() => toast.show('Copied.'));
+
+  if (!isAdmin) {
+    return (
+      <Card className="p-4" id="assistants">
+        <h2 className="mb-2 font-bold">AI and assistants</h2>
+        <p className="text-sm">
+          AI features are {me.features.ai ? 'on' : 'off'}. Your own assistant (MCP) is {me.features.mcp ? 'on' : 'off'}. An admin can change these.
+        </p>
+      </Card>
+    );
+  }
+  return (
+    <Card className="flex flex-col gap-5 p-4" id="assistants">
+      <h2 className="font-bold">AI and assistants</h2>
+      {!s ? (
+        <Spinner />
+      ) : (
+        <>
+          <form onSubmit={saveAi} className="flex flex-col gap-3">
+            <div>
+              <h3 className="font-semibold">AI (an Anthropic API key)</h3>
+              <p className="text-sm text-muted">
+                Tidies imported recipes, reads receipts and recipe photos, fills in unknown products, and suggests fixes, recipes and meal plans. It only runs when you
+                tap something. {s.ai.source ? `On, with the key ending ${s.ai.keyHint}${s.ai.source === 'server' ? ' (set by the server)' : ''}.` : 'Off.'}
+              </p>
+            </div>
+            {s.ai.source !== 'server' && (
+              <Field label={s.ai.source ? 'New API key' : 'API key'} hint="From the Claude Console (console.anthropic.com). Stored encrypted and never shown again.">
+                {(id) => <TextInput id={id} type="password" autoComplete="off" placeholder="sk-ant-…" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />}
+              </Field>
+            )}
+            <Field label="Model" hint={s.ai.modelSource === 'server' ? 'Set by the server (AI_MODEL).' : `Leave blank for ${s.ai.defaultModel}.`}>
+              {(id) => (
+                <TextInput
+                  id={id}
+                  disabled={s.ai.modelSource === 'server'}
+                  placeholder={s.ai.defaultModel}
+                  value={model ?? (s.ai.modelSource ? s.ai.model : '')}
+                  onChange={(e) => setModel(e.target.value)}
+                />
+              )}
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" variant="primary" disabled={busy || (!apiKey.trim() && model === null)}>
+                Save
+              </Button>
+              {s.ai.source && (
+                <Button disabled={busy} onClick={() => void run(() => api.post('/api/settings/ai/test', apiKey.trim() ? { apiKey: apiKey.trim() } : {}), 'The key works.')}>
+                  Test key
+                </Button>
+              )}
+              {s.ai.source === 'settings' && (
+                <Button variant="danger" disabled={busy} onClick={() => void run(() => api.put('/api/settings/ai', { apiKey: null }), 'AI is off.')}>
+                  Remove key
+                </Button>
+              )}
+            </div>
+          </form>
+
+          <div className="flex flex-col gap-3 border-t border-line pt-4">
+            <div>
+              <h3 className="font-semibold">Your own assistant (MCP)</h3>
+              <p className="text-sm text-muted">
+                Lets Claude (the app or Claude Code) add recipes, read photos and receipts, and fix unmatched ingredients using your own Claude plan, with no API key.{' '}
+                {s.mcp.source ? `On, with the token ending ${s.mcp.tokenHint}${s.mcp.source === 'server' ? ' (set by the server)' : ''}.` : 'Off.'}
+              </p>
+            </div>
+            {s.mcp.source && (
+              <p className="text-sm">
+                Address: <code className="rounded bg-card-muted px-1">{s.mcp.url}</code>
+              </p>
+            )}
+            {token && (
+              <div className="flex flex-col gap-2 rounded-lg border border-accent bg-accent-soft/40 p-3 text-sm">
+                <p className="font-semibold">Copy this token now. It won&apos;t be shown again.</p>
+                <code className="break-all rounded bg-card px-2 py-1">{token}</code>
+                <p>To connect Claude Code, run:</p>
+                <code className="break-all rounded bg-card px-2 py-1">{command}</code>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => copy(token)}>
+                    <Icon name="copy" className="size-4" /> Copy token
+                  </Button>
+                  <Button size="sm" onClick={() => copy(command)}>
+                    <Icon name="copy" className="size-4" /> Copy command
+                  </Button>
+                </div>
+              </div>
+            )}
+            {s.mcp.source !== 'server' && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={s.mcp.source ? 'outline' : 'primary'}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(
+                      async () => setToken((await api.post<{ token: string }>('/api/settings/mcp-token', {})).token),
+                      s.mcp.source ? 'New token made. Give it to your assistant.' : 'MCP is on.',
+                    )
+                  }
+                >
+                  {s.mcp.source ? 'Make a new token' : 'Turn on'}
+                </Button>
+                {s.mcp.source && (
+                  <Button
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await api.del('/api/settings/mcp-token');
+                        setToken(null);
+                      }, 'MCP is off.')
+                    }
+                  >
+                    Turn off
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          <ErrorNote error={error ?? settings.error} />
+        </>
+      )}
+    </Card>
   );
 }
 

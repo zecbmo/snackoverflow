@@ -1,6 +1,6 @@
 /** API response shapes shared by the server and the web app. */
 import type { CalendarDate } from './dates';
-import type { Channel, HouseholdSettings, NotificationPrefs, Nutrition, Role } from './schemas';
+import type { Channel, HouseholdSettings, IngredientInput, NotificationPrefs, Nutrition, Role } from './schemas';
 import type { LocationType, ShelfLife, StockState } from './shelfLife';
 import type { DisplayUnit } from './units';
 import type { MealSlot } from './shopping';
@@ -33,6 +33,14 @@ export interface FeaturesDto {
   ai: boolean;
   /** The MCP endpoint for assistants is on (MCP_TOKEN); it lives at APP_URL/mcp. */
   mcp: boolean;
+  /** Products people name can be added to Open Food Facts (OFF_CONTRIBUTE_* set). */
+  offContribute: boolean;
+}
+
+/** Settings → AI and assistants (admins). Keys and tokens are never sent back, only their last characters. */
+export interface AssistantSettingsDto {
+  ai: { source: 'server' | 'settings' | null; keyHint: string | null; model: string; modelSource: 'server' | 'settings' | null; defaultModel: string };
+  mcp: { source: 'server' | 'settings' | null; tokenHint: string | null; url: string };
 }
 
 export interface SessionDto {
@@ -78,6 +86,7 @@ export interface IngredientDto {
   shelfLife: ShelfLife;
   /** Days set on this ingredient itself; null means "from the category". */
   overrides: Pick<ShelfLife, 'closedDays' | 'openedDays' | 'frozenDays' | 'defrostedDays'>;
+  swapGroupId: string | null;
 }
 
 export interface ProductDto {
@@ -107,6 +116,17 @@ export interface ProductDto {
   foodGroup: string | null;
   /** The product's own category, when set (for editing). */
   ownFoodGroup: string | null;
+  /** When this household added it to Open Food Facts. */
+  offSharedAt: string | null;
+}
+
+/** After adding a product to Open Food Facts. */
+export interface OffShareResultDto {
+  product: ProductDto;
+  /** Barcodes added. */
+  added: string[];
+  /** Barcodes Open Food Facts already had (left as they were). */
+  alreadyThere: string[];
 }
 
 export interface StockItemDto {
@@ -258,6 +278,41 @@ export interface RecipeIngredientDto {
   grams: number | null;
   /** Grams of this ingredient in stock right now (all packs), when known. */
   inStockGrams: number | null;
+  /**
+   * When there isn't enough in stock: other food in stock that could stand in. `close` is from the
+   * same swap group (tenderstem for broccoli), `loose` from the same category (pork for chicken).
+   */
+  swaps: { close: SwapOptionDto[]; loose: SwapOptionDto[] };
+}
+
+export interface SwapOptionDto {
+  ingredientId: string;
+  name: string;
+  inStockGrams: number;
+  /** "300g", "2 tins": the stock said the way the food is measured. */
+  amount: string;
+}
+
+/** An AI suggestion for a swap group, to review: a new group, or foods to add to an existing one. */
+export interface SwapGroupSuggestionDto {
+  /** An existing group to add these to; null for a new group. */
+  groupId: string | null;
+  name: string;
+  /** The foods to add (for an existing group, only ones not in it yet). */
+  ingredients: { id: string; name: string }[];
+  reason: string;
+}
+
+/** Two foods never offered as a swap for each other ("Pesto" and "Stock cubes"). */
+export interface SwapExclusionDto {
+  id: string;
+  ingredients: [{ id: string; name: string }, { id: string; name: string }];
+}
+
+export interface SwapGroupDto {
+  id: string;
+  name: string;
+  ingredients: { id: string; name: string }[];
 }
 
 export interface RecipeSummaryDto {
@@ -284,6 +339,72 @@ export interface RecipeDto extends RecipeSummaryDto {
 }
 
 /** An imported or AI-tidied recipe, not yet saved, for the review screen. */
+/** A recipe line that can't be checked against stock or put on the shopping list. */
+export interface UnmatchedLineDto {
+  id: string;
+  recipeId: string;
+  recipeTitle: string;
+  text: string;
+  amount: number | null;
+  unit: string | null;
+}
+
+/**
+ * Recipe lines naming the same food that need fixing. `unlinked`: not linked to an ingredient.
+ * `noWeight`: linked, but counted ("1 sachet") and the ingredient has no weight per item.
+ * `unknownUnit`: linked, but the unit can't be turned into grams; edit the recipe.
+ * `noNutrition`: linked and weighed, but nothing says what the food is made of, so recipes' calories leave it out.
+ */
+export interface UnmatchedGroupDto {
+  /** foodKey of the lines for `unlinked`, `ingredient:<id>` otherwise. */
+  key: string;
+  name: string;
+  problem: 'unlinked' | 'noWeight' | 'unknownUnit' | 'noNutrition';
+  ingredientId: string | null;
+  ingredientName: string | null;
+  ignored: boolean;
+  lines: UnmatchedLineDto[];
+}
+
+/** An AI suggestion for one unmatched group, for the household to review. */
+export interface UnmatchedSuggestionDto {
+  key: string;
+  action: 'link' | 'create' | 'ignore';
+  ingredientId: string | null;
+  ingredientName: string | null;
+  newIngredient: IngredientInput | null;
+  gramsPerCount: number | null;
+  nutritionPer100g: Nutrition | null;
+  reason: string;
+}
+
+/** What the AI read from photos of a product's pack, for the household to check before saving. */
+export interface ProductPhotoReadDto {
+  name: string;
+  brand: string | null;
+  packAmount: number | null;
+  packUnit: 'g' | 'kg' | 'ml' | 'l' | 'count' | null;
+  ingredientId: string | null;
+  ingredientName: string | null;
+  nutritionPer100g: Nutrition | null;
+}
+
+/** Photos of one recipe waiting in the bank to be read (by AI or the household's assistant). */
+export interface RecipeScanDto {
+  id: string;
+  status: 'waiting' | 'reading' | 'failed' | 'done';
+  error: string | null;
+  recipeId: string | null;
+  recipeTitle: string | null;
+  imageCount: number;
+  createdAt: string;
+}
+
+export interface UnmatchedFixResultDto {
+  linked: number;
+  created: { id: string; name: string }[];
+}
+
 export interface RecipeDraftDto {
   title: string;
   serves: number;
@@ -316,6 +437,8 @@ export interface CookPlanLineDto {
   /** All of this food in stock right now (before this cook), when it is measured. */
   inStockGrams: number | null;
   ingredientName: string | null;
+  /** Cooking with a swap: what the recipe says ("Broccoli"); ingredientName is what's used instead. */
+  swappedFrom: string | null;
   optional: boolean;
   /** How the ingredient is measured, so amounts can be shown in ml for liquids. */
   unit: { displayUnit: 'g' | 'ml' | 'count'; densityGPerMl: number | null };
@@ -378,6 +501,8 @@ export interface PlanEntryDto {
   kcalPerServing: number | null;
   /** Calories for the person being viewed (their portions only), or for the whole entry. */
   kcal: number | null;
+  /** For recipes: food used instead of what the recipe says ("Tenderstem broccoli for Broccoli"). */
+  swaps: { recipeIngredientId: string; ingredientId: string; from: string; to: string }[];
 }
 
 export interface PlanDayDto {

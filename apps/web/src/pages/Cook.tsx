@@ -57,7 +57,8 @@ export function CookPage() {
   const batch = params.get('batch') === '1';
   const entryId = params.get('entry');
   const servings = Number(params.get('servings')) || 0;
-  const plan = useCookPlan(id, servings || 1);
+  const swapsParam = params.get('swaps');
+  const plan = useCookPlan(id, servings || 1, entryId ? `&entry=${entryId}` : swapsParam ? `&swaps=${encodeURIComponent(swapsParam)}` : '');
   const recipe = useRecipe(id).data;
   const members = useUsers().data ?? [];
   const me = useMe();
@@ -212,13 +213,18 @@ export function CookPage() {
                 <div className="flex items-start gap-3">
                   <div className="flex-1">
                     <p className="font-semibold">{l.text}</p>
+                    {l.swappedFrom && l.ingredientName && (
+                      <p className="text-sm font-medium">
+                        Using {l.ingredientName.toLowerCase()} instead of {l.swappedFrom.toLowerCase()}
+                      </p>
+                    )}
                     {p.servings !== p.serves && l.originalText !== l.text && (
                       <p className="text-sm text-muted">
                         Recipe for {p.serves} uses {l.originalText}
                       </p>
                     )}
                     <p className="text-sm text-muted">
-                      {l.neededGrams === null ? 'Not tracked' : stockLine(l)}
+                      {l.neededGrams === null ? (l.ingredientName ? 'Not tracked' : 'Not linked to stock') : stockLine(l)}
                       {!l.skipped && (l.shortGrams ?? 0) > 0 && <span className="text-fresh-red-text"> · short by {amountText(l.shortGrams ?? 0, l.unit)}</span>}
                     </p>
                   </div>

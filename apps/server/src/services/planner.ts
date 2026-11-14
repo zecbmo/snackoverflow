@@ -22,7 +22,7 @@ import {
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import type { Db } from '../db/client';
-import { locations, mealPlanEntries, mealPlanPeople, products, recipeIngredients, recipes, stockItems, users } from '../db/schema';
+import { ingredients, locations, mealPlanEntries, mealPlanPeople, products, recipeIngredients, recipes, stockItems, users } from '../db/schema';
 import { badRequest, forbidden, notFound } from '../http';
 import type { ProductRow } from './catalog';
 import { listRecipes } from './recipes';
@@ -44,6 +44,9 @@ interface Lookups {
   recipeKcal: Map<string, { title: string; kcal: number | null }>;
   productsById: Map<string, ProductRow>;
   stockById: Map<string, { productId: string; locationName: string }>;
+  /** For swaps: what each swapped recipe line was, and ingredient names. */
+  lineNames: Map<string, string>;
+  ingredientNames: Map<string, string>;
 }
 
 async function lookups(db: Db, auth: Auth, rows: EntryRow[]): Promise<Lookups> {
@@ -60,9 +63,21 @@ async function lookups(db: Db, auth: Auth, rows: EntryRow[]): Promise<Lookups> {
     : [];
   const productIds = [...new Set([...rows.map((r) => r.productId), ...stock.map((s) => s.productId)].filter((x): x is string => Boolean(x)))];
   const prods = productIds.length ? await db.select().from(products).where(inArray(products.id, productIds)) : [];
+  const swapLineIds = [...new Set(rows.flatMap((r) => Object.keys(r.swaps ?? {})))];
+  const swapLines = swapLineIds.length
+    ? await db
+        .select({ id: recipeIngredients.id, text: recipeIngredients.text, ingredientId: recipeIngredients.ingredientId })
+        .from(recipeIngredients)
+        .where(inArray(recipeIngredients.id, swapLineIds))
+    : [];
+  const ingIds = [...new Set([...rows.flatMap((r) => Object.values(r.swaps ?? {})), ...swapLines.map((l) => l.ingredientId).filter((x): x is string => Boolean(x))])];
+  const ings = ingIds.length ? await db.select({ id: ingredients.id, name: ingredients.name }).from(ingredients).where(inArray(ingredients.id, ingIds)) : [];
+  const ingredientNames = new Map(ings.map((i) => [i.id, i.name]));
   return {
     members,
     recipeKcal,
+    lineNames: new Map(swapLines.map((l) => [l.id, (l.ingredientId && ingredientNames.get(l.ingredientId)) || l.text])),
+    ingredientNames,
     productsById: new Map(prods.map((p) => [p.id, p])),
     stockById: new Map(stock.map((s) => [s.id, { productId: s.productId, locationName: s.locationName }])),
   };
@@ -113,7 +128,33 @@ function toDto(row: EntryRow, people: { userId: string; portions: number }[], l:
     batch: row.batch,
     kcalPerServing,
     kcal: kcalPerServing === null ? null : Math.round(kcalPerServing * share),
+    swaps: Object.entries(row.swaps ?? {})
+      .filter(([lineId, ingId]) => l.lineNames.has(lineId) && l.ingredientNames.has(ingId))
+      .map(([lineId, ingId]) => ({ recipeIngredientId: lineId, ingredientId: ingId, from: l.lineNames.get(lineId)!, to: l.ingredientNames.get(ingId)! })),
   };
+}
+
+/**
+ * Keep only swaps for lines of this recipe, to ingredients of this household. Null when none are
+ * left. The household's cook might swap anything for anything, so there's no rule beyond that.
+ */
+export async function cleanSwaps(db: Db, auth: Auth, recipeId: string | null, swaps: Record<string, string> | null | undefined): Promise<Record<string, string> | null> {
+  if (!recipeId || !swaps || !Object.keys(swaps).length) return null;
+  const lines = new Set(
+    (await db.select({ id: recipeIngredients.id }).from(recipeIngredients).where(and(eq(recipeIngredients.recipeId, recipeId), inArray(recipeIngredients.id, Object.keys(swaps))))).map(
+      (l) => l.id,
+    ),
+  );
+  const ings = new Set(
+    (
+      await db
+        .select({ id: ingredients.id })
+        .from(ingredients)
+        .where(and(eq(ingredients.householdId, auth.household.id), inArray(ingredients.id, Object.values(swaps))))
+    ).map((i) => i.id),
+  );
+  const out = Object.fromEntries(Object.entries(swaps).filter(([line, ing]) => lines.has(line) && ings.has(ing)));
+  return Object.keys(out).length ? out : null;
 }
 
 async function peopleFor(db: Db, ids: string[]) {
@@ -230,6 +271,7 @@ export async function createEntry(deps: StockDeps, input: PlanEntryInput & { sou
       text: input.kind === 'text' ? (input.text ?? null) : null,
       servings: input.servings,
       kcalPerServing: input.kind === 'text' ? (input.kcalPerServing ?? null) : null,
+      swaps: input.kind === 'recipe' ? await cleanSwaps(db, auth, input.recipeId ?? null, input.swaps) : null,
       batch,
       status: 'planned',
       source: input.source ?? 'plan',
@@ -246,10 +288,22 @@ export async function createEntry(deps: StockDeps, input: PlanEntryInput & { sou
 export async function updateEntry(
   deps: StockDeps,
   id: string,
-  input: { date?: string; slot?: MealSlot; servings?: number; status?: 'planned' | 'cooked' | 'skipped'; people?: Portions; batch?: boolean },
+  input: {
+    date?: string;
+    slot?: MealSlot;
+    servings?: number;
+    status?: 'planned' | 'cooked' | 'skipped';
+    people?: Portions;
+    batch?: boolean;
+    swaps?: Record<string, string> | null;
+  },
 ): Promise<PlanEntryDto> {
   const { db, auth } = deps;
-  const { people, ...rest } = input;
+  const { people, swaps, ...rest } = input;
+  if (swaps !== undefined) {
+    const row = await assertCanEdit(db, auth, id);
+    await db.update(mealPlanEntries).set({ swaps: await cleanSwaps(db, auth, row.recipeId, swaps) }).where(eq(mealPlanEntries.id, id));
+  }
   const before = (await peopleFor(db, [id])).get(id) ?? [];
   // Taking a free portion (or giving yours back) is open to anyone who can see the meal.
   const row = Object.keys(rest).length ? await assertCanEdit(db, auth, id) : await findEntry(db, auth, id);
@@ -356,10 +410,12 @@ export async function earmarks(db: Db, auth: Auth, today: CalendarDate, until?: 
   for (const { entry, recipe } of entries) {
     for (const l of lines.filter((x) => x.recipeId === recipe.id && x.ingredientId && x.grams && !x.optional)) {
       const grams = Math.round(((l.grams! * entry.servings) / recipe.serves) * 10) / 10;
-      const e = out.get(l.ingredientId!) ?? { ingredientId: l.ingredientId!, grams: 0, meals: [] };
+      // A swap chosen for this meal uses the other food instead, weight for weight.
+      const ingredientId = entry.swaps?.[l.id] ?? l.ingredientId!;
+      const e = out.get(ingredientId) ?? { ingredientId, grams: 0, meals: [] };
       e.grams = Math.round((e.grams + grams) * 10) / 10;
       e.meals.push({ entryId: entry.id, title: recipe.title, date: entry.date, grams });
-      out.set(l.ingredientId!, e);
+      out.set(ingredientId, e);
     }
   }
   return [...out.values()];

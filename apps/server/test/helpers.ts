@@ -11,7 +11,7 @@ import { loadSeedData } from '../src/db/seed';
 import { LiveHub } from '../src/live';
 import type { EmailMessage, Mailer } from '../src/notify/email';
 import type { PushPayload, PushSender } from '../src/notify/push';
-import type { OffProduct, OpenFoodFacts } from '../src/services/off';
+import { type OffContribution, OffContributeError, type OffProduct, type OpenFoodFacts } from '../src/services/off';
 import { migrationsDir, seedDataDir } from '../src/paths';
 
 export class FakeOff implements OpenFoodFacts {
@@ -22,6 +22,18 @@ export class FakeOff implements OpenFoodFacts {
     const p = this.products[barcode];
     if (!p) return null;
     return { barcode, name: null, brand: null, quantity: null, imageUrl: null, categories: [], nutritionPer100g: null, ...p };
+  }
+  /** Products added with contribute(). */
+  contributed: OffContribution[] = [];
+  /** Set to make Open Food Facts unreachable for hasProduct() and contribute(). */
+  down = false;
+  async hasProduct(barcode: string): Promise<boolean | null> {
+    if (this.down) return null;
+    return barcode in this.products || this.contributed.some((c) => c.barcode === barcode);
+  }
+  async contribute(c: OffContribution): Promise<void> {
+    if (this.down) throw new OffContributeError("Couldn't reach Open Food Facts. Try again later.");
+    this.contributed.push(c);
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmount, isoDurationMinutes, parseIngredientLine, recipeMeals, recipeNutrition, scaleAmount, scaledLine, tidyLine } from './recipes';
+import { foodKey, formatAmount, isoDurationMinutes, parseIngredientLine, recipeMeals, recipeNutrition, scaleAmount, scaledLine, tidyLine } from './recipes';
 
 describe('parseIngredientLine', () => {
   it.each([
@@ -99,5 +99,24 @@ describe('recipeMeals', () => {
     expect(recipeMeals(['main course', 'german'])).toEqual(['dinner']);
     expect(recipeMeals(['lunch', 'dinner'])).toEqual(['lunch', 'dinner']);
     expect(recipeMeals(['quick'])).toEqual([]);
+  });
+});
+
+describe('count words and plural markers', () => {
+  it('reads "1 sachet(s) Curry Powder" as one sachet of curry powder', () => {
+    expect(parseIngredientLine('1 sachet(s) Curry Powder')).toMatchObject({ amount: 1, unit: 'count', countWord: 'sachet', name: 'Curry Powder', note: null });
+  });
+});
+
+describe('foodKey', () => {
+  it('groups lines naming the same food however they are written', () => {
+    expect(foodKey('2 Rump Steaks')).toBe('rump steak');
+    expect(foodKey('250g rump steak, trimmed')).toBe('rump steak');
+    expect(foodKey('1 sachet(s) Curry Powder')).toBe(foodKey('2 tsp curry powder'));
+  });
+
+  it('keeps lines with no amount', () => {
+    expect(foodKey('Salt and pepper')).toBe('salt and pepper');
+    expect(foodKey('Water')).toBe('water');
   });
 });

@@ -5,6 +5,8 @@
  * Visual direction: docs/design/README.md. Palette colours live in palettes.css;
  * the tokens below are the same in every palette. Green, amber and red are only
  * for freshness (validated for colour-blind readers; pills always carry words too).
+ * Yellow and orange are only for recipe swaps: a close swap (same swap group) and a
+ * loose one (same category). Their markers always carry words too.
  */
 :root {
   --danger: #b42318;
@@ -17,6 +19,12 @@
   --green: #17855c;
   --green-soft: #dcf2e8;
   --green-text: #116446;
+  --swap-close: #e8c31a;
+  --swap-close-soft: #fdf6cf;
+  --swap-close-text: #6b5700;
+  --swap-loose: #ea7a1e;
+  --swap-loose-soft: #fde7d4;
+  --swap-loose-text: #96430a;
   --scan-bg: #161816;
   /* Chart bars for days still being logged. */
   --chart-pending: #c6c6d0;
@@ -36,6 +44,12 @@
     --green: #3fbf85;
     --green-soft: #15302a;
     --green-text: #8ddcb6;
+    --swap-close: #f2d54a;
+    --swap-close-soft: #35300f;
+    --swap-close-text: #f5e08a;
+    --swap-loose: #f59a4a;
+    --swap-loose-soft: #3a2412;
+    --swap-loose-text: #f9c08e;
     --chart-pending: #4a4a57;
   }
 }
@@ -50,6 +64,12 @@
   --green: #3fbf85;
   --green-soft: #15302a;
   --green-text: #8ddcb6;
+  --swap-close: #f2d54a;
+  --swap-close-soft: #35300f;
+  --swap-close-text: #f5e08a;
+  --swap-loose: #f59a4a;
+  --swap-loose-soft: #3a2412;
+  --swap-loose-text: #f9c08e;
   --chart-pending: #4a4a57;
 }
 
@@ -84,6 +104,12 @@
   --color-fresh-green: var(--green);
   --color-fresh-green-soft: var(--green-soft);
   --color-fresh-green-text: var(--green-text);
+  --color-swap-close: var(--swap-close);
+  --color-swap-close-soft: var(--swap-close-soft);
+  --color-swap-close-text: var(--swap-close-text);
+  --color-swap-loose: var(--swap-loose);
+  --color-swap-loose-soft: var(--swap-loose-soft);
+  --color-swap-loose-text: var(--swap-loose-text);
   --color-frozen: var(--blue);
   --color-frozen-soft: var(--blue-soft);
   --color-frozen-text: var(--blue-text);

@@ -1,0 +1,151 @@
+item,section,serving,serving_g,kcal,fat_g,sat_fat_g,carbs_g,sugars_g,fibre_g,protein_g,salt_g
+Apple Slices,Breakfast,1 portion,,46,0.1,0.0,10,10,1.8,0.3,0.00
+Bacon & Egg McMuffin,Breakfast,1 portion,,336,16,5.8,27,2.6,1.8,20,1.4
+Breakfast Wrap with Brown Sauce,Breakfast,1 portion,,666,34,10,53,6.7,4.8,35,2.3
+Breakfast Wrap with Ketchup,Breakfast,1 portion,,661,34,10,52,5.9,5.3,35,2.6
+Cheesy Bacon Flatbread,Breakfast,1 portion,,280,12,5.9,28,2.4,1.4,14,1.5
+Chicken & Bacon McMuffin,Breakfast,1 portion,,363,15,4.1,37,2.9,2.2,20,1.6
+Chicken & Egg McMuffin,Breakfast,1 portion,,396,17,4.6,38,3.0,2.2,22,1.4
+Double Bacon & Egg McMuffin,Breakfast,1 portion,,377,19,6.7,27,2.7,1.8,24,1.8
+Double Sausage & Egg McMuffin,Breakfast,1 portion,,552,33,11,28,3.7,2.5,36,2.3
+Double Sausage Sandwich with Brown Sauce,Breakfast,1 portion,,458,24,9.0,31,9.0,2.3,28,2.3
+Double Sausage Sandwich with Ketchup,Breakfast,1 portion,,455,24,9.0,31,8.5,2.5,28,2.4
+Egg & Cheese McMuffin,Breakfast,1 portion,,296,14,5.0,27,2.6,1.8,15,0.96
+Flahavan's Quick Oats,Breakfast,1 portion,,194,4.3,2.0,28,8.8,2.5,9.0,0.26
+Hash Brown,Breakfast,1 portion,,127,7.4,0.7,13,0.2,1.2,1.1,0.64
+Mini Hashbrown Sharebox,Breakfast,1 portion,,316,18,1.3,34,0.6,3.8,2.8,1.1
+Muffin & Jam,Breakfast,1 portion,,214,5.6,1.4,35,11,1.9,5.5,0.44
+Pancakes & Sausage with Syrup,Breakfast,1 portion,,592,12,3.8,99,41,3.2,19,2.1
+Pancakes & Syrup,Breakfast,1 portion,,464,3.2,0.5,98,41,2.8,9.0,1.4
+Porridge,Breakfast,1 portion,,154,3.0,1.3,23,6.4,1.9,7.8,0.17
+Porridge with Golden Syrup,Breakfast,1 portion,,326,4.3,2.0,61,34,2.5,9.0,0.26
+Porridge with Strawberry Jam,Breakfast,1 portion,,233,4.3,2.0,37,18,2.7,9.0,0.26
+Porridge with Sugar,Breakfast,1 portion,,206,4.3,2.0,31,12,2.5,9.0,0.26
+Sausage & Egg McMuffin,Breakfast,1 portion,,424,23,8.2,27,3.1,2.1,25,1.6
+Sausage Sandwich with Brown Sauce,Breakfast,1 portion,,330,15,5.7,31,8.5,1.9,17,1.6
+Sausage Sandwich with Ketchup,Breakfast,1 portion,,327,15,5.7,30,8.0,2.2,18,1.7
+Big Arch,Burgers,1 portion,,1057,67,26,54,15,4.0,57,4.1
+Big Arch with Bacon,Burgers,1 portion,,1103,70,28,54,15,4.0,62,4.5
+Big Mac,Burgers,1 portion,,509,25,9.6,41,8.1,3.4,27,2.0
+Cheese & Bacon McCrispy,Burgers,1 portion,,578,24,5.3,55,7.7,3.7,33,2.7
+Cheeseburger,Burgers,1 portion,,303,13,5.8,30,7.5,2.1,16,1.4
+Double Cheeseburger,Burgers,1 portion,,452,24,11,31,8.2,2.2,27,2.1
+Double Filet-O-Fish,Burgers,1 portion,,453,19,3.7,45,5.9,2.5,24,2.1
+Double Quarter Pounder with Cheese,Burgers,1 portion,,749,44,20,36,11,2.5,50,2.8
+Filet-O-Fish,Burgers,1 portion,,316,13,2.1,36,5.4,2.2,14,1.4
+Hamburger,Burgers,1 portion,,255,9.2,3.5,29,6.9,2.1,13,1.1
+Mayo Chicken,Burgers,1 portion,,282,9.4,1.0,36,5.1,2.1,12,0.92
+McChicken Sandwich,Burgers,1 portion,,371,15,1.5,41,7.0,2.7,17,1.2
+McCrispy,Burgers,1 portion,,484,18,2.0,53,6.9,3.7,26,1.9
+McExtreme,Burgers,1 portion,,935,58,22,45,6.5,2.8,57,3.4
+McPlant,Burgers,1 portion,,426,20,6.5,40,11,4.2,19,2.1
+Quarter Pounder with Cheese,Burgers,1 portion,,514,27,13,36,11,2.3,31,2.3
+Spicy McCrispy,Burgers,1 portion,,486,18,2.0,53,6.2,3.6,26,2.0
+20 Chicken McNuggets ShareBox,Chicken,1 portion,,869,43,4.9,68,1.9,4.5,50,1.9
+9 Chicken Selects Sharebox,Chicken,1 portion,,1008,50,4.9,66,0.0,4.1,70,4.7
+Chicken McNuggets (6 pieces),Chicken,1 portion,,261,13,1.5,21,0.6,1.4,15,0.57
+Chicken McNuggets (9 pieces),Chicken,1 portion,,391,19,2.2,31,0.9,2.0,22,0.86
+Chicken Selects (3 pieces),Chicken,1 portion,,336,17,1.6,22,0.0,1.4,23,1.6
+Chicken Selects (5 pieces),Chicken,1 portion,,560,28,2.7,36,0.0,2.3,39,2.6
+Chicken Wings - 3 Pieces,Chicken,1 portion,,286,16,3.5,6.5,1.6,0.0,30,2.2
+Chicken Wings - 5 Pieces,Chicken,1 portion,,476,26,5.8,11,2.6,0.0,49,3.6
+Crispy BBQ & Bacon Wrap,Chicken,1 portion,,477,18,2.5,54,6.3,4.6,23,2.1
+Crispy Chicken & Bacon Salad,Chicken,1 portion,,401,21,4.5,25,3.8,3.5,26,1.7
+Crispy Chicken Salad,Chicken,1 portion,,355,18,3.5,24,3.7,3.5,21,1.3
+Crispy Sweet Chilli Chicken Wrap,Chicken,1 portion,,453,16,1.9,53,6.5,4.7,21,1.9
+The McDonald's Chicken Sharebox,Chicken,1 portion,,1193,59,6.2,85,1.1,5.4,77,4.3
+The Tikka Chicken One - Crispy,Chicken,1 portion,,455,18,2.0,50,4.2,4.8,21,1.8
+Apple Pie,Desserts,1 portion,,243,14,3.0,27,9.2,1.0,2.3,0.31
+Chocolate Brownie,Desserts,1 portion,,278,16,6.3,29,24,1.6,3.2,0.04
+Mixed Berry Muffin,Desserts,1 portion,,298,7.6,1.1,48,25,5.2,5.0,0.43
+Oreo McFlurry (Mini),Desserts,Mini,,130,4.5,3.0,19,16,0.9,2.6,0.15
+Oreo McFlurry (Regular),Desserts,Regular,,260,9.0,6.0,39,32,1.7,5.2,0.30
+S'mores McFlurry,Desserts,1 portion,,338,12,7.5,51,42,2.1,6.0,0.43
+Smarties McFlurry (Mini),Desserts,Mini,,137,5.0,3.3,20,18,0.7,2.6,0.09
+Smarties McFlurry (Regular),Desserts,Regular,,273,10.0,6.7,40,37,1.5,5.2,0.19
+Sugar Donut,Desserts,1 portion,,197,11,4.6,21,5.7,0.8,3.5,0.33
+Twix White Salted Caramel McFlurry,Desserts,1 portion,,345,11,7.1,55,43,1.5,5.6,0.52
+Carrot Sticks,Fries & Sides,1 portion,,34,0.2,0.1,6.2,5.8,2.4,0.5,0.08
+Fries (Large),Fries & Sides,Large,,444,22,2.0,55,0.8,4.8,4.4,0.82
+Fries (Medium),Fries & Sides,Medium,,337,17,1.5,42,0.6,3.6,3.3,0.62
+Fries (Small),Fries & Sides,Small,,237,12,1.1,29,0.4,2.6,2.3,0.44
+Mac and Cheese Triangles,Fries & Sides,1 portion,,226,11,3.7,24,0.9,1.2,7.2,1.0
+Paprika Shaker Fries (Large),Fries & Sides,Large,,452,22,2.0,56,1.9,5.1,4.6,1.5
+Paprika Shaker Fries (Medium),Fries & Sides,Medium,,345,17,1.5,43,1.7,4.0,3.6,1.3
+Americano (Large),McCafé,Large,,8,0.0,0.0,1.1,0.0,0.0,0.8,0.01
+Americano (Regular),McCafé,Regular,,6,0.0,0.0,0.8,0.0,0.0,0.6,0.01
+Cappuccino (Large),McCafé,Large,,120,4.5,2.8,12,12,0.0,8.7,
+Cappuccino (Regular),McCafé,Regular,,89,3.4,2.1,8.6,8.6,0.0,6.4,
+Double Espresso,McCafé,1 portion,,1,0.0,0.0,0.2,0.0,0.0,0.1,0.00
+Espresso Single,McCafé,1 portion,,1,0.0,0.0,0.1,0.0,0.0,0.1,0.00
+Flat White,McCafé,1 portion,,86,3.1,1.9,8.4,8.2,0.0,6.3,0.19
+Hot Chocolate (Large),McCafé,Large,,231,5.8,3.0,40,36,3.1,3.0,0.77
+Hot Chocolate (Regular),McCafé,Regular,,173,4.3,2.2,30,27,2.3,2.2,0.57
+Latte (Large),McCafé,Large,,197,7.1,4.3,19,19,0.0,14,0.43
+Latte (Regular),McCafé,Regular,,145,5.2,3.2,14,14,0.0,11,0.32
+Tea (Large),McCafé,Large,,12,0.4,0.2,1.4,1.0,0.0,0.7,0.02
+Tea (Regular),McCafé,Regular,,6,0.2,0.1,0.8,0.5,0.0,0.4,0.01
+White Coffee (Large),McCafé,Large,,74,2.4,1.5,7.6,6.4,0.0,5.6,0.16
+White Coffee (Regular),McCafé,Regular,,54,1.8,1.1,5.5,4.7,0.0,4.1,0.11
+Banana Milkshake (Large),Milkshakes & Cold Drinks,Large,,459,9.0,6.3,80,74,1.7,13,0.50
+Banana Milkshake (Medium),Milkshakes & Cold Drinks,Medium,,357,7.0,4.9,62,58,1.3,11,0.39
+Banana Milkshake (Small),Milkshakes & Cold Drinks,Small,,191,3.7,2.6,34,30,0.7,5.5,0.20
+Brecon Carreg Natural Mineral Water (Still) - 330ml,Milkshakes & Cold Drinks,1 portion,,0,0.0,0.0,0.0,0.0,0.0,0.0,0.00
+Caramel Iced Frappe (Large),Milkshakes & Cold Drinks,Large,,399,19,12,48,42,1.0,8.2,0.40
+Caramel Iced Frappe (Regular),Milkshakes & Cold Drinks,Regular,,319,16,10,38,33,0.7,6.4,0.31
+Chocolate Milkshake (Large),Milkshakes & Cold Drinks,Large,,468,10,6.8,79,65,2.6,14,0.85
+Chocolate Milkshake (Medium),Milkshakes & Cold Drinks,Medium,,364,7.8,5.3,61,50,2.1,11,0.66
+Chocolate Milkshake (Small),Milkshakes & Cold Drinks,Small,,192,4.1,2.8,32,27,1.1,5.9,0.35
+Coca-Cola (Large),Milkshakes & Cold Drinks,Large,,212,0.0,0.0,53,53,0.0,0.0,0.00
+Coca-Cola (Medium),Milkshakes & Cold Drinks,Medium,,170,0.0,0.0,42,42,0.0,0.0,0.00
+Coca-Cola (Small),Milkshakes & Cold Drinks,Small,,106,0.0,0.0,27,27,0.0,0.0,0.00
+Coca-Cola Zero Sugar (Large),Milkshakes & Cold Drinks,Large,,2,0.0,0.0,0.0,0.0,0.0,0.0,0.13
+Coca-Cola Zero Sugar (Medium),Milkshakes & Cold Drinks,Medium,,1,0.0,0.0,0.0,0.0,0.0,0.0,0.10
+Coca-Cola Zero Sugar (Small),Milkshakes & Cold Drinks,Small,,1,0.0,0.0,0.0,0.0,0.0,0.0,0.07
+Deep RiverRock Water - 330ml,Milkshakes & Cold Drinks,1 portion,,0,0.0,0.0,0.0,0.0,0.0,0.0,0.00
+Deep RiverRock Water - 500ml,Milkshakes & Cold Drinks,1 portion,,0,0.0,0.0,0.0,0.0,0.0,0.0,0.00
+Diet Coke (Large),Milkshakes & Cold Drinks,Large,,2,0.0,0.0,0.0,0.0,0.0,0.0,0.09
+Diet Coke (Medium),Milkshakes & Cold Drinks,Medium,,1,0.0,0.0,0.0,0.0,0.0,0.0,0.07
+Diet Coke (Small),Milkshakes & Cold Drinks,Small,,1,0.0,0.0,0.0,0.0,0.0,0.0,0.05
+Fanta No Added Sugar (Medium),Milkshakes & Cold Drinks,Medium,,12,0.0,0.0,1.6,1.6,0.0,0.0,0.44
+Frozen Strawberry Lemonade (Large),Milkshakes & Cold Drinks,Large,,155,0.0,0.0,38,32,0.0,0.0,0.00
+Frozen Strawberry Lemonade (Regular),Milkshakes & Cold Drinks,Regular,,120,0.0,0.0,29,25,0.0,0.0,0.00
+Glaceau Smartwater (Still) 600ml,Milkshakes & Cold Drinks,1 portion,,0,0.0,0.0,0.0,0.0,0.0,0.0,0.00
+Green Apple X Sprite,Milkshakes & Cold Drinks,1 portion,,6,0.0,0.0,0.2,0.0,0.0,0.1,0.05
+Irn Bru (Large),Milkshakes & Cold Drinks,Large,,95,0.0,0.0,23,23,0.0,0.0,0.00
+Irn Bru (Medium),Milkshakes & Cold Drinks,Medium,,76,0.0,0.0,18,18,0.0,0.0,0.00
+Irn Bru (Small),Milkshakes & Cold Drinks,Small,,48,0.0,0.0,11,11,0.0,0.0,0.00
+Mango & Pineapple Iced Fruit Smoothie (Large),Milkshakes & Cold Drinks,Large,,200,0.7,0.1,44,42,2.0,1.6,0.13
+Mango & Pineapple Iced Fruit Smoothie (Regular),Milkshakes & Cold Drinks,Regular,,153,0.5,0.1,34,32,1.5,1.2,0.10
+Oasis Zero Summer Fruits (Regular),Milkshakes & Cold Drinks,Regular,,12,0.0,0.0,2.0,2.0,0.0,0.0,0.32
+Organic Milk,Milkshakes & Cold Drinks,1 portion,,125,4.5,2.8,12,12,0.0,9.0,0.28
+Peach x Sprite Zero,Milkshakes & Cold Drinks,1 portion,,6,0.0,0.0,0.1,0.0,0.0,0.1,0.05
+Robinsons Fruit Shoot,Milkshakes & Cold Drinks,1 portion,,8,0.0,0.0,1.6,1.6,0.0,0.0,0.06
+Semi Skimmed Milk – 250ml,Milkshakes & Cold Drinks,1 portion,,122,3.7,2.5,12,12,0.0,8.3,0.37
+Sprite Zero (Large),Milkshakes & Cold Drinks,Large,,5,0.0,0.0,0.0,0.0,0.0,0.1,0.07
+Sprite Zero (Medium),Milkshakes & Cold Drinks,Medium,,4,0.0,0.0,0.0,0.0,0.0,0.1,0.05
+Sprite Zero (Small),Milkshakes & Cold Drinks,Small,,3,0.0,0.0,0.0,0.0,0.0,0.1,0.03
+Strawberry Milkshake (Large),Milkshakes & Cold Drinks,Large,,458,9.0,6.3,80,74,1.7,13,0.53
+Strawberry Milkshake (Medium),Milkshakes & Cold Drinks,Medium,,356,7.0,4.9,62,57,1.3,11,0.41
+Strawberry Milkshake (Small),Milkshakes & Cold Drinks,Small,,188,3.7,2.6,33,30,0.7,5.5,0.22
+Tropicana Apple Juice,Milkshakes & Cold Drinks,1 portion,,115,0.0,0.0,28,25,1.5,0.5,0.00
+Tropicana Orange Juice,Milkshakes & Cold Drinks,1 portion,,100,0.0,0.0,23,22,0.0,2.0,0.00
+Vanilla Milkshake (Large),Milkshakes & Cold Drinks,Large,,469,9.0,6.3,82,77,1.7,13,0.51
+Vanilla Milkshake (Medium),Milkshakes & Cold Drinks,Medium,,366,7.0,4.9,64,60,1.3,11,0.40
+Vanilla Milkshake (Small),Milkshakes & Cold Drinks,Small,,192,3.7,2.6,34,31,0.7,5.5,0.21
+BBQ Dip - 25g,Sauces & Dips,1 portion,,49,0.3,0.0,11,9.3,0.4,0.3,0.54
+Garlic Mayo Dip,Sauces & Dips,1 portion,,118,12,0.9,3.0,0.8,0.2,0.4,0.36
+Spicy Mayo Dip,Sauces & Dips,1 portion,,109,11,0.7,3.0,1.2,0.2,0.3,0.84
+Sweet & Smoky BBQ Dip - 40g,Sauces & Dips,1 portion,,60,0.0,0.0,15,14,0.0,0.4,0.52
+Sweet & Sour Dip - 25ml,Sauces & Dips,1 portion,,44,0.2,0.0,10,8.7,0.4,0.1,0.21
+Sweet Chilli Dip - 40g,Sauces & Dips,1 portion,,71,0.4,0.1,17,14,0.3,0.1,0.56
+Sweet Curry Dip - 25g,Sauces & Dips,1 portion,,47,0.4,0.0,10,8.0,0.6,0.3,0.32
+Szechuan Dip,Sauces & Dips,1 portion,,91,2.1,0.9,16,16,0.5,1.4,1.5
+Tomato Ketchup - 25g,Sauces & Dips,1 portion,,27,0.1,0.0,6.0,4.6,0.6,0.3,0.53
+Fanta No Added Sugar (Small),Saver Menu,Small,,7,0.0,0.0,1.0,1.0,0.0,0.0,0.28
+Oasis Zero (Large),Saver Menu,Large,,15,0.0,0.0,2.5,2.5,0.0,0.1,0.41
+Oasis Zero (Medium),Saver Menu,Medium,,12,0.0,0.0,2.0,2.0,0.0,0.1,0.32
+Oasis Zero Summer Fruits (Small),Saver Menu,Small,,7,0.0,0.0,1.2,1.2,0.0,0.0,0.20
+Mac and Cheese Triangles Sharebox,What's New,1 portion,,679,33,11,71,2.8,3.7,22,3.0
+Shaker Side Salad,Wraps & Salads,1 portion,,58,4.0,1.1,3.8,1.7,1.2,1.2,0.14
+Snack Wrap,Wraps & Salads,1 portion,,282,12,1.3,31,2.0,3.3,11,1.1

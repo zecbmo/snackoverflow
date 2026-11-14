@@ -1,0 +1,154 @@
+item,section,serving,serving_g,kcal,fat_g,sat_fat_g,carbs_g,sugars_g,fibre_g,protein_g,salt_g
+American Cheese,Burger Toppings,1 burger topping,,42,3.2,1.5,1.3,0.5,0,1.9,0.5
+BBQ Mayo,Burger Toppings,1 burger topping,,75,6,0.8,4.8,4.4,0.1,0.5,0.5
+Burger Sauce,Burger Toppings,1 burger topping,,81,8,0.7,2,1.9,0.1,0.5,0.6
+Cheddar Cheese,Burger Toppings,1 burger topping,,83,7,4.4,0.1,0.1,0,5,0.4
+Chipotle Mayo,Burger Toppings,1 burger topping,,95,9.7,0.8,1.4,1.1,0.1,0.5,0.3
+Honest Pickles,Burger Toppings,1 burger topping,,12,0.1,0,2.5,2.4,0.1,0.2,0.1
+Vegan Chipotle Mayo,Burger Toppings,1 burger topping,,79,8,0.6,1.5,1,0.1,0.2,0.3
+BBQ Fried Chicken Burger,Burgers,1 burger,,545,15,3.7,64,14,2.3,38,3.6
+BBQ Grilled Chicken Burger,Burgers,1 burger,,464,15,4,38,12,1.8,44,2
+Beef Burger,Burgers,1 burger,,582,21,9.2,64,23,2.9,32,2.6
+Beef Burger with American Cheese,Burgers,1 burger,,698,29,13,71,27,3,37,3.8
+Beef Burger with Blue Cheese,Burgers,1 burger,,686,30,15,64,23,3,38,3.1
+Beef Burger with Cheddar,Burgers,1 burger,,666,28,14,64,23,2.9,37,2.9
+Buffalo Fried Chicken Burger,Burgers,1 burger,,689,31,11,63,13,2.4,39,5.8
+Buffalo Grilled Chicken Burger,Burgers,1 burger,,608,31,11,38,10,1.9,45,4.2
+California,Burgers,1 burger,,928,66,17,44,13,5,37,3
+California with Bacon,Burgers,1 burger,,983,70,18,44,14,5,41,3.9
+Fritter Burger,Burgers,1 burger,,627,37,8.3,48,11,5,22,2.5
+Honest Burger,Burgers,1 burger,,751,33,15,70,29,3.2,42,3.7
+Pesto Fried Chicken Burger,Burgers,1 burger,,620,25,3.9,58,9.6,2.9,38,3.3
+Pesto Grilled Chicken Burger,Burgers,1 burger,,531,24,3.9,33,7,2.4,43,1.6
+Plant Burger,Burgers,1 burger,,570,30,9.7,44,9,4.7,28,2.6
+Plant Burger with La Vie Bacon,Burgers,1 burger,,607,34,9.6,43,8,4.9,31,2.7
+Smashed Bacon (Double),Burgers,Double,,982,73,19,39,9.4,3.5,41,3.3
+Smashed Bacon (Single),Burgers,Single,,663,45,11,37,9,2.7,26,2.7
+Smashed Cheese (Double),Burgers,Double,,927,68,18,39,9.1,3.5,37,2.4
+Smashed Cheese (Single),Burgers,Single,,608,41,9.9,37,8.7,2.7,22,1.7
+Tribute Burger,Burgers,1 burger,,808,42,15,65,22,3.4,42,5.5
+Bourbon Berry Mule,Cocktails,1 portion,,90,0,0,0,0,0,0,0
+Margarita,Cocktails,1 portion,,133,0,0,7.6,7.6,0,0,0
+Mojito,Cocktails,1 portion,,177,0,0,16,16,0,0,0
+Negroni,Cocktails,1 portion,,174,0.7,0,17,17,0,0.1,0
+Paloma,Cocktails,1 portion,,185,0.1,0,17,16,0,0.2,0.2
+Pina Colada,Cocktails,1 portion,,233,0,0,30,28,0,0,0
+Sloe Lemonade - Single Serve,Cocktails,1 portion,,105,0.1,0,25,25,0.5,0.2,0.1
+Homemade Iced Tea,Drinks,1 portion,,78,0.1,0,18,18,0.5,0.2,0
+Homemade Lemonade,Drinks,1 portion,,63,0.1,0,15,15,0.5,0.2,0
+Corn on the Cob,Kids,Kids portion,,112,8.2,1.1,6.3,1.7,2.8,2.2,0.1
+GF Kids Beef Burger,Kids,1 burger,,385,24,6,25,4.4,4,15,1.2
+GF Kids Chicken Burger,Kids,1 burger,,607,6.1,1.4,75,9.5,4.1,61,4.5
+GF Kids Fritter,Kids,Kids portion,,311,12,1.8,37,6.7,5.6,12,2.2
+Kids Apple Juice 250ml,Kids,Kids portion,,119,1.3,0,25,25,1.3,1.3,0.3
+Kids Beef Burger,Kids,1 burger,,441,27,6.7,30,4.4,2.2,19,0.7
+Kids Chicken Burger,Kids,1 burger,,663,8.2,2.1,80,9.5,2.4,66,4
+Kids Chicken Tenders,Kids,Kids portion,,479,2.6,0.5,86,8.6,1.5,27,5.3
+Kids Chips (Unsalted),Kids,Kids portion,,98,4.3,0.4,13,1.1,1.5,1.5,0
+Kids Fritter,Kids,Kids portion,,367,14,2.5,43,6.7,3.9,16,1.7
+Kids Homemade Lemonade,Kids,Kids portion,,64,0.1,0,16,16,0.1,0.2,0
+Kids Onion Rings,Kids,Kids portion,,165,6.7,0.5,24,3.8,1.2,1.7,0.9
+Kids Orange Juice 250ml,Kids,Kids portion,,117,1.3,0.3,25,25,0,1.5,0
+Kids Seasonal Coleslaw Spring/Summer 2026,Kids,Kids portion,,112,9.7,1.3,4.7,4.4,1.2,1,0.8
+Rosemary Salted Chips,Kids,Kids portion,,262,13,0.9,31,0.5,4.3,3.1,0.9
+Baker St,Local Burgers,1 burger,,935,52,18,69,22,4.3,45,4.4
+Bank,Local Burgers,1 burger,,959,46,19,76,26,3.3,59,5.2
+Borough (Market),Local Burgers,1 burger,,1031,65,25,61,19,2.5,49,5.1
+Brighton,Local Burgers,1 burger,,868,45,17,71,27,4,42,5.9
+Bristol,Local Burgers,1 burger,,1067,56,27,84,30,4,55,7.7
+Bristol Cabot Circus,Local Burgers,1 burger,,949,63,18,52,22,4.6,41,3.1
+Bristol Cribbs Causeway,Local Burgers,1 burger,,779,35,15,75,30,3.4,41,5.2
+Brixton,Local Burgers,1 burger,,691,43,11,40,11,3.3,35,3.6
+Cambridge,Local Burgers,1 burger,,871,48,18,66,19,3.6,41,5.2
+Camden,Local Burgers,1 burger,,893,51,17,65,19,3.3,41,4.6
+Cardiff BBQ Sriracha,Local Burgers,1 burger,,1103,78,19,56,20,4.1,41,4.5
+Chimichurri,Local Burgers,1 burger,,1017,63,24,59,17,2.8,51,6.1
+Chiswick,Local Burgers,1 burger,,990,60,19,66,18,3.6,44,5.2
+Clapham,Local Burgers,1 burger,,918,54,20,65,18,3.2,42,4.4
+Covent Garden,Local Burgers,1 burger,,970,54,20,74,26,3.4,45,5.7
+Dalston,Local Burgers,1 burger,,764,23,4,88,20,3.4,49,4.3
+Ealing,Local Burgers,1 burger,,916,53,22,61,20,3.1,47,4.5
+East Dulwich,Local Burgers,1 burger,,946,54,19,69,22,4.4,44,4.6
+Finsbury Park,Local Burgers,1 burger,,773,26,4.7,84,23,3,50,4.7
+Greenwich,Local Burgers,1 burger,,756,29,13,81,33,3.3,40,4.1
+Hammersmith,Local Burgers,1 burger,,882,48,19,67,24,3,45,4.1
+Holborn,Local Burgers,1 burger,,921,57,20,59,18,2.5,42,4.9
+King's Cross,Local Burgers,1 burger,,997,55,22,73,21,9.8,47,4.4
+Kingston,Local Burgers,1 burger,,1059,75,25,47,18,3.6,47,3.7
+Leicester Square,Local Burgers,1 burger,,802,37,18,71,28,3.3,44,4.2
+Liverpool,Local Burgers,1 burger,,995,68,21,53,22,4.3,41,3.6
+London Bridge - Tooley St,Local Burgers,1 burger,,927,55,20,64,20,3.1,43,4
+Manchester,Local Burgers,1 burger,,927,49,19,75,27,3.6,45,4.8
+Old Brompton Road,Local Burgers,1 burger,,910,54,18,62,21,3.1,44,4.2
+Old St,Local Burgers,1 burger,,945,49,16,72,28,2.7,53,4.9
+Peckham,Local Burgers,1 burger,,909,39,12,84,25,3.1,55,6.4
+Portobello,Local Burgers,1 burger,,1016,54,20,84,27,2.9,48,5.8
+Reading,Local Burgers,1 burger,,908,53,19,65,19,3.2,42,4.6
+Soho,Local Burgers,1 burger,,803,38,17,72,29,4,41,4.9
+South Bank,Local Burgers,1 burger,,824,39,19,73,25,3.1,44,4.7
+South Kensington,Local Burgers,1 burger,,768,39,18,59,18,2.7,45,4.7
+Spitalfields,Local Burgers,1 burger,,929,52,18,67,19,4,45,5.4
+St Katherine Docks,Local Burgers,1 burger,,1080,67,25,65,18,3.1,51,6.6
+Truffle Fried Chicken,Local Burgers,1 burger,,777,27,4.9,82,19,3.2,50,6
+Warren St,Local Burgers,1 burger,,883,41,17,83,37,3.3,43,8
+Waterloo,Local Burgers,1 burger,,913,52,28,68,21,3.2,41,4.4
+Westfield,Local Burgers,1 burger,,699,29,7.5,69,18,2.4,41,5.1
+Wimbledon,Local Burgers,1 burger,,716,33,17,65,23,3.3,39,3.3
+Windsor,Local Burgers,1 burger,,952,57,23,66,17,3,43,4.9
+Christmas Tender Mighty,Mighties,1 burger,,443,12,2.8,65,9.5,1.8,18,4
+Mighty Buffalo,Mighties,1 burger,,492,17,6.5,65,10,1.5,19,4.9
+Mighty California,Mighties,1 burger,,366,25,6.4,22,5.9,1.6,13,1.3
+Mighty Honest,Mighties,1 burger,,387,25,7.8,23,6.8,1.4,17,1.9
+Turkey Curry Mighty,Mighties,1 burger,,226,9.2,1.6,26,8.6,1.9,9,1.1
+Chocolate Millionaire Milkshake,Milkshakes,1 portion,,1064,59,27,114,95,0.5,19,1
+Strawberry Eton Mess Milkshake,Milkshakes,1 portion,,784,33,17,105,92,0.5,15,0.7
+Vanilla Shortbread Milkshake,Milkshakes,1 portion,,767,40,21,86,66,0.5,16,0.9
+BBQ Mayo,Sauces,1 pot,,150,12,1.5,9.6,8.7,0.5,0.9,1
+BBQ Sriracha Sauce,Sauces,1 pot,,84,1.6,0.9,16,15,0.5,1,1.3
+Beef & Bacon Gravy,Sauces,1 pot,,179,9.4,3,18,11,0.5,5.9,3.9
+Brown Butter Mustard Mayo,Sauces,1 pot,,101,10,1.3,1.3,1.2,0.1,0.6,0.3
+Buffalo Sauce,Sauces,1 pot,,228,21,13,7,4.9,0.2,1.7,5.1
+Burger Sauce,Sauces,1 pot,,163,16,1.4,4.1,3.7,0.2,0.6,1.2
+Chipotle Jam,Sauces,1 pot,,42,0.1,0,9.8,9.6,0.5,0.5,0
+Chipotle Mayo,Sauces,1 pot,,190,19,1.7,2.8,2.2,0.5,0.7,0.6
+Confit Garlic Mayo,Sauces,1 pot,,252,27,2.3,1.3,0.8,0,0.7,0.4
+Heinz Ketchup,Sauces,1 pot,,39,0,0,9.3,9.1,0,0.5,0.7
+Heinz Mayonnaise,Sauces,1 pot,,258,28,2.1,1.2,0.6,0,0.5,0.4
+Hot Sauce,Sauces,1 pot,,27,0.5,0,4.7,3.4,0.5,0.7,1.2
+Ranch Mayo,Sauces,1 pot,,209,22,2.9,1.4,1.1,0.2,1,0.4
+Stuffing Mayo,Sauces,1 pot,,211,22,1.7,2.4,1,0.2,0.6,0.6
+Vegan Chipotle Mayo,Sauces,1 pot,,158,16,1.2,2.9,1.9,0.5,0.5,0.6
+BBQ Sriracha Wings (Large),Sides,Large,,808,58,8.1,38,16,2.1,32,3.4
+BBQ Sriracha Wings (Small),Sides,Small,,533,43,5.2,20,8.7,1.2,16,1.9
+Buffalo Wings (Large),Sides,Large,,910,73,21,29,6.9,2.1,33,7.1
+Buffalo Wings (Small),Sides,Small,,562,48,12,16,4.1,1.2,17,3.7
+Cajun Tenders (Large),Sides,Large,,699,15,2.1,109,23,2.1,31,6.9
+Cajun Tenders (Small),Sides,Small,,425,13,1.8,59,16,1.2,16,4
+Christmas Loaded Chips,Sides,1 portion,,843,45,13,78,11,9.7,26,4.3
+Christmas Wings (Large),Sides,Large,,725,47,2.7,45,14,4.7,28,4.9
+Christmas Wings (Small),Sides,Small,,363,24,1.3,23,6.9,2.3,14,2.5
+Halloumi Fries (Large),Sides,Large,,509,37,27,14,14,1.1,30,6.8
+Halloumi Fries (Small),Sides,Small,,276,18,13,12,12,0.7,15,3.4
+Honest Loaded Chips,Sides,1 portion,,792,47,15,67,3.6,8.8,22,2.9
+House Green Salad,Sides,1 portion,,229,21,2.7,6.2,3.1,3.1,2.6,0.4
+Liverpool Salt & Pepper BBQ Tenders (Large),Sides,Large,,1219,27,3,185,28,5.2,56,12.8
+Liverpool Salt & Pepper BBQ Tenders (Small),Sides,Small,,614,12,1.4,96,17,3.5,29,6.7
+Liverpool Salt & Pepper Chips,Sides,1 portion,,787,48,3.8,75,12,11,8.4,5.1
+Onion Rings (Large),Sides,Large,,493,20,1.5,71,11,3.7,5.2,2.7
+Onion Rings (Small),Sides,Small,,247,10,0.8,35,5.7,1.9,2.6,1.3
+Rosemary Salted Chips,Sides,1 portion,,524,26,1.9,63,0.9,8.7,6.3,1.7
+Turkey Curry Loaded Chips,Sides,1 portion,,964,58,14,80,13,10,26,3.8
+Winter Coleslaw,Sides,1 portion,,189,16,1.4,8,7.3,2.4,1.5,0.5
+Billionaire Sundae,Sundaes,1 portion,,656,26,17,99,88,0.1,6.3,0.7
+Madagascan Vanilla Gelato,Sundaes,1 portion,,237,9.9,7.1,32,28,0,4.7,0.3
+Rich Chocolate Sorbetto,Sundaes,1 portion,,213,5.2,3.1,39,39,0,2.6,0.3
+Strawberry Gelato,Sundaes,1 portion,,198,7.7,6.5,28,27,0,3.8,0.1
+Dark Chocolate Flake,Toppings,1 portion,,61,3.8,2.3,6,5.6,0,0.7,0
+Fudge Pieces,Toppings,1 portion,,56,1.6,1.3,10,8.4,0,0.5,0
+Luxury Milk Chocolate Sauce,Toppings,1 portion,,116,8.3,1.6,9.1,8.8,0,1.2,0
+Meringue Pieces,Toppings,1 portion,,15,0.6,0.4,2.3,2.2,0,0,0
+Salted Caramel Sauce,Toppings,1 portion,,56,0.2,0.1,13,11,0,0.5,0.1
+Shortbread Crumb,Toppings,1 portion,,52,2.7,1.7,6.4,2.3,0.1,0.5,0.1
+Strawberry Pieces,Toppings,1 portion,,7,0,0,1.5,1.2,0.5,0.1,0
+Strawberry Sauce,Toppings,1 portion,,60,0,0,15,13,0,0,0
+Wafers,Toppings,1 portion,,10,0.1,0,2.1,0.8,0,0.2,0

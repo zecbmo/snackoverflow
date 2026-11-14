@@ -49,9 +49,11 @@ export const householdSettingsInput = z.object({
   excludedTags: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(30),
   /** Most extra ingredients a suggestion may need buying. */
   maxExtraIngredients: z.number().int().min(0).max(10),
+  /** Unmatched recipe foods (by foodKey) the household chose not to link, e.g. "water". */
+  ignoredFoods: z.array(z.string().trim().min(1).max(200)).max(1000),
 });
 export type HouseholdSettings = z.infer<typeof householdSettingsInput>;
-export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = { pricingEnabled: false, noRepeatDays: 7, excludedTags: [], maxExtraIngredients: 3 };
+export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = { pricingEnabled: false, noRepeatDays: 7, excludedTags: [], maxExtraIngredients: 3, ignoredFoods: [] };
 
 export const updateHouseholdInput = z.object({
   settings: householdSettingsInput.partial().optional(),
@@ -84,18 +86,6 @@ export const shelfLifeInput = z.object({
   defrostedDays: days.optional(),
 });
 
-export const ingredientInput = z.object({
-  name,
-  aisle: z.string().trim().max(60).nullish(),
-  shelfLifeCategoryId: id.nullish(),
-  densityGPerMl: z.number().positive().max(5).nullish(),
-  gramsPerCount: z.number().positive().max(100_000).nullish(),
-  countUnit: z.string().trim().max(30).nullish(),
-  trackRunningLow: z.boolean().optional(),
-  shelfLife: shelfLifeInput.optional(),
-  foodGroup: z.enum(FOOD_GROUPS).nullish(),
-});
-
 export const nutritionInput = z
   .object({
     kcal: z.number().min(0).nullish(),
@@ -109,6 +99,23 @@ export const nutritionInput = z
   })
   .partial();
 export type Nutrition = z.infer<typeof nutritionInput>;
+
+export const ingredientInput = z.object({
+  name,
+  aisle: z.string().trim().max(60).nullish(),
+  shelfLifeCategoryId: id.nullish(),
+  densityGPerMl: z.number().positive().max(5).nullish(),
+  gramsPerCount: z.number().positive().max(100_000).nullish(),
+  countUnit: z.string().trim().max(30).nullish(),
+  trackRunningLow: z.boolean().optional(),
+  shelfLife: shelfLifeInput.optional(),
+  foodGroup: z.enum(FOOD_GROUPS).nullish(),
+  /** Typical nutrition per 100g, for recipes' calories when no product says. */
+  nutritionPer100g: nutritionInput.nullish(),
+  /** Its swap group: foods that can stand in for each other in a recipe. */
+  swapGroupId: id.nullish(),
+});
+
 
 export const productInput = z.object({
   name,
@@ -200,6 +207,39 @@ export const pushSubscriptionInput = z.object({
 
 export type LocationInput = z.infer<typeof locationInput>;
 export type IngredientInput = z.infer<typeof ingredientInput>;
+
+/**
+ * Fix unmatched recipe lines: link them to an ingredient (or a new one), and optionally give
+ * that ingredient the measure its lines need (grams per item for counted things).
+ */
+export const unmatchedFix = z
+  .object({
+    lineIds: z.array(id).min(1).max(500),
+    ingredientId: id.nullish(),
+    newIngredient: ingredientInput.nullish(),
+    gramsPerCount: z.number().positive().max(100_000).nullish(),
+    /** Nutrition per 100g for the ingredient (new or existing). */
+    nutritionPer100g: nutritionInput.nullish(),
+  })
+  .refine((f) => Boolean(f.ingredientId) !== Boolean(f.newIngredient), 'Give either ingredientId or newIngredient.');
+export const unmatchedFixInput = z.object({ fixes: z.array(unmatchedFix).min(1).max(200) });
+/** Settings → AI: a key and model (null removes). The environment wins over these. */
+export const aiSettingsInput = z.object({
+  apiKey: z.string().trim().min(20, "That doesn't look like a whole key.").max(500).nullish(),
+  model: z.string().trim().max(100).nullish(),
+});
+export const aiKeyTestInput = z.object({ apiKey: z.string().trim().min(20).max(500).nullish(), model: z.string().trim().max(100).nullish() });
+
+/** Photos sent as base64 in JSON (so the app needs nothing extra to upload them). */
+export const photoInput = z.object({ data: z.string().min(1).max(12_000_000), type: z.string().trim().max(40) });
+export const photosInput = z.object({ photos: z.array(photoInput).min(1).max(6) });
+/** Recipe photos for the bank: all one recipe (front and back of a card), or one recipe each. */
+export const recipeScansInput = z.object({ photos: z.array(photoInput).min(1).max(20), separate: z.boolean().default(false) });
+/** Make up a recipe that uses food going off. */
+export const useItUpInput = z.object({ serves: z.number().int().min(1).max(20).default(2), request: z.string().trim().max(300).nullish() });
+
+export const unmatchedIgnoreInput = z.object({ keys: z.array(z.string().trim().min(1).max(200)).min(1).max(200), ignored: z.boolean().default(true) });
+export type UnmatchedFix = z.infer<typeof unmatchedFix>;
 export type ProductInput = z.infer<typeof productInput>;
 export type UseAmountInput = z.infer<typeof useAmountInput>;
 export type AdjustStockInput = z.infer<typeof adjustStockInput>;
@@ -276,6 +316,35 @@ export type CookInput = z.infer<typeof cookInput>;
 export const mealSlot = z.enum(MEAL_SLOTS);
 const people = z.array(z.object({ userId: id, portions: z.number().positive().max(50) })).max(20);
 
+/** Swaps for a planned recipe: recipe line id -> the ingredient used instead. */
+export const swapsInput = z.record(id, id).refine((r) => Object.keys(r).length <= 50, 'Too many swaps.');
+
+/** A swap group: foods that can stand in for each other (broccoli and tenderstem). */
+export const swapGroupInput = z.object({ name: z.string().trim().min(1, 'Required').max(60), ingredientIds: z.array(id).max(200).optional() });
+/**
+ * Several swap groups at once (reviewed suggestions, or an assistant). With an id, the foods are
+ * added to that group (`replace`: it becomes exactly these); without, a group is made, or merged
+ * into one of the same name.
+ */
+/** Two foods that aren't a good swap for each other (either way round). */
+export const swapExclusionInput = z
+  .object({ ingredientId: id, otherIngredientId: id })
+  .refine((v) => v.ingredientId !== v.otherIngredientId, 'Pick two different foods.');
+
+export const swapGroupsSaveInput = z.object({
+  groups: z
+    .array(
+      z.object({
+        id: id.nullish(),
+        name: z.string().trim().min(1).max(60),
+        ingredientIds: z.array(id).max(200),
+        replace: z.boolean().optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
 export const planEntryInput = z
   .object({
     date: calendarDate,
@@ -293,6 +362,8 @@ export const planEntryInput = z
     batch: z.boolean().default(false),
     /** Log it as eaten straight away (e.g. adding a banana you just had). */
     eaten: z.boolean().default(false),
+    /** For recipes: food used instead of what the recipe says. */
+    swaps: swapsInput.nullish(),
   })
   .refine(
     (v) =>
@@ -311,6 +382,8 @@ export const updatePlanEntryInput = z.object({
   status: z.enum(['planned', 'cooked', 'skipped']).optional(),
   people: people.optional(),
   batch: z.boolean().optional(),
+  /** Replaces the meal's swaps; null clears them. */
+  swaps: swapsInput.nullable().optional(),
 });
 
 /** Eating planned leftovers or a product takes it out of stock. */

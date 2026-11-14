@@ -4,9 +4,9 @@
  * an amber flash and a quick "what is it?" sheet. Undo on every scan.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { type EatResultDto, formatPackSize, MEAL_SLOTS, type MealSlot, type ProductDto, type ScanAddResult, type ScanUseResult, slotForTime, type StockItemDto } from '@snackoverflow/shared';
+import { type EatResultDto, formatPackSize, MEAL_SLOTS, type MealSlot, type ProductDto, type ProductPhotoReadDto, type ScanAddResult, type ScanUseResult, slotForTime, type StockItemDto } from '@snackoverflow/shared';
 import { Icon, locationIcon } from '../components/Icon';
 import { useMe } from '../components/Layout';
 import { useStockActions } from '../components/StockActions';
@@ -15,7 +15,9 @@ import { Button, Field, Select, Sheet, TextInput } from '../components/ui';
 import { api, errorMessage, isOffline } from '../lib/api';
 import { enqueueScan, type QueuedScan, removeQueued } from '../lib/offlineQueue';
 import { longDate } from '../lib/format';
+import { photoBody } from '../lib/images';
 import { parsePounds } from '../lib/money';
+import { canShareWithOff, rememberedShare, rememberShare, shareWithOff } from '../lib/off';
 import { useIngredients, useLocations } from '../lib/queries';
 import { beep, useBarcodeScanner } from '../scanner/useBarcodeScanner';
 
@@ -514,6 +516,36 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
   const [unit, setUnit] = useState(product.packUnit ?? 'g');
   const [ingredientId, setIngredientId] = useState(product.ingredientId ?? '');
   const [saving, setSaving] = useState(false);
+  const canShare = canShareWithOff(product, useMe().features);
+  const [share, setShare] = useState(() => canShare && rememberedShare());
+  const [brand, setBrand] = useState(product.brand ?? '');
+  const shareId = useId();
+  const me = useMe();
+  // Read from photos of the pack (AI): fills the form in, and the label's nutrition is saved with it.
+  const [nutrition, setNutrition] = useState<ProductPhotoReadDto['nutritionPer100g']>(null);
+  const [reading, setReading] = useState(false);
+  const [fromPhoto, setFromPhoto] = useState(false);
+  const readPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setReading(true);
+    try {
+      const photos = await Promise.all([...files].slice(0, 4).map(photoBody));
+      const r = await api.post<ProductPhotoReadDto>(`/api/products/${product.id}/read-photos`, { photos });
+      setName(r.name);
+      if (r.brand) setBrand(r.brand);
+      if (r.packAmount) {
+        setAmount(String(r.packAmount));
+        setUnit(r.packUnit ?? 'g');
+      }
+      if (r.ingredientId) setIngredientId(r.ingredientId);
+      setNutrition(r.nutritionPer100g);
+      setFromPhoto(true);
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    } finally {
+      setReading(false);
+    }
+  };
   // Suggest the ingredient from the name as it's typed.
   const suggestion = name.length >= 3 ? ingredients.find((i) => name.toLowerCase().includes(i.name.toLowerCase().replace(/s$/, ''))) : undefined;
   const save = async () => {
@@ -521,6 +553,8 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
     try {
       const p = await api.patch<ProductDto>(`/api/products/${product.id}`, {
         name,
+        ...(share || fromPhoto ? { brand: brand.trim() || null } : {}),
+        ...(nutrition ? { nutritionPer100g: nutrition } : {}),
         packAmount: amount ? Number(amount) : null,
         packUnit: amount ? unit : null,
         ingredientId: (ingredientId || suggestion?.id) ?? null,
@@ -530,6 +564,15 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
       void qc.invalidateQueries({ queryKey: ['stock'] });
       toast.show(`Saved. Everyone's phone will know ${p.name} now.`);
       onClose();
+      if (canShare) rememberShare(share);
+      // Carries on after the sheet closes, so scanning isn't held up.
+      if (share)
+        shareWithOff(p.id)
+          .then((r) => {
+            toast.show(r.message);
+            void qc.invalidateQueries({ queryKey: ['products'] });
+          })
+          .catch((e: unknown) => toast.show(errorMessage(e), { tone: 'error' }));
     } catch (e) {
       toast.show(errorMessage(e), { tone: 'error' });
     } finally {
@@ -545,7 +588,21 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
           if (name.trim()) void save();
         }}
       >
-        <Field label="Name">{(id) => <TextInput id={id} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Greek yogurt" />}</Field>
+        {me.features.ai && (
+          <div className="flex flex-col gap-1">
+            <label className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-line bg-card px-4 font-semibold hover:bg-card-muted ${reading ? 'opacity-60' : ''}`}>
+              <Icon name="camera" className="size-5" />
+              {reading ? 'Reading the pack…' : fromPhoto ? 'Take another photo' : 'Take a photo of the pack'}
+              <input type="file" accept="image/*" capture="environment" multiple className="sr-only" disabled={reading} onChange={(e) => void readPhotos(e.target.files)} />
+            </label>
+            <p className="text-sm text-muted">
+              {fromPhoto
+                ? `Filled in from the photo${nutrition ? ', with the label’s nutrition' : ''}. Check it, then save.`
+                : 'The front, and the label with the nutrition if you can. Or type it in.'}
+            </p>
+          </div>
+        )}
+        <Field label="Name">{(id) => <TextInput id={id} autoFocus={!me.features.ai} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Greek yogurt" />}</Field>
         <div className="grid grid-cols-[1fr_7rem] gap-3">
           <Field label="Pack size">{(id) => <TextInput id={id} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional" />}</Field>
           <Field label="Unit">
@@ -572,6 +629,27 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
             </Select>
           )}
         </Field>
+        {canShare && (
+          <div className="flex min-h-11 items-start gap-3">
+            <input
+              id={`${shareId}-box`}
+              type="checkbox"
+              aria-describedby={`${shareId}-hint`}
+              className="mt-0.5 size-5 shrink-0 accent-[var(--accent)]"
+              checked={share}
+              onChange={(e) => setShare(e.target.checked)}
+            />
+            <div>
+              <label htmlFor={`${shareId}-box`} className="block font-medium">
+                Add it to Open Food Facts too
+              </label>
+              <p id={`${shareId}-hint`} className="text-sm text-muted">
+                Shares the name, brand and pack size, so the next person to scan it doesn't have to type them.
+              </p>
+            </div>
+          </div>
+        )}
+        {(share || fromPhoto) && <Field label="Brand">{(id) => <TextInput id={id} value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Optional" />}</Field>}
         <div className="grid grid-cols-2 gap-3">
           <Button variant="outline" size="lg" onClick={onClose}>
             Later
