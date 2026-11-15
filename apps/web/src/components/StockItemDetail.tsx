@@ -11,6 +11,7 @@ import { amountLabel, dateLabel, longDate, stateLabel, toneClasses, toneFor } fr
 import { useProductStock, useStockItem } from '../lib/queries';
 import { Icon } from './Icon';
 import { useMe } from './Layout';
+import { useStockActions } from './StockActions';
 import { StockRowActions } from './StockRowActions';
 import { useToast } from './Toast';
 import { Button, ErrorNote, Field, Pill, Sheet, Spinner, TextInput } from './ui';
@@ -74,40 +75,6 @@ function DateSheet({ item, open, onClose }: { item: StockItemDto; open: boolean;
   );
 }
 
-function AmountSheet({ item, open, onClose }: { item: StockItemDto; open: boolean; onClose: () => void }) {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const set = async (body: object) => {
-    try {
-      await api.patch(`/api/stock/${item.id}`, body);
-      await qc.invalidateQueries({ queryKey: ['stock'] });
-      onClose();
-    } catch (e) {
-      toast.show(errorMessage(e), { tone: 'error' });
-    }
-  };
-  return (
-    <Sheet open={open} onClose={onClose} title="How much is left?">
-      <div className="grid grid-cols-2 gap-2">
-        {(
-          [
-            [1, 'Full'],
-            [0.75, 'About ¾'],
-            [0.5, 'About half'],
-            [0.25, 'About ¼'],
-            [0.1, 'Nearly gone'],
-            [0, 'None'],
-          ] as const
-        ).map(([f, label]) => (
-          <Button key={f} variant={f === 0 ? 'dark' : 'outline'} onClick={() => void set({ fractionLeft: f })}>
-            {label}
-          </Button>
-        ))}
-      </div>
-    </Sheet>
-  );
-}
-
 /** Puts this product on the shopping list (one more pack). */
 function AddToListButton({ item }: { item: StockItemDto }) {
   const qc = useQueryClient();
@@ -135,7 +102,7 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
   const item = q.data?.item;
   const siblings = useProductStock(item?.productId ?? '').data?.filter((s) => s.id !== id) ?? [];
   const [dateOpen, setDateOpen] = useState(false);
-  const [amountOpen, setAmountOpen] = useState(false);
+  const actions = useStockActions();
 
   if (q.isPending) return <Spinner />;
   if (q.error || !item) return <ErrorNote error={q.error ?? 'Not found'} />;
@@ -163,7 +130,7 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
         <div className={row}>
           <dt className="text-muted">Amount left</dt>
           <dd>
-            <button type="button" onClick={() => setAmountOpen(true)} className="font-semibold text-accent-text hover:underline">
+            <button type="button" onClick={() => actions.changeAmount([item])} className="font-semibold text-accent-text hover:underline">
               {amountLabel(item)}
             </button>
           </dd>
@@ -245,7 +212,6 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
       </Link>
 
       <DateSheet key={`d-${item.bestBefore}`} item={item} open={dateOpen} onClose={() => setDateOpen(false)} />
-      <AmountSheet item={item} open={amountOpen} onClose={() => setAmountOpen(false)} />
     </div>
   );
 }

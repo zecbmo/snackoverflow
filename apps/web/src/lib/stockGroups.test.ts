@@ -24,6 +24,7 @@ const base: StockItemDto = {
   displayUnit: 'g',
   densityGPerMl: null,
   gramsPerCount: null,
+  countUnit: null,
   addedAt: '2026-11-01T10:00:00Z',
   isMeal: false,
   actions: { open: null, freeze: null, defrost: "It isn't frozen.", freezeWarning: null },

@@ -1,7 +1,7 @@
 import {
   bestBeforeLabel,
   type CalendarDate,
-  formatQuantity,
+  amountText,
   formatShortDate,
   freshness,
   type StockItemDto,
@@ -50,9 +50,8 @@ export function amountLabel(item: StockItemDto): string {
     const n = Math.round((item.remainingGrams / item.gramsPerCount) * 2) / 2;
     return `${n} ${n === 1 ? 'portion' : 'portions'}`;
   }
-  const measures = { densityGPerMl: item.densityGPerMl, gramsPerCount: item.gramsPerCount };
   if (item.remainingGrams !== null) {
-    const q = formatQuantity(item.remainingGrams, item.displayUnit, measures);
+    const q = amountText(item.remainingGrams, item);
     return item.fractionLeft < 1 ? `~${q}` : q;
   }
   if (item.fractionLeft >= 1) return '1 pack';

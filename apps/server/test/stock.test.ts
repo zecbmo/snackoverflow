@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type {
+  IngredientDto,
   LocationDto,
   ProductDto,
   ScanAddResult,
   ScanUseResult,
   StockChangeDto,
   StockItemDto,
+  StockMergeDto,
   WasteSummaryDto,
 } from '@snackoverflow/shared';
 import { type Client, FakeOff, makeTestApp, setupAdmin, type TestApp } from './helpers';
@@ -155,6 +157,82 @@ describe('using stock', () => {
     await api.post(`/api/stock/${a.change.item.id}/discard`, {});
     await api.post(`/api/stock/${b.change.item.id}/use`, { amount: { kind: 'all' } });
     expect(await api.get<WasteSummaryDto>('/api/stats/waste')).toEqual({ thisMonthGrams: 1000, lastMonthGrams: 0, thisMonthItems: 1 });
+  });
+});
+
+describe('changing the amount', () => {
+  it('sets the amount left in grams, keeping the fraction in step', async () => {
+    const { change } = await scanAdd(BEANS, loc.cupboard.id);
+    const r = await api.patch<StockChangeDto>(`/api/stock/${change.item.id}`, { remainingGrams: 200 });
+    expect(r.item).toMatchObject({ initialGrams: 415, remainingGrams: 200, fractionLeft: 0.482 });
+  });
+
+  it('takes more than the pack holds as a bigger pack, and undo puts the size back', async () => {
+    const { change } = await scanAdd(BEANS, loc.cupboard.id);
+    const r = await api.patch<StockChangeDto>(`/api/stock/${change.item.id}`, { remainingGrams: 500 });
+    expect(r.item).toMatchObject({ initialGrams: 500, remainingGrams: 500, fractionLeft: 1 });
+    // Using half afterwards works from the new size.
+    const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'fraction', fraction: 0.5 } });
+    expect(used.item.remainingGrams).toBe(250);
+    await api.post(`/api/events/${used.eventId}/undo`);
+    await api.post(`/api/events/${r.eventId}/undo`);
+    const [item] = await api.get<StockItemDto[]>('/api/stock');
+    expect(item).toMatchObject({ initialGrams: 415, remainingGrams: 415, fractionLeft: 1 });
+  });
+
+  it('setting it to nothing finishes the pack', async () => {
+    const { change } = await scanAdd(BEANS, loc.cupboard.id);
+    await api.patch(`/api/stock/${change.item.id}`, { remainingGrams: 0 });
+    expect(await api.get('/api/stock')).toHaveLength(0);
+  });
+});
+
+describe('removing and merging packs', () => {
+  const apples = async () => {
+    const ings = await api.get<IngredientDto[]>('/api/ingredients');
+    const apple = ings.find((i) => i.key === 'apples')!;
+    return api.post<ProductDto>('/api/products', { name: 'Pink Lady apples', ingredientId: apple.id, packAmount: 900, packUnit: 'g' });
+  };
+
+  it('counts food sold by the item, even when the pack was bought by weight', async () => {
+    const p = await apples();
+    expect(p.displayUnit).toBe('g');
+    await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id });
+    const [item] = await api.get<StockItemDto[]>('/api/stock');
+    expect(item).toMatchObject({ displayUnit: 'count', countUnit: 'apple', gramsPerCount: 150, remainingGrams: 900 });
+  });
+
+  it('merges packs into the one used first, with the earliest date, and undoes it', async () => {
+    const p = await apples();
+    await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id, bestBefore: '2026-11-20' });
+    await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id, bestBefore: '2026-11-30' });
+    const [a, b] = await api.get<StockItemDto[]>('/api/stock');
+    await api.patch(`/api/stock/${b!.id}`, { remainingGrams: 300 });
+    const r = await api.post<StockMergeDto>('/api/stock/merge', { ids: [b!.id, a!.id] });
+    expect(r.item).toMatchObject({ id: a!.id, initialGrams: 1800, remainingGrams: 1200, bestBefore: '2026-11-20' });
+    expect(r.eventIds).toHaveLength(2);
+    expect(await api.get('/api/stock')).toHaveLength(1);
+    for (const e of [...r.eventIds].reverse()) await api.post(`/api/events/${e}/undo`);
+    const back = await api.get<StockItemDto[]>('/api/stock');
+    expect(back.map((s) => [s.id, s.remainingGrams, s.initialGrams])).toEqual([
+      [a!.id, 900, 900],
+      [b!.id, 300, 900],
+    ]);
+  });
+
+  it('only merges packs of the same food in the same place', async () => {
+    const a = await scanAdd(BEANS, loc.cupboard.id);
+    const b = await scanAdd(BEANS, loc.fridge.id);
+    const r = await api.raw('POST', '/api/stock/merge', { ids: [a.change.item.id, b.change.item.id] });
+    expect(r.statusCode).toBe(400);
+    expect((await api.raw('POST', '/api/stock/merge', { ids: [a.change.item.id] })).statusCode).toBe(400);
+  });
+
+  it('removing a pack is a correction, not waste', async () => {
+    const { change } = await scanAdd(BEANS, loc.cupboard.id);
+    await api.patch(`/api/stock/${change.item.id}`, { fractionLeft: 0 });
+    expect(await api.get('/api/stock')).toHaveLength(0);
+    expect((await api.get<WasteSummaryDto>('/api/stats/waste')).thisMonthGrams).toBe(0);
   });
 });
 

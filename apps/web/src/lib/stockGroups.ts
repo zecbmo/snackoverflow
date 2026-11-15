@@ -2,7 +2,7 @@
  * Batches stay hidden: the stock screen shows one row per product and location
  * ("Potatoes · 2 packs · 2.9kg"), and tapping it shows the individual packs.
  */
-import { formatQuantity, type StockItemDto } from '@snackoverflow/shared';
+import { amountText, type StockItemDto } from '@snackoverflow/shared';
 
 export interface StockGroup {
   key: string;
@@ -42,7 +42,6 @@ export function groupSummary(g: StockGroup): string {
   const p = g.first;
   if (g.packs.some((x) => x.state === 'opened')) parts.push('opened');
   else if (g.packs.some((x) => x.state === 'defrosted')) parts.push('defrosted');
-  const measures = { densityGPerMl: p.densityGPerMl, gramsPerCount: p.gramsPerCount };
   if (p.isMeal) {
     const portions = g.packs.reduce((n, x) => n + (x.remainingGrams !== null && x.gramsPerCount ? x.remainingGrams / x.gramsPerCount : 1), 0);
     const r = Math.round(portions * 2) / 2;
@@ -51,18 +50,18 @@ export function groupSummary(g: StockGroup): string {
   }
   if (g.packs.length === 1) {
     if (p.remainingGrams !== null) {
-      const q = formatQuantity(p.remainingGrams, p.displayUnit, measures);
+      const q = amountText(p.remainingGrams, p);
       parts.push(p.fractionLeft < 1 ? `~${q}` : q);
     }
     return parts.join(' · ');
   }
   const allFull = g.packs.every((x) => x.fractionLeft >= 1 && x.initialGrams === p.initialGrams);
   if (allFull && p.initialGrams !== null) {
-    parts.push(`${g.packs.length} × ${formatQuantity(p.initialGrams, p.displayUnit, measures)}`);
+    parts.push(`${g.packs.length} × ${amountText(p.initialGrams, p)}`);
   } else {
     parts.push(`${g.packs.length} packs`);
     const total = g.packs.reduce((sum, x) => (sum === null || x.remainingGrams === null ? null : sum + x.remainingGrams), 0 as number | null);
-    if (total !== null) parts.push(formatQuantity(total, p.displayUnit, measures));
+    if (total !== null) parts.push(amountText(total, p));
   }
   return parts.join(' · ');
 }

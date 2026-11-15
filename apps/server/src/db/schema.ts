@@ -285,7 +285,9 @@ export type StockSnapshot = Pick<
   | 'fractionLeft'
   | 'remainingGrams'
   | 'finishedAt'
->;
+> &
+  // Older events were written without the pack size; undo leaves it alone for those.
+  Partial<Pick<typeof stockItems.$inferSelect, 'initialGrams'>>;
 
 /** Audit log of every stock change; powers undo, waste stats and usage estimates. */
 export const stockEvents = pgTable(

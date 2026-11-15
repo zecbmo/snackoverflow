@@ -160,6 +160,9 @@ export const adjustStockInput = z
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), 'Nothing to change');
 
+/** Merge packs of the same food in the same place into one. */
+export const mergeStockInput = z.object({ ids: z.array(id).min(2).max(50) });
+
 export const addStockInput = z.object({
   productId: id,
   locationId: id,
@@ -243,6 +246,7 @@ export type UnmatchedFix = z.infer<typeof unmatchedFix>;
 export type ProductInput = z.infer<typeof productInput>;
 export type UseAmountInput = z.infer<typeof useAmountInput>;
 export type AdjustStockInput = z.infer<typeof adjustStockInput>;
+export type MergeStockInput = z.infer<typeof mergeStockInput>;
 
 // --- Recipes and cooking ------------------------------------------------------------
 

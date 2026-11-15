@@ -14,6 +14,7 @@ import { MenuButton, useMe } from '../components/Layout';
 import { Menu, PickerMenu } from '../components/Menu';
 import { SidePanel, usePanelParam } from '../components/SidePanel';
 import { StockItemDetail } from '../components/StockItemDetail';
+import { useStockActions } from '../components/StockActions';
 import { StockRowActions } from '../components/StockRowActions';
 import { useToast } from '../components/Toast';
 import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
@@ -109,6 +110,7 @@ export function StockPage() {
   const [hiddenColumns, toggleColumn] = useHiddenColumns('stock');
   const [openId, openPanel, closePanel] = usePanelParam();
   const navigate = useNavigate();
+  const actions = useStockActions();
 
   const rows = useMemo(() => {
     const soon = addDays(me.today, 3);
@@ -185,7 +187,24 @@ export function StockPage() {
     { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (g) => g.locationName },
     { key: 'state', label: 'State', header: <span title="Opened, frozen or defrosted">State</span>, className: 'w-14', cell: (g) => <StateIcon g={g} /> },
     { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : g.packs.length) },
-    { key: 'left', label: 'Amount', header: <span title="What's left. ~ means an estimate, for opened packs">Amount</span>, align: 'right', className: 'whitespace-nowrap tabular-nums', cell: (g) => leftLabel(g) || '–' },
+    {
+      key: 'left',
+      label: 'Amount',
+      header: <span title="What's left. ~ means an estimate, for opened packs. Click to change it.">Amount</span>,
+      align: 'right',
+      className: 'whitespace-nowrap tabular-nums',
+      cell: (g) => (
+        <button
+          type="button"
+          aria-label={`Change amount of ${g.name}, ${leftLabel(g) || 'not known'}`}
+          title="Change amount"
+          onClick={() => actions.changeAmount(g.packs)}
+          className="-mx-1.5 rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-accent-text hover:underline focus-visible:bg-accent-soft"
+        >
+          {leftLabel(g) || '–'}
+        </button>
+      ),
+    },
     { key: 'planned', header: 'Planned', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: plannedCell },
     { key: 'date', header: 'Best before', className: 'whitespace-nowrap', cell: datePill },
   ];
@@ -313,7 +332,7 @@ export function StockPage() {
           openLabel={(g) => `${g.name}, ${g.locationName}`}
           activeKey={activeKey}
           selection={{ selected, onChange: setSelected }}
-          actions={(g) => <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} />}
+          actions={(g) => <StockRowActions item={g.first} name={g.name} packs={g.packs} onDetails={() => openGroup(g)} />}
           phone={(g) => ({
             lead: <span role="img" aria-label={toneMeaning[toneFor(g.first, me.today)]} title={toneMeaning[toneFor(g.first, me.today)]} className={`h-10 w-1 shrink-0 rounded-full ${toneClasses[toneFor(g.first, me.today)].bar}`} />,
             title: g.name,
@@ -324,7 +343,7 @@ export function StockPage() {
               </>
             ),
             badge: datePill(g),
-            trailing: <StockRowActions item={g.first} name={g.name} onDetails={() => openGroup(g)} compact />,
+            trailing: <StockRowActions item={g.first} name={g.name} packs={g.packs} onDetails={() => openGroup(g)} compact />,
           })}
           empty={
             <EmptyState title={q || filter !== 'all' || place !== 'all' || category ? 'Nothing matches' : 'Nothing in stock yet'}>

@@ -17,10 +17,12 @@ import {
   estimateOnAdd,
   learnedDaysFromEdit,
   type LocationType,
+  mergePacks,
   orderForUse,
   shouldAskOpened,
   type StillSomeAnswer,
   type StockChangeDto,
+  type StockMergeDto,
   type StockEventType,
   type StockItemDto,
   todayIn,
@@ -59,6 +61,7 @@ function snapshot(item: StockRow): StockSnapshot {
     defrostedOn: item.defrostedOn,
     fractionLeft: item.fractionLeft,
     remainingGrams: item.remainingGrams,
+    initialGrams: item.initialGrams,
     finishedAt: item.finishedAt,
   };
 }
@@ -72,8 +75,11 @@ export function toStockDto(
 ): StockItemDto {
   const shelfLife = productShelfLife(product, catalog);
   const measures = measuresFor(product.ingredientId, catalog);
+  const ingredient = product.ingredientId ? catalog.ingredients.get(product.ingredientId) : undefined;
   // Cooked meals are counted in portions.
   if (product.portionGrams) measures.gramsPerCount = product.portionGrams;
+  // Food sold by the item (apples, eggs) is counted, even when this pack was bought by weight.
+  const counted = !product.portionGrams && product.displayUnit === 'g' && ingredient?.packUnit === 'count' && Boolean(measures.gramsPerCount);
   const open = canOpen(item.state, shelfLife);
   const freeze = canFreeze({ today, state: item.state, bestBefore: item.bestBefore, shelfLife });
   const defrost = canDefrost(item.state);
@@ -95,9 +101,10 @@ export function toStockDto(
     fractionLeft: item.fractionLeft,
     initialGrams: item.initialGrams,
     remainingGrams: item.remainingGrams,
-    displayUnit: product.displayUnit,
+    displayUnit: counted ? 'count' : product.displayUnit,
     densityGPerMl: measures.densityGPerMl ?? null,
     gramsPerCount: measures.gramsPerCount ?? null,
+    countUnit: product.portionGrams ? null : (ingredient?.countUnit ?? null),
     addedAt: item.addedAt.toISOString(),
     isMeal: product.recipeId !== null,
     foodGroup: product.foodGroup ?? (product.ingredientId ? (catalog.ingredients.get(product.ingredientId)?.foodGroup ?? null) : null),
@@ -430,8 +437,12 @@ export async function adjustPack(deps: StockDeps, id: string, input: AdjustStock
       // First time we learn the size of this pack: take the amount as the pack size.
       patch.initialGrams = input.remainingGrams;
       fraction = input.remainingGrams > 0 ? 1 : 0;
+    } else if (input.remainingGrams > item.initialGrams) {
+      // More than the pack holds: the pack was bigger than we thought, so it's full at the new size.
+      patch.initialGrams = input.remainingGrams;
+      fraction = 1;
     } else {
-      fraction = Math.min(1, input.remainingGrams / item.initialGrams);
+      fraction = input.remainingGrams / item.initialGrams;
     }
     patch.remainingGrams = input.remainingGrams;
   } else if (input.fractionLeft !== undefined) {
@@ -465,6 +476,45 @@ export async function adjustPack(deps: StockDeps, id: string, input: AdjustStock
     to: input.locationId ?? item.locationId,
   });
   return finishChange(db, auth, now, item.id, eventId);
+}
+
+/**
+ * Merge packs of one food in one place into the pack that's used first. The rest are finished
+ * (not binned, so it isn't waste). Every pack gets an adjust event, so each can be undone.
+ */
+export async function mergeStockPacks(deps: StockDeps, ids: string[]): Promise<StockMergeDto> {
+  const { db, auth, now } = deps;
+  const rows = [];
+  for (const id of [...new Set(ids)]) rows.push(await loadItem(db, auth, id));
+  if (rows.length < 2) throw badRequest('Pick at least two packs to merge.');
+  const [first] = rows;
+  if (rows.some((r) => r.item.finishedAt)) throw conflict("One of those packs is already gone.");
+  if (rows.some((r) => r.item.productId !== first!.item.productId || r.item.locationId !== first!.item.locationId)) {
+    throw badRequest('Only packs of the same food in the same place can be merged.');
+  }
+  let merged;
+  try {
+    merged = mergePacks(rows.map((r) => r.item));
+  } catch (e) {
+    throw badRequest((e as Error).message);
+  }
+  const target = orderForUse(rows.map((r) => r.item))[0]!;
+  const eventIds: string[] = [];
+  for (const { item } of rows) {
+    if (item.id === target.id) continue;
+    await db.update(stockItems).set({ fractionLeft: 0, remainingGrams: item.initialGrams === null ? null : 0, finishedAt: now }).where(eq(stockItems.id, item.id));
+    eventIds.push(await writeEvent(deps, item, 'adjust', { fraction: -item.fractionLeft, grams: item.remainingGrams === null ? null : -item.remainingGrams, before: snapshot(item) }));
+  }
+  await db.update(stockItems).set({ ...merged, finishedAt: merged.fractionLeft <= 0 ? now : null }).where(eq(stockItems.id, target.id));
+  const delta = Math.round((merged.fractionLeft - target.fractionLeft) * 1000) / 1000;
+  eventIds.push(
+    await writeEvent(deps, target, 'adjust', {
+      fraction: delta || null,
+      grams: merged.remainingGrams !== null && target.remainingGrams !== null ? Math.round((merged.remainingGrams - target.remainingGrams) * 1000) / 1000 : null,
+      before: snapshot(target),
+    }),
+  );
+  return { item: await getStockItem(db, auth, now, target.id), eventIds };
 }
 
 /**

@@ -147,9 +147,12 @@ export interface StockItemDto {
   fractionLeft: number;
   initialGrams: number | null;
   remainingGrams: number | null;
+  /** How the amount is shown: "count" for food sold by the item (apples, eggs), even when the pack was bought by weight. */
   displayUnit: DisplayUnit;
   densityGPerMl: number | null;
   gramsPerCount: number | null;
+  /** What one item is called ("apple", "egg"), for counted food. */
+  countUnit: string | null;
   addedAt: string;
   /** A cooked meal (leftovers or batch-cook portions), counted in portions. */
   isMeal: boolean;
@@ -187,6 +190,12 @@ export interface StockChangeDto {
   askStillSome?: boolean;
   askOpened?: boolean;
   message?: string;
+}
+
+/** Packs merged into one: the pack that's left, and every event written (undo them newest first). */
+export interface StockMergeDto {
+  item: StockItemDto;
+  eventIds: string[];
 }
 
 export interface ScanAddResult {

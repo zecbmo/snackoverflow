@@ -8,6 +8,7 @@ import {
   discardStockInput,
   freezeStockInput,
   manualAddInput,
+  mergeStockInput,
   moveStockInput,
   type ScanAddResult,
   type ScanUseResult,
@@ -46,6 +47,7 @@ import {
   getStockItem,
   itemHistory,
   listStock,
+  mergeStockPacks,
   movePack,
   openPack,
   packsForUse,
@@ -153,6 +155,11 @@ export async function stockRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/api/stock/:id', async (req) => {
     const input = parse(adjustStockInput, req.body);
     return change(req, (d) => adjustPack(d, req.params.id, input));
+  });
+
+  app.post('/api/stock/merge', async (req) => {
+    const { ids } = parse(mergeStockInput, req.body);
+    return change(req, (d) => mergeStockPacks(d, ids));
   });
 
   app.post<{ Params: { id: string } }>('/api/events/:id/undo', async (req) => change(req, (d) => undoEvent(d, req.params.id)));

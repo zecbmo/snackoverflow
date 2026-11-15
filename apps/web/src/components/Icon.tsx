@@ -18,6 +18,7 @@ const paths = {
   cupboard: 'M4 4h16v16H4zM12 4v16M9.5 11v2M14.5 11v2',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0',
   plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
   bottle: 'M10 2.5h4M10.5 2.5v3.2L8 9.5V20a1.5 1.5 0 0 0 1.5 1.5h5A1.5 1.5 0 0 0 16 20V9.5l-2.5-3.8V2.5M8 13h8',
   undo: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',

@@ -11,6 +11,7 @@ const SAME_WIDTH = 'min-w-[5rem]';
 export function StockRowActions({
   item,
   name,
+  packs,
   onDetails,
   compact = false,
   size = 'xs',
@@ -18,6 +19,8 @@ export function StockRowActions({
   item: StockItemDto;
   /** For the buttons' accessible names: "Use Semi Skimmed Milk". */
   name: string;
+  /** Every pack on the row, for "Change amount" (defaults to just this one). */
+  packs?: StockItemDto[];
   onDetails?: () => void;
   /**
    * Phones: just Use and "⋯" on the row (Freeze or Defrost, Move and Bin are in the menu), so
@@ -29,6 +32,7 @@ export function StockRowActions({
   const actions = useStockActions();
   const frozen = item.state === 'frozen';
   const more: MenuEntry[] = [];
+  more.push({ label: 'Change amount…', icon: 'edit', onSelect: () => actions.changeAmount(packs ?? [item]) });
   more.push({ label: 'Move…', icon: 'move', onSelect: () => actions.move(item) });
   if (item.actions.open === null) more.push({ label: 'Mark as opened', icon: 'bottle', onSelect: () => void actions.open(item) });
   if (onDetails) more.push({ label: 'Details and history', icon: 'external', onSelect: onDetails });

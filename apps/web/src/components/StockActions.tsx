@@ -10,6 +10,7 @@ import { amountText, type EarmarkDto, type StockChangeDto, type StockItemDto, ty
 import { api, errorMessage } from '../lib/api';
 import { useLocations } from '../lib/queries';
 import { amountLabel, longDate } from '../lib/format';
+import { AmountSheet } from './AmountSheet';
 import { Icon, locationIcon } from './Icon';
 import { useToast } from './Toast';
 import { Button, Field, Sheet, TextInput } from './ui';
@@ -21,6 +22,8 @@ interface StockActions {
   freeze(item: StockItemDto): Promise<void>;
   defrost(item: StockItemDto): Promise<void>;
   move(item: StockItemDto): void;
+  /** Change how much is left, for one pack or every pack on a stock row. */
+  changeAmount(packs: StockItemDto[]): void;
   discard(item: StockItemDto): Promise<void>;
   /** Handle the follow-up questions after any use. */
   followUp(change: StockChangeDto): void;
@@ -59,6 +62,7 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
   const toast = useToast();
   const [useFor, setUseFor] = useState<StockItemDto | null>(null);
   const [moveFor, setMoveFor] = useState<StockItemDto | null>(null);
+  const [amountFor, setAmountFor] = useState<StockItemDto[] | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [warning, setWarning] = useState<PlanWarning | null>(null);
   const [freezeCheck, setFreezeCheck] = useState<{ item: StockItemDto; resolve: (go: boolean) => void } | null>(null);
@@ -171,6 +175,7 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
         await run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/defrost`), (c) => `Defrosting in the ${c.item.locationName.toLowerCase()}. Use within a day or so.`);
       },
       move: (item) => setMoveFor(item),
+      changeAmount: (packs) => setAmountFor(packs.length ? packs : null),
       async discard(item) {
         if (!(await checkPlan(item, { kind: 'all' }))) return;
         await run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/discard`, {}), () => `Binned the ${item.productName}.`);
@@ -187,6 +192,7 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={actions}>
       {children}
       <UseSheet item={useFor} onClose={() => setUseFor(null)} onUse={(item, amount) => void actions.useAmount(item, amount)} />
+      <AmountSheet packs={amountFor} onClose={() => setAmountFor(null)} onReplace={setAmountFor} />
       <MoveSheet
         item={moveFor}
         onClose={() => setMoveFor(null)}
