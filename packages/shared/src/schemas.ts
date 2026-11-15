@@ -353,10 +353,12 @@ export const planEntryInput = z
   .object({
     date: calendarDate,
     slot: mealSlot,
-    kind: z.enum(['recipe', 'product', 'stock', 'text']),
+    kind: z.enum(['recipe', 'product', 'stock', 'text', 'ingredient', 'chain']),
     recipeId: id.nullish(),
     productId: id.nullish(),
     stockItemId: id.nullish(),
+    ingredientId: id.nullish(),
+    chainItemId: id.nullish(),
     text: z.string().trim().max(200).nullish(),
     servings: z.number().positive().max(100).default(1),
     kcalPerServing: z.number().min(0).max(10_000).nullish(),
@@ -366,6 +368,8 @@ export const planEntryInput = z
     batch: z.boolean().default(false),
     /** Log it as eaten straight away (e.g. adding a banana you just had). */
     eaten: z.boolean().default(false),
+    /** When logged as eaten: take it from stock if it's there (the app asks first). */
+    fromStock: z.boolean().default(true),
     /** For recipes: food used instead of what the recipe says. */
     swaps: swapsInput.nullish(),
   })
@@ -374,6 +378,8 @@ export const planEntryInput = z
       (v.kind === 'recipe' && v.recipeId) ||
       (v.kind === 'product' && v.productId) ||
       (v.kind === 'stock' && v.stockItemId) ||
+      (v.kind === 'ingredient' && v.ingredientId) ||
+      (v.kind === 'chain' && v.chainItemId) ||
       (v.kind === 'text' && v.text),
     'Pick what to plan',
   );
@@ -390,8 +396,41 @@ export const updatePlanEntryInput = z.object({
   swaps: swapsInput.nullable().optional(),
 });
 
-/** Eating planned leftovers or a product takes it out of stock. */
-export const eatPlanEntryInput = z.object({ fromStock: z.boolean().default(true) });
+/**
+ * Tick people as having eaten a meal (anyone in the household can tick for anyone). Eating
+ * planned food or leftovers takes their share out of stock unless `fromStock` is false.
+ */
+export const eatPlanEntryInput = z.object({
+  fromStock: z.boolean().default(true),
+  /** Who ate it; default: you. */
+  people: z.array(id).max(20).optional(),
+});
+
+/** Untick: they haven't eaten it after all. Stock isn't put back (use Undo for that). */
+export const uneatPlanEntryInput = z.object({ people: z.array(id).max(20).optional() });
+
+export const foodSearchQuery = z.object({ q: z.string().trim().max(100).default('') });
+export const foodSuggestionsQuery = z.object({ slot: mealSlot.optional() });
+
+/** Star or unstar a food for Log food. */
+export const favouriteInput = z.object({
+  kind: z.enum(['product', 'recipe', 'ingredient', 'chain']),
+  id,
+  on: z.boolean(),
+});
+
+/** Save what you ate at a meal as "My usual breakfast". */
+export const savedMealInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  entryIds: z.array(id).min(1).max(30),
+});
+
+/** Log a saved meal as eaten. */
+export const logSavedMealInput = z.object({
+  date: calendarDate,
+  slot: mealSlot,
+  fromStock: z.boolean().default(true),
+});
 
 // --- Shopping list ------------------------------------------------------------------------
 

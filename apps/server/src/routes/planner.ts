@@ -7,11 +7,13 @@ import {
   calendarDate,
   eatPlanEntryInput,
   type EatResultDto,
+  type PlanEatDto,
   planEntryInput,
   putAwayInput,
   scanInput,
   shoppingItemInput,
   todayIn,
+  uneatPlanEntryInput,
   updatePlanEntryInput,
   updateShoppingItemInput,
 } from '@snackoverflow/shared';
@@ -20,7 +22,7 @@ import { stockEvents, users } from '../db/schema';
 import { badRequest, forbidden, parse } from '../http';
 import { deliver, prefsOf } from '../notify/notifications';
 import { barcodesFor, loadCatalog, productDto } from '../services/catalog';
-import { createEntry, deleteEntry, earmarks, eatEntry, getEntry, listPlan, logEaten, updateEntry } from '../services/planner';
+import { createEntryWithStock, deleteEntry, earmarks, eatEntry, getEntry, listPlan, logEaten, uneatEntry, updateEntry } from '../services/planner';
 import { resolveBarcode } from '../services/scan';
 import { pricingOn } from '../services/pricing';
 import { addItem, buildFromPlan, deleteItems, listShopping, putAway, runningLow, syncPlanItems, updateItem } from '../services/shopping';
@@ -59,9 +61,10 @@ export async function plannerRoutes(app: FastifyInstance) {
     return listPlan(ctx.db, auth, from, to, personId);
   });
 
+  /** Plan a meal, or log one as eaten (`eaten: true`). Logging takes it from stock unless `fromStock` is false. */
   app.post('/api/plan', async (req) => {
     const input = parse(planEntryInput, req.body);
-    return inTx(req, (d) => createEntry(d, input), 'plan', 'stock');
+    return (await inTx(req, (d) => createEntryWithStock(d, input), 'plan', 'stock')).entry;
   });
 
   app.patch<{ Params: { id: string } }>('/api/plan/:id', async (req) => {
@@ -69,15 +72,23 @@ export async function plannerRoutes(app: FastifyInstance) {
     return inTx(req, (d) => updateEntry(d, req.params.id, input), 'plan');
   });
 
-  app.delete<{ Params: { id: string } }>('/api/plan/:id', async (req) => {
-    await inTx(req, (d) => deleteEntry(d, req.params.id), 'plan');
-    return { ok: true };
+  /** Remove a meal. `?restoreStock=1` puts back the food it took from stock (Undo after logging). */
+  app.delete<{ Params: { id: string }; Querystring: { restoreStock?: string } }>('/api/plan/:id', async (req) => {
+    const restore = req.query.restoreStock === '1' || req.query.restoreStock === 'true';
+    const r = await inTx(req, (d) => deleteEntry(d, req.params.id, restore), 'plan', 'stock');
+    return { ok: true, restored: r.restored };
   });
 
-  /** Eaten a planned product or leftovers: mark it done and take it out of stock. */
-  app.post<{ Params: { id: string } }>('/api/plan/:id/eat', async (req) => {
-    const { fromStock } = parse(eatPlanEntryInput, req.body);
-    return (await inTx(req, (d) => eatEntry(d, req.params.id, fromStock), 'plan', 'stock')).entry;
+  /** Tick people as having eaten it (default: you; anyone can tick for anyone in the household). */
+  app.post<{ Params: { id: string } }>('/api/plan/:id/eat', async (req): Promise<PlanEatDto> => {
+    const { fromStock, people } = parse(eatPlanEntryInput, req.body);
+    return inTx(req, (d) => eatEntry(d, req.params.id, fromStock, people), 'plan', 'stock');
+  });
+
+  /** Untick: they haven't eaten it after all. */
+  app.post<{ Params: { id: string } }>('/api/plan/:id/uneat', async (req) => {
+    const { people } = parse(uneatPlanEntryInput, req.body);
+    return inTx(req, (d) => uneatEntry(d, req.params.id, people), 'plan');
   });
 
   app.get<{ Params: { id: string } }>('/api/plan/:id', async (req) => getEntry(ctx.db, requireAuth(req), req.params.id));

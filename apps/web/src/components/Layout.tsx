@@ -10,6 +10,7 @@ import { hasServer, isNative } from '../lib/platform';
 import { useToast } from './Toast';
 import { useInbox, useProducts, useRecipes, useSession, useStock } from '../lib/queries';
 import { Icon, type IconName } from './Icon';
+import { LogFoodProvider, useLogFood } from './LogFood';
 import { SETTINGS_PATHS } from './SettingsShell';
 import { Spinner } from './ui';
 
@@ -95,13 +96,13 @@ function OfflineBanner() {
   return (
     <div role="status" className="mt-4 flex items-center gap-3 rounded-lg border border-line bg-card-muted px-4 py-2">
       <p className="flex-1 text-[0.9375rem]">
-        {count === 1 ? '1 scan is' : `${count} scans are`} waiting to sync. They'll go as soon as you're back online.
+        {count === 1 ? '1 change is' : `${count} changes are`} waiting to sync. They'll go as soon as you're back online.
       </p>
       <button
         type="button"
         className="min-h-11 font-semibold text-accent-text"
         onClick={() =>
-          void syncQueue().then((r) => toast.show(r.synced ? `Synced ${r.synced} scan${r.synced === 1 ? '' : 's'}.` : 'Still offline. Will try again soon.'))
+          void syncQueue().then((r) => toast.show(r.synced ? `Synced ${r.synced} ${r.synced === 1 ? 'change' : 'changes'}.` : 'Still offline. Will try again soon.'))
         }
       >
         Sync now
@@ -282,6 +283,7 @@ function ScrollToTop() {
 
 function Sidebar() {
   const me = useMe();
+  const logFood = useLogFood();
   const sections = useMenuSections();
   const [collapsed, toggle] = useSidebarCollapsed();
   const main = useMainLinks();
@@ -318,23 +320,25 @@ function Sidebar() {
       </div>
       <nav aria-label="Pages" className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-3 ${collapsed ? 'items-stretch px-2' : 'px-3'}`}>
         <div className={`mb-3 flex shrink-0 gap-1.5 ${collapsed ? 'flex-col' : ''}`}>
-          <Link
-            to="/scan"
-            aria-label="Scan items"
-            title={collapsed ? 'Scan items' : undefined}
+          <button
+            type="button"
+            onClick={() => logFood.openLog()}
+            aria-label="Log food"
+            title={collapsed ? 'Log food' : undefined}
             className="inline-flex h-8 flex-1 items-center justify-center gap-2 rounded-md bg-accent text-sm font-semibold text-accent-ink hover:brightness-110"
           >
-            <Icon name="scan" className="size-[18px]" />
-            {!collapsed && 'Scan items'}
-          </Link>
-          <Link
-            to="/stock?add=1"
-            aria-label="Add items by hand"
-            title="Add items by hand"
+            <Icon name="spoon" className="size-[18px]" />
+            {!collapsed && 'Log food'}
+          </button>
+          <button
+            type="button"
+            onClick={() => logFood.openChooser()}
+            aria-label="Add: log food, scan shopping or plan a meal"
+            title="Log food, scan shopping, add by hand or plan a meal"
             className="inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-line bg-card text-ink hover:bg-card-muted"
           >
             <Icon name="plus" className="size-[18px]" />
-          </Link>
+          </button>
         </div>
         {main.map((l) => (
           <SideLink key={l.to} {...l} collapsed={collapsed} end={l.to === '/'} />
@@ -372,6 +376,7 @@ function Sidebar() {
 }
 
 function BottomBar() {
+  const logFood = useLogFood();
   const item = 'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[0.8125rem]';
   const cls = ({ isActive }: { isActive: boolean }) => `${item} ${isActive ? 'font-semibold text-ink' : 'text-muted'}`;
   return (
@@ -384,13 +389,14 @@ function BottomBar() {
           </NavLink>
         ))}
         <div className="flex flex-1 justify-center">
-          <Link
-            to="/scan"
-            aria-label="Scan"
+          <button
+            type="button"
+            onClick={() => logFood.openChooser()}
+            aria-label="Add: log food, scan shopping or plan a meal"
             className="-mt-8 inline-flex size-16 items-center justify-center rounded-full bg-accent text-accent-ink shadow-[0_8px_24px_-6px_var(--accent)]"
           >
-            <Icon name="scan" className="size-8" />
-          </Link>
+            <Icon name="plus" className="size-8" strokeWidth={2.4} />
+          </button>
         </div>
         {tabs.slice(2).map((t) => (
           <NavLink key={t.to} to={t.to} className={cls}>
@@ -448,7 +454,7 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
       signedIn
         ? startQueueSync((r) => {
             void qc.invalidateQueries({ queryKey: ['stock'] });
-            toast.show(`Synced ${r.synced} scan${r.synced === 1 ? '' : 's'} made offline.${r.dropped ? ` ${r.dropped} couldn't be added.` : ''}`);
+            toast.show(`Synced ${r.synced} ${r.synced === 1 ? 'change' : 'changes'} made offline.${r.dropped ? ` ${r.dropped} couldn't be added.` : ''}`);
           })
         : undefined,
     [signedIn, qc, toast],
@@ -482,6 +488,7 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
   }
   return (
     <SessionCtx.Provider value={session.data}>
+      <LogFoodProvider>
       <MenuCtx.Provider value={() => setMenuOpen(true)}>
         {bare ? (
           <Outlet />
@@ -498,6 +505,7 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
           </div>
         )}
       </MenuCtx.Provider>
+      </LogFoodProvider>
     </SessionCtx.Provider>
   );
 }

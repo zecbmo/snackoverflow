@@ -15,7 +15,7 @@ test('scans offline and syncs when back online', async ({ page, context }, info)
   await expect(page.getByRole('status').filter({ hasText: 'Saved offline' })).toBeVisible();
 
   await context.setOffline(false);
-  await expect(page.getByText(/Synced 1 scan made offline/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Synced 1 change made offline/)).toBeVisible({ timeout: 15_000 });
 
   await page.goto('/stock');
   await expect(page.getByRole('button', { name: new RegExp(name) }).first()).toBeVisible();

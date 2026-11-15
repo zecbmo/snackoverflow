@@ -35,6 +35,26 @@ export interface FeaturesDto {
   mcp: boolean;
   /** Products people name can be added to Open Food Facts (OFF_CONTRIBUTE_* set). */
   offContribute: boolean;
+  /** A local copy of Open Food Facts is kept for search as you type (OFF_DUMP_ENABLED). */
+  offDump: boolean;
+}
+
+/** Settings → the local copy of Open Food Facts. */
+export interface OffDumpStatusDto {
+  enabled: boolean;
+  /** Products sold here are kept, e.g. "united-kingdom"; null keeps every country. */
+  country: string | null;
+  /** Products in the local copy now. */
+  products: number;
+  refreshDays: number;
+  last: {
+    status: 'running' | 'done' | 'failed';
+    startedAt: string;
+    finishedAt: string | null;
+    lines: number;
+    products: number;
+    error: string | null;
+  } | null;
 }
 
 /** Settings → AI and assistants (admins). Keys and tokens are never sent back, only their last characters. */
@@ -332,6 +352,8 @@ export interface RecipeSummaryDto {
   tags: string[];
   totalMinutes: number | null;
   kcalPerServing: number | null;
+  /** Nutrition per serving, when enough of the recipe is known (as for kcalPerServing). */
+  nutritionPerServing: Nutrition | null;
   ingredientCount: number;
 }
 
@@ -485,31 +507,42 @@ export interface CookResultDto {
   leftovers: StockItemDto[];
 }
 
+export type PlanKind = 'recipe' | 'product' | 'stock' | 'text' | 'ingredient' | 'chain';
+
 export interface PlanEntryDto {
   id: string;
   date: CalendarDate;
   slot: MealSlot;
-  kind: 'recipe' | 'product' | 'stock' | 'text';
+  kind: PlanKind;
   recipeId: string | null;
   productId: string | null;
   stockItemId: string | null;
+  ingredientId: string | null;
+  chainItemId: string | null;
   title: string;
-  /** "From fridge", "Scanned", "Missing 1"… */
+  /** "From fridge", "Scanned", "McDonald's"… */
   detail: string | null;
   servings: number;
-  /** For food and leftovers: grams in one item (servings counts items), so amounts can be shown and set by weight. */
+  /** For food, leftovers and ingredients: grams in one item (servings counts items), so amounts can be shown and set by weight. */
   unitGrams: number | null;
   /** How the food is measured, for showing a weight: 'ml' for liquids. */
   displayUnit: 'g' | 'ml' | 'count';
+  /** What one item is called ("banana"), for counted ingredients. */
+  countUnit: string | null;
+  /** The meal itself: planned, cooked or done, or skipped. Whether each person has eaten is on `people`. */
   status: 'planned' | 'cooked' | 'skipped';
   source: 'plan' | 'scan';
-  /** Who has portions of it. Servings beyond these are free: nobody's yet. */
-  people: { userId: string; name: string; portions: number }[];
+  /** Who has portions of it, and whether they've eaten them. Servings beyond these are free: nobody's yet. */
+  people: { userId: string; name: string; portions: number; eaten: boolean }[];
   /** A batch cook for the freezer: nobody is eating it, so no one gets its calories. */
   batch: boolean;
   kcalPerServing: number | null;
+  /** Protein, carbs, fat (and the rest, when known) in one serving. */
+  nutritionPerServing: Nutrition | null;
   /** Calories for the person being viewed (their portions only), or for the whole entry. */
   kcal: number | null;
+  /** The person being viewed has eaten their portion (everyone's view: everyone with a portion has). */
+  eaten: boolean;
   /** For recipes: food used instead of what the recipe says ("Tenderstem broccoli for Broccoli"). */
   swaps: { recipeIngredientId: string; ingredientId: string; from: string; to: string }[];
 }
@@ -517,7 +550,20 @@ export interface PlanEntryDto {
 export interface PlanDayDto {
   date: CalendarDate;
   entries: PlanEntryDto[];
-  kcal: number;
+  /** Calories eaten so far. Never added to planned. */
+  eatenKcal: number;
+  /** Calories still planned (not yet eaten, not skipped). */
+  plannedKcal: number;
+  /** Grams of protein, carbs and fat eaten, from the foods that have them; `missing` eaten foods don't. */
+  eatenMacros: MacroTotals;
+}
+
+export interface MacroTotals {
+  protein: number;
+  carbs: number;
+  fat: number;
+  /** Eaten foods with no macros known. */
+  missing: number;
 }
 
 export interface PlanDto {
@@ -526,6 +572,71 @@ export interface PlanDto {
   /** Whose calendar this is; null = everyone. */
   personId: string | null;
   days: PlanDayDto[];
+}
+
+/** People ticked as having eaten a meal, and the stock changes it made (for Undo). */
+export interface PlanEatDto {
+  entry: PlanEntryDto;
+  stockEventIds: string[];
+}
+
+/** Where a food in the Log food search comes from. */
+export type FoodSource = 'leftovers' | 'stock' | 'recipe' | 'product' | 'ingredient' | 'chain' | 'quick' | 'off';
+
+/** One thing you could log: everything needed to pick an amount and log it. */
+export interface FoodResultDto {
+  source: FoodSource;
+  /** The id for logging: stock item (leftovers), recipe, product (stock and product), ingredient, menu item or barcode (Open Food Facts). Empty for quick calories. */
+  id: string;
+  title: string;
+  /** "Fridge · 2 packs", "Hovis", "McDonald's · Burgers". */
+  subtitle: string | null;
+  kcalPerServing: number | null;
+  /** What one serving is: "1 pack (400g)", "1 serving", "1 banana (120g)", "100g". */
+  servingLabel: string;
+  /** Grams in one serving, when known, so it can be logged by weight. */
+  unitGrams: number | null;
+  displayUnit: 'g' | 'ml' | 'count';
+  countUnit: string | null;
+  /** In the house: logging it can take it from stock (the app asks). */
+  inStock: { packs: number; locationName: string } | null;
+  /** Protein, carbs, fat… in one serving, when known. */
+  nutritionPerServing: Nutrition | null;
+  /** Starred by you (products, recipes, foods and menu items can be). */
+  favourite: boolean;
+  /** How much you usually have, from what you've logged before. */
+  usualServings: number | null;
+}
+
+/** "My usual breakfast": several foods logged in one tap. */
+export interface SavedMealDto {
+  id: string;
+  name: string;
+  items: { title: string; servings: number; kcal: number | null }[];
+  kcal: number | null;
+}
+
+/** What Log food shows before anything is typed. */
+export interface FoodSuggestionsDto {
+  favourites: FoodResultDto[];
+  /** Had at this meal more than once lately, most often first. */
+  usual: FoodResultDto[];
+  /** Had lately, any meal, newest first. */
+  recent: FoodResultDto[];
+  meals: SavedMealDto[];
+}
+
+/** Searching Open Food Facts by name: `busy` means wait a minute (it limits searches). */
+export interface OffSearchDto {
+  status: 'ok' | 'busy' | 'unavailable';
+  results: FoodResultDto[];
+}
+
+/** A barcode scanned in Log food: the food, and whether anyone has named it yet. */
+export interface BarcodeFoodDto {
+  food: FoodResultDto;
+  productId: string;
+  named: boolean;
 }
 
 /** Food set aside for planned meals (planned meals warn, they don't lock stock). */

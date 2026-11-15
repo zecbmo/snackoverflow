@@ -48,11 +48,11 @@ test('drag a recipe onto the calendar, then move it to another day', async ({ pa
   await pane.getByRole('button', { name: 'Recipes', exact: true }).click();
   await pane.getByRole('searchbox').fill(title);
   const cell = (label: RegExp) => page.getByRole('button', { name: label }).locator('xpath=ancestor::div[@role="cell"]');
-  await pane.getByText(title).dragTo(cell(/^Add to lunch on Today/));
+  await pane.getByText(title).dragTo(cell(/^Plan lunch on Today/));
   await expect(page.getByText(`Planned ${title} for lunch`)).toBeVisible();
 
   // Move it to tomorrow's dinner by dragging the card.
-  await page.getByRole('cell').getByRole('button', { name: new RegExp(title) }).dragTo(cell(/^Add to dinner on Tomorrow/));
+  await page.getByRole('cell').getByRole('button', { name: new RegExp(title) }).dragTo(cell(/^Plan dinner on Tomorrow/));
   await expect(page.getByText(`Moved ${title} to dinner`)).toBeVisible();
   const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
   const plan = await (await page.request.get(`/api/plan?from=${today}&to=${tomorrow}`)).json();

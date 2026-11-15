@@ -15,7 +15,7 @@ import {
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import type { Db } from '../db/client';
-import { cooks, locations, mealPlanEntries, products, recipes, shelfLifeCategories, stockEvents, stockItems } from '../db/schema';
+import { cooks, locations, mealPlanEntries, mealPlanPeople, products, recipes, shelfLifeCategories, stockEvents, stockItems } from '../db/schema';
 import { badRequest, conflict, notFound } from '../http';
 import { loadCatalog } from './catalog';
 import { getRecipe } from './recipes';
@@ -163,10 +163,18 @@ export async function confirmCook(deps: StockDeps, recipeId: string, input: Cook
     .returning();
   const d: StockDeps = { ...deps, cookId: cook!.id, mealPlanEntryId: input.mealPlanEntryId };
   if (input.mealPlanEntryId) {
-    await db
+    const [entry] = await db
       .update(mealPlanEntries)
       .set({ status: 'cooked' })
-      .where(and(eq(mealPlanEntries.id, input.mealPlanEntryId), eq(mealPlanEntries.householdId, auth.household.id)));
+      .where(and(eq(mealPlanEntries.id, input.mealPlanEntryId), eq(mealPlanEntries.householdId, auth.household.id)))
+      .returning({ id: mealPlanEntries.id, batch: mealPlanEntries.batch });
+    // Everyone with a portion has eaten it; they can untick themselves if they didn't.
+    if (entry && !entry.batch) {
+      await db
+        .update(mealPlanPeople)
+        .set({ eatenAt: now, eatenBy: auth.user.id })
+        .where(and(eq(mealPlanPeople.entryId, entry.id), isNull(mealPlanPeople.eatenAt)));
+    }
   }
 
   const askOpened = new Map<string, StockItemDto>();
@@ -236,7 +244,10 @@ export async function undoCook(deps: StockDeps, cookId: string): Promise<void> {
   await db.update(cooks).set({ undoneAt: now }).where(eq(cooks.id, cookId));
   // The planned meal goes back to planned.
   const planned = [...new Set(events.map((e) => e.mealPlanEntryId).filter((x): x is string => Boolean(x)))];
-  if (planned.length) await db.update(mealPlanEntries).set({ status: 'planned' }).where(inArray(mealPlanEntries.id, planned));
+  if (planned.length) {
+    await db.update(mealPlanEntries).set({ status: 'planned' }).where(inArray(mealPlanEntries.id, planned));
+    await db.update(mealPlanPeople).set({ eatenAt: null, eatenBy: null }).where(inArray(mealPlanPeople.entryId, planned));
+  }
 }
 
 /** Recent cooks, newest first. */

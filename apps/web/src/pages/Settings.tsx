@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
-import type { AssistantSettingsDto, BackupDto, HouseholdSettings, ShelfLifeCategoryDto } from '@snackoverflow/shared';
+import type { AssistantSettingsDto, BackupDto, HouseholdSettings, OffDumpStatusDto, ShelfLifeCategoryDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
@@ -24,6 +24,7 @@ export function SettingsPage() {
           <PricesCard />
           <SuggestionsCard />
           {isAdmin && me.features.backups && <BackupsCard />}
+          {me.features.offDump && <OffCopyCard canRefresh={isAdmin} />}
           <AssistantsCard />
           {isAdmin && (
             <Card className="p-4" id="data">
@@ -427,6 +428,76 @@ function BackupsCard() {
             </li>
           ))}
         </ul>
+      )}
+    </Card>
+  );
+}
+
+/** The local copy of Open Food Facts: what's in it, when it was refreshed, and Update now. */
+function OffCopyCard({ canRefresh }: { canRefresh: boolean }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const status = useQuery({
+    queryKey: ['off-dump'],
+    queryFn: () => api.get<OffDumpStatusDto>('/api/off-dump'),
+    // While it's downloading, show it counting.
+    refetchInterval: (q) => (q.state.data?.last?.status === 'running' ? 3000 : false),
+  });
+  const s = status.data;
+  const running = s?.last?.status === 'running';
+  const n = (x: number) => x.toLocaleString('en-GB');
+  const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const where = s?.country ? s.country.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'every country';
+  const refresh = async () => {
+    try {
+      await qc.setQueryData(['off-dump'], await api.post<OffDumpStatusDto>('/api/off-dump/import'));
+      toast.show('Updating. It takes a few minutes; carry on using the app.');
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
+  };
+  return (
+    <Card className="p-4" id="open-food-facts">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-bold">Open Food Facts</h2>
+          <p className="text-sm text-muted">A copy of the products sold in {where}, for searching as you type in Log food. Updated every {s?.refreshDays ?? 7} days.</p>
+        </div>
+        {canRefresh && (
+          <Button variant="primary" disabled={running || !s} onClick={() => void refresh()}>
+            {running ? 'Updating…' : 'Update now'}
+          </Button>
+        )}
+      </div>
+      {status.isPending ? (
+        <Spinner />
+      ) : status.error ? (
+        <ErrorNote error={status.error} />
+      ) : (
+        <div className="text-sm" aria-live="polite">
+          <p>
+            <span className="font-semibold tabular-nums">{n(s!.products)}</span> products
+            {s!.last?.status === 'done' && s!.last.finishedAt ? `, updated ${when(s!.last.finishedAt)}` : ''}.
+          </p>
+          {running && (
+            <p className="text-muted">
+              Downloading: {n(s!.last!.lines)} products read, {n(s!.last!.products)} kept so far.
+            </p>
+          )}
+          {s!.last?.status === 'failed' && <p className="text-danger">The last update didn't work: {s!.last.error}</p>}
+          {!s!.last && <p className="text-muted">Not downloaded yet. It starts on its own within a minute or so of the server starting.</p>}
+          <p className="mt-2 text-xs text-muted">
+            Data from{' '}
+            <a href="https://world.openfoodfacts.org" target="_blank" rel="noreferrer" className="underline">
+              Open Food Facts
+            </a>
+            , under the{' '}
+            <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer" className="underline">
+              Open Database Licence
+            </a>
+            .
+          </p>
+        </div>
       )}
     </Card>
   );

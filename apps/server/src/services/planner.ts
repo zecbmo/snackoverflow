@@ -3,33 +3,59 @@
  * planned food (which takes it out of stock), Eat-mode scans, and the food
  * earmarked for planned meals (planned meals warn, they don't lock stock).
  */
-import { and, asc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import {
   addDays,
   type CalendarDate,
   type EarmarkDto,
+  eatenPortions,
+  kcalSplit,
+  macroTotals,
+  type Nutrition,
+  nutritionFor,
   MEAL_SLOTS,
   type MealSlot,
   orderForUse,
   type PlanDayDto,
   type PlanDto,
+  type PlanEatDto,
   type PlanEntryDto,
   type PlanEntryInput,
   onCalendarOf,
-  portionShare,
   slotForTime,
   wallClockIn,
 } from '@snackoverflow/shared';
 import type { Auth } from '../context';
 import type { Db } from '../db/client';
-import { ingredients, locations, mealPlanEntries, mealPlanPeople, products, recipeIngredients, recipes, stockItems, users } from '../db/schema';
-import { badRequest, forbidden, notFound } from '../http';
+import { chainMenuItems, chains, ingredients, locations, mealPlanEntries, mealPlanPeople, products, recipeIngredients, recipes, stockEvents, stockItems, users } from '../db/schema';
+import { badRequest, forbidden, HttpError, notFound } from '../http';
 import type { ProductRow } from './catalog';
 import { listRecipes } from './recipes';
-import { householdToday, type StockDeps, usePack } from './stock';
+import { householdToday, type StockDeps, undoEvent, usePack } from './stock';
 
 type EntryRow = typeof mealPlanEntries.$inferSelect;
 const SLOT_ORDER: Record<MealSlot, number> = Object.fromEntries(MEAL_SLOTS.map((s, i) => [s, i])) as Record<MealSlot, number>;
+
+type IngredientRow = typeof ingredients.$inferSelect;
+
+/** One serving of a generic food: one item when it's counted (a banana), else 100g. */
+export function ingredientServing(i: Pick<IngredientRow, 'gramsPerCount' | 'packUnit' | 'countUnit' | 'nutritionPer100g'>) {
+  const counted = i.packUnit === 'count' && Boolean(i.gramsPerCount);
+  const unitGrams = counted ? i.gramsPerCount! : 100;
+  const per100 = i.nutritionPer100g?.kcal;
+  return {
+    unitGrams,
+    displayUnit: (counted ? 'count' : i.packUnit === 'ml' ? 'ml' : 'g') as 'g' | 'ml' | 'count',
+    countUnit: counted ? (i.countUnit ?? null) : null,
+    kcalPerServing: per100 == null ? null : Math.round((per100 * unitGrams) / 100),
+    nutritionPerServing: nutritionFor(i.nutritionPer100g, unitGrams),
+  };
+}
+
+/** Nutrition in one serving of a product: one pack, or one portion for cooked meals. */
+export function productNutrition(p: ProductRow | undefined): Nutrition | null {
+  return nutritionFor(p?.nutritionPer100g, p?.portionGrams ?? p?.packGrams);
+}
 
 /** Calories in one serving of a product: one pack, or one portion for cooked meals. */
 export function productKcal(p: ProductRow | undefined): number | null {
@@ -41,18 +67,23 @@ export function productKcal(p: ProductRow | undefined): number | null {
 
 interface Lookups {
   members: { id: string; name: string }[];
-  recipeKcal: Map<string, { title: string; kcal: number | null }>;
+  recipeKcal: Map<string, { title: string; kcal: number | null; nutrition: Nutrition | null }>;
   productsById: Map<string, ProductRow>;
   stockById: Map<string, { productId: string; locationName: string }>;
   /** For swaps: what each swapped recipe line was, and ingredient names. */
   lineNames: Map<string, string>;
   ingredientNames: Map<string, string>;
+  /** Generic foods logged as ingredients. */
+  ingredientsById: Map<string, IngredientRow>;
+  /** Menu items: their chain's name. */
+  chainNames: Map<string, string>;
 }
 
 async function lookups(db: Db, auth: Auth, rows: EntryRow[]): Promise<Lookups> {
   const members = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.householdId, auth.household.id));
   const summaries = await listRecipes(db, auth);
-  const recipeKcal = new Map(summaries.map((r) => [r.id, { title: r.title, kcal: r.kcalPerServing }]));
+  // Recipes without enough known ingredients have no calories, so no macros either.
+  const recipeKcal = new Map(summaries.map((r) => [r.id, { title: r.title, kcal: r.kcalPerServing, nutrition: r.kcalPerServing === null ? null : r.nutritionPerServing }]));
   const stockIds = rows.map((r) => r.stockItemId).filter((x): x is string => Boolean(x));
   const stock = stockIds.length
     ? await db
@@ -73,7 +104,19 @@ async function lookups(db: Db, auth: Auth, rows: EntryRow[]): Promise<Lookups> {
   const ingIds = [...new Set([...rows.flatMap((r) => Object.values(r.swaps ?? {})), ...swapLines.map((l) => l.ingredientId).filter((x): x is string => Boolean(x))])];
   const ings = ingIds.length ? await db.select({ id: ingredients.id, name: ingredients.name }).from(ingredients).where(inArray(ingredients.id, ingIds)) : [];
   const ingredientNames = new Map(ings.map((i) => [i.id, i.name]));
+  const foodIds = [...new Set(rows.map((r) => (r.kind === 'ingredient' ? r.ingredientId : null)).filter((x): x is string => Boolean(x)))];
+  const foods = foodIds.length ? await db.select().from(ingredients).where(inArray(ingredients.id, foodIds)) : [];
+  const chainItemIds = [...new Set(rows.map((r) => r.chainItemId).filter((x): x is string => Boolean(x)))];
+  const chainRows = chainItemIds.length
+    ? await db
+        .select({ id: chainMenuItems.id, chain: chains.name })
+        .from(chainMenuItems)
+        .innerJoin(chains, eq(chains.key, chainMenuItems.chainKey))
+        .where(inArray(chainMenuItems.id, chainItemIds))
+    : [];
   return {
+    ingredientsById: new Map(foods.map((i) => [i.id, i])),
+    chainNames: new Map(chainRows.map((c) => [c.id, c.chain])),
     members,
     recipeKcal,
     lineNames: new Map(swapLines.map((l) => [l.id, (l.ingredientId && ingredientNames.get(l.ingredientId)) || l.text])),
@@ -83,32 +126,54 @@ async function lookups(db: Db, auth: Auth, rows: EntryRow[]): Promise<Lookups> {
   };
 }
 
-function toDto(row: EntryRow, people: { userId: string; portions: number }[], l: Lookups, personId: string | null): PlanEntryDto {
+type PeopleRow = { userId: string; portions: number; eatenAt: Date | null };
+
+function toDto(row: EntryRow, people: PeopleRow[], l: Lookups, personId: string | null): PlanEntryDto {
   let title = row.text ?? 'Meal';
   let kcalPerServing: number | null = row.kcalPerServing;
+  let nutritionPerServing: Nutrition | null = row.nutrition ?? null;
   let detail: string | null = null;
   let unit: ProductRow | undefined;
+  let unitGrams: number | null = null;
+  let displayUnit: 'g' | 'ml' | 'count' = 'g';
+  let countUnit: string | null = null;
   if (row.kind === 'recipe' && row.recipeId) {
     const r = l.recipeKcal.get(row.recipeId);
     title = r?.title ?? 'Deleted recipe';
     kcalPerServing = r?.kcal ?? null;
+    nutritionPerServing = r?.nutrition ?? null;
   } else if (row.kind === 'product' && row.productId) {
     const p = l.productsById.get(row.productId);
     unit = p;
     title = p?.name ?? 'Unnamed product';
     kcalPerServing = productKcal(p);
+    nutritionPerServing = productNutrition(p);
   } else if (row.kind === 'stock' && row.stockItemId) {
     const s = l.stockById.get(row.stockItemId);
     const p = s ? l.productsById.get(s.productId) : undefined;
     unit = p;
     title = p?.name ? `Leftover ${p.name.charAt(0).toLowerCase()}${p.name.slice(1)}` : 'Leftovers';
     kcalPerServing = productKcal(p);
+    nutritionPerServing = productNutrition(p);
     detail = s ? `From ${s.locationName.toLowerCase()}` : null;
+  } else if (row.kind === 'ingredient') {
+    const i = row.ingredientId ? l.ingredientsById.get(row.ingredientId) : undefined;
+    title = i?.name ?? 'Food';
+    if (i) ({ unitGrams, displayUnit, countUnit, kcalPerServing, nutritionPerServing } = ingredientServing(i));
+  } else if (row.kind === 'chain') {
+    title = row.text ?? 'Takeaway';
+    detail = (row.chainItemId && l.chainNames.get(row.chainItemId)) || null;
+  }
+  if (unit) {
+    unitGrams = unit.portionGrams ?? unit.packGrams ?? null;
+    displayUnit = unit.displayUnit;
   }
   if (row.source === 'scan') detail = 'Scanned';
   const names = new Map(l.members.map((m) => [m.id, m.name]));
+  const eatenPeople = people.map((p) => ({ userId: p.userId, portions: p.portions, eaten: p.eatenAt !== null }));
   // A person's calendar counts only their own portions; free portions and batch cooks count for nobody.
-  const share = personId ? (row.batch ? 0 : portionShare(people, personId)) : row.servings;
+  const share = personId ? (row.batch ? 0 : (people.find((p) => p.userId === personId)?.portions ?? 0)) : row.servings;
+  const eaten = personId ? Boolean(people.find((p) => p.userId === personId)?.eatenAt) : people.length > 0 && people.every((p) => p.eatenAt);
   return {
     id: row.id,
     date: row.date,
@@ -117,17 +182,22 @@ function toDto(row: EntryRow, people: { userId: string; portions: number }[], l:
     recipeId: row.recipeId,
     productId: row.productId,
     stockItemId: row.stockItemId,
+    ingredientId: row.ingredientId,
+    chainItemId: row.chainItemId,
     title,
     detail,
     servings: row.servings,
-    unitGrams: unit ? (unit.portionGrams ?? unit.packGrams ?? null) : null,
-    displayUnit: unit?.displayUnit ?? 'g',
+    unitGrams,
+    displayUnit,
+    countUnit,
     status: row.status,
     source: row.source === 'scan' ? 'scan' : 'plan',
-    people: people.map((p) => ({ userId: p.userId, name: names.get(p.userId) ?? 'Someone', portions: p.portions })),
+    people: eatenPeople.map((p) => ({ ...p, name: names.get(p.userId) ?? 'Someone' })),
     batch: row.batch,
     kcalPerServing,
+    nutritionPerServing,
     kcal: kcalPerServing === null ? null : Math.round(kcalPerServing * share),
+    eaten,
     swaps: Object.entries(row.swaps ?? {})
       .filter(([lineId, ingId]) => l.lineNames.has(lineId) && l.ingredientNames.has(ingId))
       .map(([lineId, ingId]) => ({ recipeIngredientId: lineId, ingredientId: ingId, from: l.lineNames.get(lineId)!, to: l.ingredientNames.get(ingId)! })),
@@ -159,15 +229,15 @@ export async function cleanSwaps(db: Db, auth: Auth, recipeId: string | null, sw
 
 async function peopleFor(db: Db, ids: string[]) {
   const rows = ids.length ? await db.select().from(mealPlanPeople).where(inArray(mealPlanPeople.entryId, ids)) : [];
-  const map = new Map<string, { userId: string; portions: number }[]>();
-  for (const r of rows) map.set(r.entryId, [...(map.get(r.entryId) ?? []), { userId: r.userId, portions: r.portions }]);
+  const map = new Map<string, PeopleRow[]>();
+  for (const r of rows) map.set(r.entryId, [...(map.get(r.entryId) ?? []), { userId: r.userId, portions: r.portions, eatenAt: r.eatenAt }]);
   return map;
 }
 
 /**
  * A person's calendar, or everyone's. It has their meals plus any with portions nobody has yet
  * (so everyone sees what's being cooked); a meal given entirely to other people isn't on it.
- * Skipped meals are left out of the calories.
+ * Calories are split into eaten and still planned; skipped meals count for neither.
  */
 export async function listPlan(db: Db, auth: Auth, from: CalendarDate, to: CalendarDate, personId: string | null): Promise<PlanDto> {
   const rows = await db
@@ -181,8 +251,18 @@ export async function listPlan(db: Db, auth: Auth, from: CalendarDate, to: Calen
     .sort((a, b) => (a.date !== b.date ? (a.date < b.date ? -1 : 1) : SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot] || a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime()));
   const days: PlanDayDto[] = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
-    const entries = visible.filter((r) => r.date === d).map((r) => toDto(r, people.get(r.id) ?? [], l, personId));
-    days.push({ date: d, entries, kcal: entries.filter((e) => e.status !== 'skipped').reduce((s, e) => s + (e.kcal ?? 0), 0) });
+    const dayRows = visible.filter((r) => r.date === d);
+    const entries = dayRows.map((r) => toDto(r, people.get(r.id) ?? [], l, personId));
+    // Eaten and planned are kept apart: they're never added together.
+    let eatenKcal = 0;
+    let plannedKcal = 0;
+    for (const e of entries) {
+      const split = kcalSplit({ kcalPerServing: e.kcalPerServing, servings: e.servings, people: e.people, batch: e.batch, status: e.status }, personId);
+      eatenKcal += split.eaten;
+      plannedKcal += split.planned;
+    }
+    const eatenMacros = macroTotals(entries.map((e) => ({ nutritionPerServing: e.nutritionPerServing, servings: eatenPortions(e, personId) })));
+    days.push({ date: d, entries, eatenKcal, plannedKcal, eatenMacros });
   }
   return { from, to, personId, days };
 }
@@ -242,22 +322,58 @@ function assertPeopleChange(auth: Auth, servings: number, before: Portions, afte
 }
 
 async function setPeople(db: Db, auth: Auth, entryId: string, people: { userId: string; portions: number }[]) {
+  // Whoever has already eaten keeps their tick.
+  const before = (await peopleFor(db, [entryId])).get(entryId) ?? [];
   await db.delete(mealPlanPeople).where(eq(mealPlanPeople.entryId, entryId));
   if (!people.length) return;
-  const members = new Set((await db.select({ id: users.id }).from(users).where(eq(users.householdId, auth.household.id))).map((u) => u.id));
+  const members = new Set((await householdMembers(db, auth)).map((u) => u.id));
   const valid = people.filter((p) => members.has(p.userId));
-  if (valid.length) await db.insert(mealPlanPeople).values(valid.map((p) => ({ entryId, userId: p.userId, portions: p.portions })));
+  if (valid.length) {
+    await db.insert(mealPlanPeople).values(
+      valid.map((p) => {
+        const was = before.find((b) => b.userId === p.userId);
+        return { entryId, userId: p.userId, portions: p.portions, eatenAt: was?.eatenAt ?? null };
+      }),
+    );
+  }
+}
+
+async function householdMembers(db: Db, auth: Auth) {
+  return db.select({ id: users.id }).from(users).where(eq(users.householdId, auth.household.id));
 }
 
 export async function createEntry(deps: StockDeps, input: PlanEntryInput & { source?: 'plan' | 'scan' }): Promise<PlanEntryDto> {
+  return (await createEntryWithStock(deps, input)).entry;
+}
+
+/** Plan a meal, or log one as eaten (taking it from stock when asked). Returns the stock changes too. */
+export async function createEntryWithStock(deps: StockDeps, input: PlanEntryInput & { source?: 'plan' | 'scan' }): Promise<PlanEatDto> {
   const { db, auth } = deps;
-  if (auth.user.role !== 'admin' && input.people.length && !input.people.some((p) => p.userId === auth.user.id)) {
+  if (auth.user.role !== 'admin' && !input.eaten && input.people.length && !input.people.some((p) => p.userId === auth.user.id)) {
     throw forbidden("Only admins can plan meals on someone else's calendar.");
   }
   const batch = input.kind === 'recipe' && input.batch;
   // Logged as already eaten with nobody named: the person logging it ate it.
   const people = batch ? [] : input.people.length || !input.eaten ? input.people : [{ userId: auth.user.id, portions: input.servings }];
   if (totalPortions(people) > input.servings + 0.001) throw badRequest('More portions handed out than there are servings.');
+  let text = input.kind === 'text' ? (input.text ?? null) : null;
+  let kcalPerServing = input.kind === 'text' ? (input.kcalPerServing ?? null) : null;
+  let nutrition: Nutrition | null = null;
+  if (input.kind === 'chain') {
+    // A copy of the menu item, so the meal stays right if the menu changes.
+    const [item] = await db.select().from(chainMenuItems).where(eq(chainMenuItems.id, input.chainItemId!));
+    if (!item) throw notFound("That menu item isn't there any more.");
+    text = item.name;
+    kcalPerServing = item.kcal;
+    nutrition = { kcal: item.kcal, protein: item.protein, carbs: item.carbs, sugars: item.sugars, fat: item.fat, saturates: item.saturates, fibre: item.fibre, salt: item.salt };
+  }
+  if (input.kind === 'ingredient') {
+    const [ing] = await db
+      .select({ id: ingredients.id })
+      .from(ingredients)
+      .where(and(eq(ingredients.id, input.ingredientId!), eq(ingredients.householdId, auth.household.id)));
+    if (!ing) throw notFound('No such food.');
+  }
   const [row] = await db
     .insert(mealPlanEntries)
     .values({
@@ -268,9 +384,12 @@ export async function createEntry(deps: StockDeps, input: PlanEntryInput & { sou
       recipeId: input.kind === 'recipe' ? (input.recipeId ?? null) : null,
       productId: input.kind === 'product' ? (input.productId ?? null) : null,
       stockItemId: input.kind === 'stock' ? (input.stockItemId ?? null) : null,
-      text: input.kind === 'text' ? (input.text ?? null) : null,
+      ingredientId: input.kind === 'ingredient' ? (input.ingredientId ?? null) : null,
+      chainItemId: input.kind === 'chain' ? (input.chainItemId ?? null) : null,
+      text,
       servings: input.servings,
-      kcalPerServing: input.kind === 'text' ? (input.kcalPerServing ?? null) : null,
+      kcalPerServing,
+      nutrition,
       swaps: input.kind === 'recipe' ? await cleanSwaps(db, auth, input.recipeId ?? null, input.swaps) : null,
       batch,
       status: 'planned',
@@ -279,10 +398,12 @@ export async function createEntry(deps: StockDeps, input: PlanEntryInput & { sou
     })
     .returning();
   await setPeople(db, auth, row!.id, people);
-  if (input.eaten) {
-    await eatEntry(deps, row!.id, true);
+  const viewer = people.length === 1 ? people[0]!.userId : null;
+  if (input.eaten && people.length) {
+    const r = await eatEntry(deps, row!.id, input.fromStock, people.map((p) => p.userId));
+    return { entry: await getEntry(db, auth, row!.id, viewer), stockEventIds: r.stockEventIds };
   }
-  return getEntry(db, auth, row!.id, people.length === 1 ? people[0]!.userId : null);
+  return { entry: await getEntry(db, auth, row!.id, viewer), stockEventIds: [] };
 }
 
 export async function updateEntry(
@@ -316,67 +437,162 @@ export async function updateEntry(
   else if (rest.servings !== undefined && totalPortions(before) > servings) next = trimTo(servings, before);
   if (Object.keys(rest).length) await db.update(mealPlanEntries).set(rest).where(eq(mealPlanEntries.id, id));
   if (next) await setPeople(db, auth, id, next);
+  // "Not done yet" and Skip: nobody has eaten it. Marked done: everyone with a portion has.
+  if (rest.status === 'planned' || rest.status === 'skipped') {
+    await db.update(mealPlanPeople).set({ eatenAt: null, eatenBy: null }).where(eq(mealPlanPeople.entryId, id));
+  } else if (rest.status === 'cooked') {
+    await db.update(mealPlanPeople).set({ eatenAt: deps.now, eatenBy: auth.user.id }).where(and(eq(mealPlanPeople.entryId, id), isNull(mealPlanPeople.eatenAt)));
+  }
   return getEntry(db, auth, id);
 }
 
-export async function deleteEntry(deps: StockDeps, id: string): Promise<void> {
+/**
+ * Remove a meal. With `restoreStock`, food it took from stock goes back first (newest change
+ * first); anything that has changed since stays as it is.
+ */
+export async function deleteEntry(deps: StockDeps, id: string, restoreStock = false): Promise<{ restored: number }> {
   await assertCanEdit(deps.db, deps.auth, id);
+  let restored = 0;
+  if (restoreStock) {
+    const events = await deps.db
+      .select({ id: stockEvents.id })
+      .from(stockEvents)
+      .where(and(eq(stockEvents.mealPlanEntryId, id), eq(stockEvents.householdId, deps.auth.household.id), isNull(stockEvents.undoneAt)))
+      .orderBy(desc(stockEvents.seq));
+    for (const ev of events) {
+      try {
+        await undoEvent(deps, ev.id);
+        restored++;
+      } catch (e) {
+        if (!(e instanceof HttpError)) throw e;
+      }
+    }
+  }
   await deps.db.delete(mealPlanEntries).where(eq(mealPlanEntries.id, id));
+  return { restored };
 }
 
-/** Mark a planned product or leftovers as eaten, taking it out of stock. (Recipes go through the cook flow.) */
-export async function eatEntry(deps: StockDeps, id: string, fromStock: boolean): Promise<{ entry: PlanEntryDto; changed: boolean }> {
+/**
+ * Tick people as having eaten a meal (default: you). Anyone in the household can tick for
+ * anyone, so you can log for each other. Someone without a portion gets one of the free
+ * servings. With `fromStock`, their share of planned food, leftovers or a generic food comes
+ * out of stock (recipes go through the cook flow). The meal is done once everyone's eaten.
+ */
+export async function eatEntry(deps: StockDeps, id: string, fromStock: boolean, who?: string[]): Promise<PlanEatDto> {
+  const { db, auth, now } = deps;
+  const row = await findEntry(db, auth, id);
+  if (row.batch) throw badRequest("A batch cook isn't eaten now: it's for later.");
+  if (row.status === 'skipped') await db.update(mealPlanEntries).set({ status: 'planned' }).where(eq(mealPlanEntries.id, id));
+  const members = new Set((await householdMembers(db, auth)).map((u) => u.id));
+  const eaters = [...new Set(who?.length ? who : [auth.user.id])];
+  if (eaters.some((u) => !members.has(u))) throw badRequest("That person isn't in your household.");
+  let people = (await peopleFor(db, [id])).get(id) ?? [];
+  // Give portions to anyone ticked who hasn't got one: all of it when nobody had any, else one each.
+  const missing = eaters.filter((u) => !people.some((p) => p.userId === u));
+  if (missing.length) {
+    let free = Math.max(0, row.servings - totalPortions(people));
+    if (free < 0.001) throw badRequest('Every portion of that already belongs to someone.');
+    const each = people.length ? null : Math.round((free / missing.length) * 1000) / 1000;
+    const added: PeopleRow[] = [];
+    for (const u of missing) {
+      const portions = each ?? Math.min(1, free);
+      if (portions < 0.001) break;
+      free -= portions;
+      added.push({ userId: u, portions, eatenAt: null });
+    }
+    if (added.length) await db.insert(mealPlanPeople).values(added.map((p) => ({ entryId: id, userId: p.userId, portions: p.portions })));
+    people = [...people, ...added];
+  }
+  const ticking = people.filter((p) => eaters.includes(p.userId) && !p.eatenAt);
+  const servings = totalPortions(ticking);
+  const stockEventIds: string[] = [];
+  if (fromStock && servings > 0) stockEventIds.push(...(await takeFromStock({ ...deps, mealPlanEntryId: id }, row, servings)));
+  if (ticking.length) {
+    await db
+      .update(mealPlanPeople)
+      .set({ eatenAt: now, eatenBy: auth.user.id })
+      .where(and(eq(mealPlanPeople.entryId, id), inArray(mealPlanPeople.userId, ticking.map((p) => p.userId))));
+  }
+  const after = (await peopleFor(db, [id])).get(id) ?? [];
+  if (after.length && after.every((p) => p.eatenAt)) await db.update(mealPlanEntries).set({ status: 'cooked' }).where(eq(mealPlanEntries.id, id));
+  return { entry: await getEntry(db, auth, id, eaters.length === 1 ? eaters[0]! : null), stockEventIds };
+}
+
+/** Untick: they haven't eaten it after all. Stock isn't put back here (Undo does that). */
+export async function uneatEntry(deps: StockDeps, id: string, who?: string[]): Promise<PlanEntryDto> {
   const { db, auth } = deps;
-  const row = await assertCanEdit(db, auth, id);
-  let changed = false;
-  const d: StockDeps = { ...deps, mealPlanEntryId: id };
-  if (fromStock && row.kind === 'stock' && row.stockItemId) {
+  const row = await findEntry(db, auth, id);
+  const people = who?.length ? who : [auth.user.id];
+  await db.update(mealPlanPeople).set({ eatenAt: null, eatenBy: null }).where(and(eq(mealPlanPeople.entryId, id), inArray(mealPlanPeople.userId, people)));
+  // Done meals go back to planned; a cooked recipe stays cooked (the cook happened).
+  if (row.status === 'cooked' && row.kind !== 'recipe') await db.update(mealPlanEntries).set({ status: 'planned' }).where(eq(mealPlanEntries.id, id));
+  return getEntry(db, auth, id, people.length === 1 ? people[0]! : null);
+}
+
+/** Take `servings` of a meal's food out of stock, earliest-expiring first. Returns the stock events. */
+async function takeFromStock(d: StockDeps, row: EntryRow, servings: number): Promise<string[]> {
+  const { db, auth } = d;
+  const events: string[] = [];
+  if (row.kind === 'stock' && row.stockItemId) {
     const [item] = await db.select().from(stockItems).where(and(eq(stockItems.id, row.stockItemId), isNull(stockItems.finishedAt)));
     const [product] = item ? await db.select().from(products).where(eq(products.id, item.productId)) : [];
     if (item) {
       const portion = product?.portionGrams;
-      const grams = portion && item.remainingGrams !== null ? Math.min(item.remainingGrams, portion * row.servings) : null;
-      await usePack(d, item.id, grams ? { kind: 'grams', grams } : { kind: 'all' });
-      changed = true;
+      const grams = portion && item.remainingGrams !== null ? Math.min(item.remainingGrams, portion * servings) : null;
+      events.push((await usePack(d, item.id, grams && grams < item.remainingGrams! ? { kind: 'grams', grams } : { kind: 'all' })).eventId);
     }
-  } else if (fromStock && row.kind === 'product' && row.productId) {
+    return events;
+  }
+  let itemGrams: number | null = null;
+  let packs: (typeof stockItems.$inferSelect)[] = [];
+  if (row.kind === 'product' && row.productId) {
     const [product] = await db.select().from(products).where(eq(products.id, row.productId));
-    const packs = orderForUse(
-      (await db
-        .select()
+    // One item is a portion (a bar from a multipack) or the whole pack; take exactly what was eaten.
+    itemGrams = product?.portionGrams ?? product?.packGrams ?? null;
+    packs = await db
+      .select()
+      .from(stockItems)
+      .where(and(eq(stockItems.householdId, auth.household.id), eq(stockItems.productId, row.productId), isNull(stockItems.finishedAt)));
+  } else if (row.kind === 'ingredient' && row.ingredientId) {
+    const [ing] = await db.select().from(ingredients).where(eq(ingredients.id, row.ingredientId));
+    if (!ing) return events;
+    itemGrams = ingredientServing(ing).unitGrams;
+    // Any pack of that food (not cooked meals made from it).
+    packs = (
+      await db
+        .select({ item: stockItems })
         .from(stockItems)
-        .where(and(eq(stockItems.householdId, auth.household.id), eq(stockItems.productId, row.productId), isNull(stockItems.finishedAt)))).map((p) => ({ ...p })),
-    );
-    // One item is a portion (a bar from a multipack) or the whole pack; take exactly what was planned.
-    const itemGrams = product?.portionGrams ?? product?.packGrams ?? null;
-    if (itemGrams) {
-      let left = itemGrams * row.servings;
-      for (const p of packs) {
-        if (left <= 0.5) break;
-        const take = p.remainingGrams === null ? null : Math.min(p.remainingGrams, left);
-        await usePack(d, p.id, take === null || take >= (p.remainingGrams ?? 0) ? { kind: 'all' } : { kind: 'grams', grams: take });
-        left -= take ?? itemGrams;
-        changed = true;
-      }
-    } else {
-      let packsLeft = Math.ceil(row.servings);
-      for (const p of packs) {
-        if (packsLeft <= 0) break;
-        await usePack(d, p.id, { kind: 'all' });
-        packsLeft--;
-        changed = true;
-      }
+        .innerJoin(products, eq(products.id, stockItems.productId))
+        .where(and(eq(stockItems.householdId, auth.household.id), eq(products.ingredientId, row.ingredientId), isNull(products.recipeId), isNull(stockItems.finishedAt)))
+    ).map((r) => r.item);
+  } else {
+    return events;
+  }
+  const ordered = orderForUse(packs.map((p) => ({ ...p })));
+  if (itemGrams) {
+    let left = itemGrams * servings;
+    for (const p of ordered) {
+      if (left <= 0.5) break;
+      const take = p.remainingGrams === null ? null : Math.min(p.remainingGrams, left);
+      events.push((await usePack(d, p.id, take === null || take >= (p.remainingGrams ?? 0) ? { kind: 'all' } : { kind: 'grams', grams: take })).eventId);
+      left -= take ?? itemGrams;
+    }
+  } else {
+    let packsLeft = Math.ceil(servings);
+    for (const p of ordered) {
+      if (packsLeft <= 0) break;
+      events.push((await usePack(d, p.id, { kind: 'all' })).eventId);
+      packsLeft--;
     }
   }
-  await db.update(mealPlanEntries).set({ status: 'cooked' }).where(eq(mealPlanEntries.id, id));
-  return { entry: await getEntry(db, auth, id), changed };
+  return events;
 }
 
 /** Eat mode: log a scanned product to your current meal and take one from stock if it's there. */
 export async function logEaten(deps: StockDeps, product: ProductRow, slot?: MealSlot): Promise<{ entry: PlanEntryDto; stockChanged: boolean }> {
   const { auth, now } = deps;
   const clock = wallClockIn(auth.household.timeZone, now);
-  const entry = await createEntry(deps, {
+  const r = await createEntryWithStock(deps, {
     date: householdToday(auth, now),
     slot: slot ?? slotForTime(clock.hour),
     kind: 'product',
@@ -384,11 +600,11 @@ export async function logEaten(deps: StockDeps, product: ProductRow, slot?: Meal
     servings: 1,
     people: [{ userId: auth.user.id, portions: 1 }],
     batch: false,
-    eaten: false,
+    eaten: true,
+    fromStock: true,
     source: 'scan',
   });
-  const r = await eatEntry(deps, entry.id, true);
-  return { entry: r.entry, stockChanged: r.changed };
+  return { entry: r.entry, stockChanged: r.stockEventIds.length > 0 };
 }
 
 /** Food set aside for meals planned from today on. */

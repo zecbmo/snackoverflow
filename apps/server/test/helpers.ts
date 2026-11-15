@@ -1,4 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
@@ -11,7 +12,7 @@ import { loadSeedData } from '../src/db/seed';
 import { LiveHub } from '../src/live';
 import type { EmailMessage, Mailer } from '../src/notify/email';
 import type { PushPayload, PushSender } from '../src/notify/push';
-import { type OffContribution, OffContributeError, type OffProduct, type OpenFoodFacts } from '../src/services/off';
+import { type OffContribution, OffContributeError, type OffProduct, type OffSearchResult, type OpenFoodFacts } from '../src/services/off';
 import { migrationsDir, seedDataDir } from '../src/paths';
 
 export class FakeOff implements OpenFoodFacts {
@@ -22,6 +23,18 @@ export class FakeOff implements OpenFoodFacts {
     const p = this.products[barcode];
     if (!p) return null;
     return { barcode, name: null, brand: null, quantity: null, imageUrl: null, categories: [], nutritionPer100g: null, ...p };
+  }
+  /** Name searches made, and what they found (any word of the name matches). */
+  searches: string[] = [];
+  async search(query: string): Promise<OffSearchResult> {
+    this.searches.push(query);
+    if (this.down) return { status: 'failed' };
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const found: OffProduct[] = [];
+    for (const [barcode, p] of Object.entries(this.products)) {
+      if (p.name && words.every((w) => p.name!.toLowerCase().includes(w))) found.push({ barcode, name: null, brand: null, quantity: null, imageUrl: null, categories: [], nutritionPer100g: null, ...p });
+    }
+    return { status: 'ok', products: found };
   }
   /** Products added with contribute(). */
   contributed: OffContribution[] = [];
@@ -68,7 +81,7 @@ const seed = loadSeedData(seedDataDir());
 export async function makeTestApp(
   opts: { now?: string; config?: Partial<Config>; off?: FakeOff; webDist?: string | null; realClock?: boolean; fetch?: typeof fetch } = {},
 ): Promise<TestApp> {
-  const client = new PGlite();
+  const client = new PGlite({ extensions: { pg_trgm } });
   const db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder: migrationsDir() });
   let now = new Date(opts.now ?? '2026-11-12T12:00:00Z');

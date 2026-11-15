@@ -82,9 +82,9 @@ describe('planner', () => {
     });
     const mine = await api.get<PlanDto>('/api/plan?from=2026-11-12&to=2026-11-12');
     expect(mine.days[0]!.entries[0]).toMatchObject({ title: 'Porridge', kcal: 282, people: [{ name: 'Alex' }, { name: 'Sam' }] });
-    expect(mine.days[0]!.kcal).toBe(282);
+    expect(mine.days[0]!.plannedKcal).toBe(282);
     const everyone = await api.get<PlanDto>('/api/plan?from=2026-11-12&to=2026-11-12&person=everyone');
-    expect(everyone.days[0]!.kcal).toBe(376);
+    expect(everyone.days[0]!.plannedKcal).toBe(376);
     // Sam sees it on their calendar too, with their share.
     const sams = await sam.get<PlanDto>('/api/plan?from=2026-11-12&to=2026-11-12');
     expect(sams.days[0]!.entries[0]!.kcal).toBe(94);
@@ -285,14 +285,14 @@ describe('people on a meal', () => {
     await api.post('/api/plan', { date: '2026-11-12', slot: 'dinner', kind: 'recipe', recipeId: r.id, servings: 3, people: [{ userId: me.user.id, portions: 1 }] });
     const mine = await day(api);
     expect(mine.entries.map((e) => e.kcal)).toEqual([188, 188]);
-    expect(mine.kcal).toBe(376);
+    expect(mine.plannedKcal).toBe(376);
     const sams = await day(sam);
     expect(sams.entries).toHaveLength(1);
     expect(sams.entries[0]).toMatchObject({ slot: 'dinner', kcal: 0, servings: 3, people: [{ name: 'Alex', portions: 1 }] });
-    expect(sams.kcal).toBe(0);
+    expect(sams.plannedKcal).toBe(0);
     // Nobody named: every portion is free, and nobody gets the calories.
     await api.post('/api/plan', { date: '2026-11-12', slot: 'lunch', kind: 'recipe', recipeId: r.id, servings: 2 });
-    expect((await day(api)).kcal).toBe(376);
+    expect((await day(api)).plannedKcal).toBe(376);
     expect((await day(sam)).entries).toHaveLength(2);
   });
 
@@ -309,7 +309,7 @@ describe('people on a meal', () => {
       ],
     });
     expect(taken.people.map((p) => p.name)).toEqual(['Alex', 'Sam']);
-    expect((await day(sam)).kcal).toBe(188);
+    expect((await day(sam)).plannedKcal).toBe(188);
     // Sam can't take Alex's portion, or more than there are.
     expect((await sam.raw('PATCH', `/api/plan/${e.id}`, { people: [{ userId: samId, portions: 2 }] })).statusCode).toBe(403);
     expect(
@@ -324,7 +324,7 @@ describe('people on a meal', () => {
     ).toBe(400);
     // Giving it back.
     await sam.patch(`/api/plan/${e.id}`, { people: [{ userId: me.user.id, portions: 1 }] });
-    expect((await day(sam)).kcal).toBe(0);
+    expect((await day(sam)).plannedKcal).toBe(0);
     // Fewer servings than portions handed out: the extra come back off the last people.
     await api.patch(`/api/plan/${e.id}`, {
       people: [
@@ -355,7 +355,7 @@ describe('people on a meal', () => {
   it('gives food logged as already eaten to the person logging it', async () => {
     const e = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'lunch', kind: 'text', text: 'Sandwich', kcalPerServing: 400, eaten: true });
     expect(e.people.map((p) => p.userId)).toEqual([me.user.id]);
-    expect((await day(api)).kcal).toBe(400);
+    expect(await day(api)).toMatchObject({ eatenKcal: 400, plannedKcal: 0 });
   });
 });
 

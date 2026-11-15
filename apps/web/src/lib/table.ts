@@ -3,19 +3,7 @@
 export type SortDir = 'asc' | 'desc';
 export type SortValue = string | number | null | undefined;
 
-/** Every word of the query appears somewhere in the text (case and accents ignored). */
-export function matchesSearch(text: string, query: string): boolean {
-  const norm = (s: string) =>
-    s
-      .normalize('NFKD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLowerCase();
-  const hay = norm(text);
-  return norm(query)
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((w) => hay.includes(w));
-}
+export { matchesSearch } from '@snackoverflow/shared';
 
 /** A stable sort by one key. Empty values always go last, whichever way it's sorted. */
 export function sortRows<T>(rows: readonly T[], key: (row: T) => SortValue, dir: SortDir = 'asc'): T[] {

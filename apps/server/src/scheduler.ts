@@ -3,6 +3,7 @@ import { wallClockIn } from '@snackoverflow/shared';
 import { backupsEnabled, listBackups, runBackup } from './backup';
 import type { AppContext } from './context';
 import { runNotifications } from './notify/notifications';
+import { maybeImportOff } from './services/offDump';
 import { refreshPrices } from './services/pricing';
 import { checkReceiptMail } from './services/receiptEmail';
 
@@ -42,6 +43,12 @@ export function startScheduler(ctx: AppContext, log: Logger): () => void {
       } catch (err) {
         log.error({ err }, 'price refresh failed');
       }
+    }
+    // The local copy of Open Food Facts: started in the background when due (it takes minutes).
+    try {
+      await maybeImportOff(ctx, log);
+    } catch (err) {
+      log.error({ err }, 'checking the Open Food Facts copy failed');
     }
     try {
       await maybeBackup(ctx, now, log);

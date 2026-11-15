@@ -92,6 +92,38 @@ export function portionShare(people: Portion[], userId: string): number {
   return people.find((p) => p.userId === userId)?.portions ?? 0;
 }
 
+/** A portion of a meal, and whether its person has eaten it. */
+export interface EatenPortion extends Portion {
+  eaten: boolean;
+}
+
+/** Servings of a meal eaten: by one person, or (personId null) by everyone. Skipped meals and batch cooks: none. */
+export function eatenPortions(meal: { people: EatenPortion[]; batch: boolean; status: 'planned' | 'cooked' | 'skipped' }, personId: string | null): number {
+  if (meal.batch || meal.status === 'skipped') return 0;
+  return meal.people.filter((p) => p.eaten && (personId === null || p.userId === personId)).reduce((n, p) => n + p.portions, 0);
+}
+
+/**
+ * A meal's calories split into eaten and still planned, for one person or (personId null) the
+ * whole meal. Eaten and planned are never added together. Skipped meals and batch cooks count
+ * for nobody; free portions count on nobody's calendar, but show as planned for everyone.
+ */
+export function kcalSplit(
+  meal: { kcalPerServing: number | null; servings: number; people: EatenPortion[]; batch: boolean; status: 'planned' | 'cooked' | 'skipped' },
+  personId: string | null,
+): { eaten: number; planned: number } {
+  if (meal.kcalPerServing === null || meal.batch || meal.status === 'skipped') return { eaten: 0, planned: 0 };
+  if (personId) {
+    const mine = meal.people.find((p) => p.userId === personId);
+    if (!mine) return { eaten: 0, planned: 0 };
+    const kcal = Math.round(meal.kcalPerServing * mine.portions);
+    return mine.eaten ? { eaten: kcal, planned: 0 } : { eaten: 0, planned: kcal };
+  }
+  const eatenPortions = meal.people.filter((p) => p.eaten).reduce((n, p) => n + p.portions, 0);
+  const eaten = Math.round(meal.kcalPerServing * eatenPortions);
+  return { eaten, planned: Math.max(0, Math.round(meal.kcalPerServing * meal.servings) - eaten) };
+}
+
 /** Servings of a planned meal not assigned to anyone yet. */
 export function freePortions(servings: number, people: Portion[]): number {
   const taken = people.reduce((n, p) => n + p.portions, 0);

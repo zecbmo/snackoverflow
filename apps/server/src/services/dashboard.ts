@@ -48,7 +48,8 @@ export async function calorieStats(db: Db, auth: Auth, now: Date, who: string): 
   }
   const today = householdToday(auth, now);
   const plan = await listPlan(db, auth, addDays(today, -29), today, personId);
-  const days = plan.days.map((d) => ({ date: d.date, kcal: d.entries.filter((e) => e.status === 'cooked').reduce((s, e) => s + (e.kcal ?? 0), 0) }));
+  // Only what's been eaten counts; planned meals never add to the totals.
+  const days = plan.days.map((d) => ({ date: d.date, kcal: d.eatenKcal }));
   const byDate = new Map(days.map((d) => [d.date, d.kcal]));
   return { personId, name, target, today, days, avg7: averageKcal(byDate, today, 7), avg30: averageKcal(byDate, today, 29) };
 }

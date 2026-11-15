@@ -36,7 +36,7 @@ const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
   fromDriver: (v) => (Buffer.isBuffer(v) ? v : Buffer.from(v)),
 });
 export const mealSlotEnum = pgEnum('meal_slot', ['breakfast', 'lunch', 'dinner', 'snack']);
-export const planKindEnum = pgEnum('plan_kind', ['recipe', 'product', 'stock', 'text']);
+export const planKindEnum = pgEnum('plan_kind', ['recipe', 'product', 'stock', 'text', 'ingredient', 'chain']);
 export const planStatusEnum = pgEnum('plan_status', ['planned', 'cooked', 'skipped']);
 export const shoppingReasonEnum = pgEnum('shopping_reason', ['plan', 'running-low', 'manual']);
 export const stockEventTypeEnum = pgEnum('stock_event_type', [
@@ -475,11 +475,18 @@ export const mealPlanEntries = pgTable(
     productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
     /** Leftovers or a batch-cook portion already in stock. */
     stockItemId: uuid('stock_item_id').references(() => stockItems.id, { onDelete: 'set null' }),
+    /** Generic food ("a banana", "100g rice"), measured in its items or 100g. */
+    ingredientId: uuid('ingredient_id').references(() => ingredients.id, { onDelete: 'set null' }),
+    /** A takeaway or restaurant menu item. Its name and calories are copied to `text` and `kcalPerServing`. */
+    chainItemId: uuid('chain_item_id').references(() => chainMenuItems.id, { onDelete: 'set null' }),
+    /** Free text, or the copied name of a menu item. */
     text: text('text'),
-    /** Servings of a recipe, packs of a product, portions of leftovers. */
+    /** Servings of a recipe, packs of a product, portions of leftovers, items (or 100g) of an ingredient. */
     servings: doublePrecision('servings').notNull().default(1),
-    /** Calories per serving for free-text entries, if someone knows. */
+    /** Calories per serving for free-text entries (if someone knows) and menu items (copied). */
     kcalPerServing: doublePrecision('kcal_per_serving'),
+    /** Nutrition per serving copied from a menu item (protein, carbs, fat…), for the day's macros. */
+    nutrition: jsonb('nutrition').$type<Nutrition>(),
     /** A batch cook: made for the freezer, eaten by nobody now, so no one gets its calories. */
     batch: boolean('batch').notNull().default(false),
     status: planStatusEnum('status').notNull().default('planned'),
@@ -494,7 +501,7 @@ export const mealPlanEntries = pgTable(
   (t) => [index('meal_plan_household_date_idx').on(t.householdId, t.date)],
 );
 
-/** Who is eating a planned meal, and how much of it. No rows = the whole household. */
+/** Who is eating a meal, how much of it, and whether they've eaten it yet. Servings nobody has are free. */
 export const mealPlanPeople = pgTable(
   'meal_plan_people',
   {
@@ -505,8 +512,100 @@ export const mealPlanPeople = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     portions: doublePrecision('portions').notNull().default(1),
+    /** When this person ate their portion; their calories count from then. Null = still planned. */
+    eatenAt: timestamp('eaten_at', { withTimezone: true }),
+    /** Who ticked it: themselves, or someone in the household logging for them. */
+    eatenBy: uuid('eaten_by').references(() => users.id, { onDelete: 'set null' }),
   },
   (t) => [primaryKey({ columns: [t.entryId, t.userId] })],
+);
+
+/**
+ * A local copy of Open Food Facts' products sold in the household's country (OFF_DUMP_ENABLED),
+ * from their data export, for search as you type. Install-wide reference data, like the chains.
+ */
+export const offProducts = pgTable(
+  'off_products',
+  {
+    barcode: text('barcode').primaryKey(),
+    name: text('name').notNull(),
+    brand: text('brand'),
+    quantity: text('quantity'),
+    categories: jsonb('categories').$type<string[]>().notNull().default([]),
+    imageUrl: text('image_url'),
+    nutritionPer100g: jsonb('nutrition_per_100g').$type<Nutrition>(),
+    /** How many people scanned it: popular products come first. */
+    scans: integer('scans').notNull().default(0),
+    /** Name and brand, lower case without accents, for search (trigram-indexed). */
+    search: text('search').notNull(),
+    /** The import that last saw it; ones the latest import didn't see are removed. */
+    importId: uuid('import_id'),
+  },
+  (t) => [index('off_products_search_idx').using('gin', sql`${t.search} gin_trgm_ops`)],
+);
+
+/** Each refresh of the local Open Food Facts copy, for its status in Settings. */
+export const offImports = pgTable('off_imports', {
+  id: id(),
+  /** Strict order of runs (their times can tie). */
+  seq: bigserial('seq', { mode: 'number' }).notNull(),
+  /** running, done or failed. */
+  status: text('status').notNull(),
+  country: text('country'),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  /** Lines read from the export so far, and products kept. */
+  lines: integer('lines').notNull().default(0),
+  products: integer('products').notNull().default(0),
+  error: text('error'),
+});
+
+/** A food someone has starred, to find it first in Log food. */
+export const foodFavourites = pgTable(
+  'food_favourites',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** product, recipe, ingredient or chain (a menu item). */
+    kind: planKindEnum('kind').notNull(),
+    refId: uuid('ref_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('food_favourites_user_food').on(t.userId, t.kind, t.refId)],
+);
+
+/** One item of a saved meal, as it was logged. */
+export interface SavedMealItem {
+  kind: 'recipe' | 'product' | 'ingredient' | 'chain' | 'text';
+  refId: string | null;
+  /** The name, for free text and in case the food has gone. */
+  text: string;
+  kcalPerServing: number | null;
+  nutrition: Nutrition | null;
+  servings: number;
+}
+
+/** "My usual breakfast": several foods logged together in one tap. Each person has their own. */
+export const savedMeals = pgTable(
+  'saved_meals',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    items: jsonb('items').$type<SavedMealItem[]>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('saved_meals_user_idx').on(t.userId)],
 );
 
 /** The one shared shopping list. */

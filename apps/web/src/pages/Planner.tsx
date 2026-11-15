@@ -6,9 +6,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { addDays, type CalendarDate, MEAL_SLOTS, type MealSlot, type PlanEntryDto, type UserDto } from '@snackoverflow/shared';
+import { addDays, type CalendarDate, MEAL_SLOTS, type MealSlot, type PlanDayDto, type PlanEntryDto, type UserDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
+import { useLogFood } from '../components/LogFood';
 import { useToast } from '../components/Toast';
 import { PickerMenu } from '../components/Menu';
 import { PageTop, Segmented, Toolbar } from '../components/Toolbar';
@@ -54,8 +55,16 @@ function rangeLabel(from: CalendarDate, to: CalendarDate): string {
   return f.getUTCMonth() === t.getUTCMonth() ? `${f.getUTCDate()} – ${t.getUTCDate()} ${month(t)}` : `${f.getUTCDate()} ${month(f)} – ${t.getUTCDate()} ${month(t)}`;
 }
 
+/** "1,240 eaten · 600 planned": eaten and planned are never added together. */
+export function dayKcalText(day: Pick<PlanDayDto, 'eatenKcal' | 'plannedKcal'>, short = false): string {
+  const n = (x: number) => x.toLocaleString('en-GB');
+  const parts = [day.eatenKcal ? `${n(day.eatenKcal)}${short ? '' : ' kcal'} eaten` : null, day.plannedKcal ? `${n(day.plannedKcal)} planned` : null].filter(Boolean);
+  return parts.join(' · ');
+}
+
 export function PlannerPage() {
   const me = useMe();
+  const logFood = useLogFood();
   const isAdmin = me.user.role === 'admin';
   const [params, setParams] = useSearchParams();
   const [from, setFrom] = useState(() => weekStart(params.get('date') ?? me.today));
@@ -124,14 +133,20 @@ export function PlannerPage() {
               kind: entry.kind,
               servings: entry.servings,
               people: entry.people.map((p) => ({ userId: p.userId, portions: p.portions })),
-              eaten: entry.status === 'cooked',
+              // Its food wasn't put back when it came off, so it isn't taken again.
+              eaten: entry.people.some((p) => p.eaten),
+              fromStock: false,
               ...(entry.kind === 'recipe'
                 ? { recipeId: entry.recipeId }
                 : entry.kind === 'product'
                   ? { productId: entry.productId }
                   : entry.kind === 'stock'
                     ? { stockItemId: entry.stockItemId }
-                    : { text: entry.title, kcalPerServing: entry.kcalPerServing }),
+                    : entry.kind === 'ingredient'
+                      ? { ingredientId: entry.ingredientId }
+                      : entry.kind === 'chain'
+                        ? { chainItemId: entry.chainItemId }
+                        : { text: entry.title, kcalPerServing: entry.kcalPerServing }),
             }),
             await refresh()),
         },
@@ -179,7 +194,8 @@ export function PlannerPage() {
   // One person at a time: each calendar is someone's own (admins can open other people's).
   const people = [{ value: 'me', label: 'You' }, ...(isAdmin ? members.filter((m) => m.id !== me.user.id).map((m) => ({ value: m.id, label: m.name })) : [])];
   const thisWeek = weekStart(me.today);
-  const addLabel = (date: CalendarDate, slot: MealSlot) => `Add to ${slot} on ${dayLabel(date, me.today, true)}`;
+  // Earlier days are a diary: their "+" logs what was eaten. Today and later, it plans.
+  const addLabel = (date: CalendarDate, slot: MealSlot) => `${date < me.today ? 'Log' : 'Plan'} ${slot} on ${dayLabel(date, me.today, true)}`;
   const entryButton = (e: PlanEntryDto, compact: boolean) => (
     <button
       type="button"
@@ -190,7 +206,7 @@ export function PlannerPage() {
           : 'flex min-h-12 w-full items-start gap-2.5 rounded-lg border border-line bg-card px-3 py-2 text-left hover:border-accent/50 hover:bg-accent-soft/40'
       }
     >
-      <span aria-hidden className={`mt-1 size-2 shrink-0 rounded-full ${e.status === 'cooked' ? 'bg-fresh-green' : e.status === 'skipped' ? 'bg-transparent' : 'border border-muted'} ${compact ? '' : 'mt-0'}`} />
+      <span aria-hidden className={`mt-1 size-2 shrink-0 rounded-full ${e.eaten ? 'bg-fresh-green' : e.status === 'skipped' ? 'bg-transparent' : e.status === 'cooked' ? 'border border-fresh-green' : 'border border-muted'} ${compact ? '' : 'mt-0'}`} />
       <span className="min-w-0 flex-1">
         <span className={`${compact ? 'line-clamp-2' : 'block text-[1.0625rem]'} ${e.status === 'skipped' ? 'text-muted line-through' : ''}`}>{e.title}</span>
         {e.swaps.length > 0 && (
@@ -217,14 +233,15 @@ export function PlannerPage() {
       ) : (
         <span className="whitespace-nowrap text-[0.9375rem] text-muted">{[shortAmount(e), e.detail, e.kcal !== null ? `${e.kcal} kcal` : null].filter((x) => x !== null && x !== '').join(' · ')}</span>
       )}
-      <span className="sr-only">{e.status === 'cooked' ? '(done)' : e.status === 'skipped' ? '(skipped)' : '(planned)'}</span>
+      <span className="sr-only">{e.eaten ? '(eaten)' : e.status === 'skipped' ? '(skipped)' : e.status === 'cooked' ? '(cooked)' : '(planned)'}</span>
     </button>
   );
-  const scanLink = (date: CalendarDate, slot: MealSlot, cls: string) =>
+  /** Today: log something eaten (it never plans), beside Plan. */
+  const logButton = (date: CalendarDate, slot: MealSlot, cls: string) =>
     date === me.today ? (
-      <Link to={`/scan?mode=eat&slot=${slot}`} aria-label={`Scan something you ate for ${slot}`} className={cls}>
-        <Icon name="scan" className="size-4" />
-      </Link>
+      <button type="button" onClick={() => logFood.openLog({ date, slot })} aria-label={`Log something you ate for ${slot} on ${dayLabel(date, me.today, true)}`} title="Log food you've eaten" className={cls}>
+        <Icon name="spoon" className="size-4" />
+      </button>
     ) : null;
 
   return (
@@ -291,7 +308,7 @@ export function PlannerPage() {
                 {plan.data?.days.map((day) => (
                   <div key={day.date} role="columnheader" className={`border-b border-r border-line px-2 py-1.5 last:border-r-0 ${day.date === me.today ? 'bg-accent-soft' : 'bg-card-muted/60'}`}>
                     <p className={`text-sm font-semibold ${day.date === me.today ? 'text-accent-text' : ''}`}>{dayLabel(day.date, me.today)}</p>
-                    <p className="text-xs text-muted tabular-nums">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : '–'}</p>
+                    <p className="truncate text-xs text-muted tabular-nums" title={dayKcalText(day) || undefined}>{dayKcalText(day, true) || '–'}</p>
                   </div>
                 ))}
               </div>
@@ -343,12 +360,12 @@ export function PlannerPage() {
                           <button
                             type="button"
                             aria-label={addLabel(day.date, slot)}
-                            onClick={() => setAdding({ date: day.date, slot })}
+                            onClick={() => (day.date < me.today ? logFood.openLog({ date: day.date, slot }) : setAdding({ date: day.date, slot }))}
                             className={`inline-flex h-6 items-center gap-1 rounded px-1 text-xs text-muted hover:bg-card-muted hover:text-ink ${entries.length ? 'opacity-0 group-hover:opacity-100 focus:opacity-100' : ''}`}
                           >
-                            <Icon name="plus" className="size-3.5" /> Add
+                            <Icon name="plus" className="size-3.5" /> {day.date < me.today ? 'Log' : 'Plan'}
                           </button>
-                          {scanLink(day.date, slot, 'inline-flex size-6 items-center justify-center rounded text-muted hover:bg-card-muted hover:text-ink')}
+                          {logButton(day.date, slot, 'inline-flex size-6 items-center justify-center rounded text-muted hover:bg-card-muted hover:text-ink')}
                           {mealKcal(entries) > 0 && (
                             <span className="ml-auto whitespace-nowrap text-[0.6875rem] font-semibold tabular-nums text-ink/70" title={`${SLOT_LABEL[slot]} total`}>
                               {mealKcal(entries).toLocaleString('en-GB')} kcal
@@ -369,7 +386,7 @@ export function PlannerPage() {
               <Card key={day.date} className={`p-3 ${day.date === me.today ? 'border-accent' : ''} ${!showEarlier && day.date < me.today && day.entries.length === 0 ? 'hidden' : ''}`}>
                 <div className="mb-1 flex items-baseline justify-between gap-2 border-b border-line pb-2">
                   <h2 className="text-lg font-bold">{dayLabel(day.date, me.today)}</h2>
-                  <span className="text-sm font-semibold text-muted">{day.kcal ? `${day.kcal.toLocaleString('en-GB')} kcal` : ''}</span>
+                  <span className="text-sm font-semibold text-muted tabular-nums">{dayKcalText(day)}</span>
                 </div>
                 {MEAL_SLOTS.map((slot) => {
                   const entries = day.entries.filter((e) => e.slot === slot);
@@ -378,8 +395,8 @@ export function PlannerPage() {
                       <div className="flex items-center gap-1">
                         <h3 className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted">{SLOT_LABEL[slot]}</h3>
                         {mealKcal(entries) > 0 && <span className="text-sm font-semibold tabular-nums">{mealKcal(entries).toLocaleString('en-GB')} kcal</span>}
-                        {scanLink(day.date, slot, 'inline-flex size-11 items-center justify-center text-accent-text')}
-                        <button type="button" aria-label={addLabel(day.date, slot)} onClick={() => setAdding({ date: day.date, slot })} className="inline-flex size-11 items-center justify-center text-accent-text">
+                        {logButton(day.date, slot, 'inline-flex size-11 items-center justify-center text-accent-text')}
+                        <button type="button" aria-label={addLabel(day.date, slot)} onClick={() => (day.date < me.today ? logFood.openLog({ date: day.date, slot }) : setAdding({ date: day.date, slot }))} className="inline-flex size-11 items-center justify-center text-accent-text">
                           <Icon name="plus" className="size-5" />
                         </button>
                       </div>
@@ -783,6 +800,7 @@ function AmountEditor({ entry, onSaved }: { entry: PlanEntryDto; onSaved?: (e: P
 
 function EntrySheet({ entry: initial, viewerId, members, onClose }: { entry: PlanEntryDto; viewerId: string; members: UserDto[]; onClose: () => void }) {
   const me = useMe();
+  const logFood = useLogFood();
   const [entry, setEntry] = useState(initial);
   const isAdmin = me.user.role === 'admin';
   const qc = useQueryClient();
@@ -914,17 +932,48 @@ function EntrySheet({ entry: initial, viewerId, members, onClose }: { entry: Pla
             )}
           </div>
         )}
+        {!entry.batch && entry.people.length > 0 && (
+          <div className="mb-3">
+            <p className="mb-1.5 text-sm font-medium">Who's eaten?</p>
+            <div className="flex flex-wrap gap-1.5">
+              {entry.people.map((p) => (
+                <button
+                  key={p.userId}
+                  type="button"
+                  aria-pressed={p.eaten}
+                  onClick={() => {
+                    onClose();
+                    void (p.eaten ? logFood.untickEaten(entry, p.userId) : logFood.tickEaten(entry, p.userId));
+                  }}
+                  className={`inline-flex min-h-10 items-center gap-1 rounded-full border px-3 text-sm font-medium lg:min-h-7 ${p.eaten ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-ink hover:bg-card-muted'}`}
+                >
+                  <Icon name={p.eaten ? 'check' : 'plus'} className="size-3.5" />
+                  {p.userId === me.user.id ? 'You' : p.name}
+                  <span className="sr-only">{p.eaten ? ': eaten (tap to untick)' : ': not yet (tap to tick)'}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted">Tick anyone who's had theirs. Calories count once they're ticked.</p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
-          {entry.status !== 'cooked' &&
-            (entry.kind === 'recipe' && entry.recipeId ? (
-              <Button variant="primary" size="lg" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}${entry.batch ? '&batch=1' : ''}`)}>
-                Cooked it
-              </Button>
-            ) : (
-              <Button variant="primary" size="lg" onClick={() => void run(() => api.post(`/api/plan/${entry.id}/eat`, {}), entry.kind === 'text' ? 'Done.' : 'Eaten, and taken out of stock.')}>
-                Eaten
-              </Button>
-            ))}
+          {entry.kind === 'recipe' && entry.recipeId && entry.status !== 'cooked' && (
+            <Button variant="primary" size="lg" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}${entry.batch ? '&batch=1' : ''}`)}>
+              Cooked it
+            </Button>
+          )}
+          {entry.kind !== 'recipe' && !entry.batch && !entry.people.find((p) => p.userId === me.user.id)?.eaten && (
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => {
+                onClose();
+                void logFood.tickEaten(entry, me.user.id);
+              }}
+            >
+              I've eaten mine
+            </Button>
+          )}
           {entry.status === 'planned' ? (
             <Button size="lg" onClick={() => void run(() => api.patch(`/api/plan/${entry.id}`, { status: 'skipped' }), 'Skipped.')}>
               Skip

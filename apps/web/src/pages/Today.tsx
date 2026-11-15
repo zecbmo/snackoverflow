@@ -1,11 +1,13 @@
 /**
- * Today: tonight's meal, the week's dinners, food to use soon (with the same row actions as
- * Stock), and a side column of figures: calories, waste, running low, the shopping list.
+ * Today: the day's food diary first (calories, what you've eaten, what's still planned), then
+ * the week's dinners, food to use soon (with the same row actions as Stock), and a side column
+ * of figures: waste, running low, the shopping list.
  */
 import { useQueryClient } from '@tanstack/react-query';
+import { Diary } from '../components/Diary';
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { addDays, formatPence, type PlanEntryDto, type StockItemDto } from '@snackoverflow/shared';
+import { addDays, formatPence, type StockItemDto } from '@snackoverflow/shared';
 import { dayName } from '../components/AddToPlanSheet';
 import { type Column, DataTable, StatusDot } from '../components/DataTable';
 import { BellButton, MenuButton, useMe } from '../components/Layout';
@@ -14,8 +16,8 @@ import { useToast } from '../components/Toast';
 import { PageTop } from '../components/Toolbar';
 import { Button, Card, EmptyState, Pill, Spinner } from '../components/ui';
 import { api } from '../lib/api';
-import { amountLabel, dateLabel, greeting, longToday, minutesLabel, stateLabel, toneClasses, toneFor, toneMeaning } from '../lib/format';
-import { useCalories, usePlan, useProducts, useRecipes, useRunningLow, useShopping, useStock, useWasteReport } from '../lib/queries';
+import { amountLabel, dateLabel, greeting, longToday, stateLabel, toneClasses, toneFor, toneMeaning } from '../lib/format';
+import { useCalories, usePlan, useProducts, useRunningLow, useShopping, useStock, useWasteReport } from '../lib/queries';
 import { changeLine, weightLabel } from './Dashboard';
 import { itemTitle } from './Shopping';
 
@@ -53,20 +55,13 @@ export function TodayPage() {
   const navigate = useNavigate();
   const waste = useWasteReport('month').data;
   const thisMonth = waste?.periods.at(-1);
-  const calories = useCalories('me').data;
-  const target = me.user.kcalTarget;
-  const avg7 = calories?.avg7 ?? null;
+  const avg7 = useCalories('me').data?.avg7 ?? null;
   const unnamed = useProducts('', true).data ?? [];
   const soonLimit = addDays(me.today, 3);
   const soon = (stock.data ?? []).filter((i) => i.state !== 'frozen' && i.bestBefore !== null && i.bestBefore <= soonLimit);
   const shown = soon.slice(0, 8);
   const wasteChange = waste ? changeLine(waste.changePercent, waste.periods, 'month') : null;
 
-  const day = usePlan(me.today, me.today, 'me').data?.days[0];
-  const eatenKcal = (day?.entries ?? []).filter((e) => e.status === 'cooked').reduce((n, e) => n + (e.kcal ?? 0), 0);
-  const plannedKcal = (day?.entries ?? []).filter((e) => e.status !== 'skipped').reduce((n, e) => n + (e.kcal ?? 0), 0);
-  const tonight =
-    (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned' && e.slot === 'dinner') ?? (day?.entries ?? []).find((e) => e.kind === 'recipe' && e.status === 'planned');
   const low = (useRunningLow().data ?? []).filter((l) => !l.onList);
   const qc = useQueryClient();
   const toast = useToast();
@@ -88,10 +83,9 @@ export function TodayPage() {
   return (
     <>
       <PageTop title={greeting()} subtitle={longToday(me.today)} left={<MenuButton />} actions={<BellButton />} />
-      {tonight && <TonightCard entry={tonight} />}
-
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0">
+          <Diary />
           <WeekDinners />
           <section aria-labelledby="use-soon" className="mb-6">
             <SectionHead id="use-soon" title="Use soon" link={soon.length > 0 ? { to: '/stock', label: 'All stock' } : undefined} />
@@ -129,18 +123,10 @@ export function TodayPage() {
         </div>
 
         <aside className="mb-6 grid grid-cols-2 gap-3 lg:flex lg:flex-col" aria-label="At a glance">
-          <Tile label={target ? 'Calories today' : 'Eaten today'} value={eatenKcal.toLocaleString('en-GB')} unit={target ? `of ${target.toLocaleString('en-GB')} kcal` : 'kcal'}>
-            {(target ?? plannedKcal) > 0 && (
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-card-muted" role="img" aria-label={`${eatenKcal} of ${target ?? plannedKcal} ${target ? 'target' : 'planned'} calories`}>
-                <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (eatenKcal / (target ?? plannedKcal)) * 100)}%` }} />
-              </div>
-            )}
-            <p className="mt-2 text-sm text-muted">
-              {avg7 !== null && <span className="hidden sm:inline">7-day average {avg7.toLocaleString('en-GB')} · </span>}
-              <Link to="/dashboard" className="font-semibold text-accent-text hover:underline">
-                Dashboard
-              </Link>
-            </p>
+          <Tile label="7-day average" value={avg7 !== null ? avg7.toLocaleString('en-GB') : '–'} unit="kcal a day">
+            <Link to="/dashboard" className="mt-1 inline-block text-sm font-semibold text-accent-text hover:underline">
+              Dashboard
+            </Link>
           </Tile>
           <Tile
             label="Binned this month"
@@ -214,17 +200,17 @@ function WeekDinners() {
             <li key={d.date} className="w-28 shrink-0 lg:w-auto">
               <Link
                 to={dinner ? `/calendar?date=${d.date}` : `/calendar?date=${d.date}&add=dinner`}
-                aria-label={`${dayName(d.date, me.today)}: ${dinner ? dinner.title : 'nothing planned, add a dinner'}`}
+                aria-label={`${dayName(d.date, me.today)}: ${dinner ? dinner.title : 'nothing planned, plan a dinner'}`}
                 className={`flex h-full min-h-20 flex-col gap-0.5 rounded-lg border bg-card p-2.5 hover:bg-card-muted ${isToday ? 'border-accent ring-1 ring-accent' : 'border-line'}`}
               >
                 <span className={`text-xs font-semibold ${isToday ? 'text-accent-text' : 'text-muted'}`}>{isToday ? 'Today' : day}</span>
                 {dinner ? (
                   <>
                     <span className="line-clamp-2 break-words text-sm font-semibold leading-snug">{dinner.title}</span>
-                    <span className="text-xs text-muted">{dinner.status === 'cooked' ? 'Eaten' : (dinner.detail ?? '')}</span>
+                    <span className="text-xs text-muted">{dinner.eaten ? 'Eaten' : dinner.status === 'cooked' ? 'Cooked' : (dinner.detail ?? '')}</span>
                   </>
                 ) : (
-                  <span className="text-sm font-medium text-muted">+ Add</span>
+                  <span className="text-sm font-medium text-muted">+ Plan</span>
                 )}
               </Link>
             </li>
@@ -264,50 +250,5 @@ function ShoppingSummary() {
         Open list
       </Link>
     </Card>
-  );
-}
-
-/** Tonight's meal: "Tonight · Chicken curry" with Cooked it / Skip; the rest of the card opens that day in the calendar. */
-function TonightCard({ entry }: { entry: PlanEntryDto }) {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-  const toast = useToast();
-  const recipe = useRecipes().data?.find((r) => r.id === entry.recipeId);
-  const label = entry.slot === 'dinner' ? 'Tonight' : entry.slot === 'lunch' ? 'Lunch' : entry.slot === 'breakfast' ? 'Breakfast' : 'Today';
-  const skip = async () => {
-    await api.patch(`/api/plan/${entry.id}`, { status: 'skipped' });
-    await qc.invalidateQueries({ queryKey: ['plan'] });
-    toast.show('Skipped.', {
-      action: {
-        label: 'Undo',
-        onClick: async () => void (await api.patch(`/api/plan/${entry.id}`, { status: 'planned' }), await qc.invalidateQueries({ queryKey: ['plan'] })),
-      },
-    });
-  };
-  const meta = [entry.people.length ? entry.people.map((p) => p.name).join(' + ') : null, `serves ${entry.servings}`, minutesLabel(recipe?.totalMinutes ?? null), entry.kcalPerServing ? `${entry.kcalPerServing} kcal each` : null]
-    .filter(Boolean)
-    .join(' · ');
-  return (
-    <section
-      aria-label="Today's meal"
-      className="relative mb-5 flex flex-col gap-3 rounded-xl border border-line bg-card p-4 hover:bg-card-muted/50 lg:flex-row lg:items-center lg:rounded-lg lg:py-3"
-    >
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wider text-accent-text">{label}</p>
-        <h2 className="truncate text-lg font-bold">
-          {/* The whole card opens that day in the calendar, like the week's dinners below. */}
-          <Link to={`/calendar?date=${entry.date}`} className="after:absolute after:inset-0 after:rounded-xl after:content-[''] lg:after:rounded-lg">
-            {entry.title}
-          </Link>
-        </h2>
-        <p className="text-sm text-muted">{meta}</p>
-      </div>
-      <div className="relative z-10 flex gap-2">
-        <Button variant="primary" className="flex-1 lg:flex-none" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}`)}>
-          Cooked it
-        </Button>
-        <Button onClick={() => void skip()}>Skip</Button>
-      </div>
-    </section>
   );
 }

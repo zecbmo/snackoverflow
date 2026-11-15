@@ -1,15 +1,18 @@
 /**
- * Scans made with no signal are kept on the phone and sent when it's back
- * online, with the time they were really scanned. Works in the browser and the
- * Android app.
+ * Scans and food logged with no signal are kept on the phone and sent when it's
+ * back online, with the time they were really scanned. Works in the browser and
+ * the Android app.
  */
 import { useSyncExternalStore } from 'react';
 import { api, ApiError, isOffline } from './api';
 
 export interface QueuedScan {
   id: string;
-  mode: 'add' | 'use' | 'eat';
+  /** `log`: food logged in Log food, sent as a plan entry (`body`). */
+  mode: 'add' | 'use' | 'eat' | 'log';
   barcode: string;
+  /** For `log`: the plan entry to create. */
+  body?: Record<string, unknown>;
   locationId?: string;
   slot?: string;
   scannedAt: string;
@@ -60,7 +63,8 @@ export function syncQueue(): Promise<{ synced: number; dropped: number }> {
     try {
       for (const scan of load()) {
         try {
-          await api.post(`/api/scan/${scan.mode}`, {
+          if (scan.mode === 'log') await api.post('/api/plan', scan.body ?? {});
+          else await api.post(`/api/scan/${scan.mode}`, {
             barcode: scan.barcode,
             locationId: scan.mode === 'eat' ? undefined : scan.locationId,
             ...(scan.mode === 'add' ? { scannedAt: scan.scannedAt } : {}),

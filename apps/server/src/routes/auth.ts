@@ -27,6 +27,7 @@ export function features(ctx: AppContext): SessionDto['features'] {
     ai: Boolean(c.AI_API_KEY),
     mcp: Boolean(c.MCP_TOKEN),
     offContribute: offContributeEnabled(c),
+    offDump: c.OFF_DUMP_ENABLED,
   };
 }
 

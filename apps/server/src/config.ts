@@ -42,6 +42,14 @@ const envSchema = z.object({
   /** An Open Food Facts account (user name, not email) for adding products people name; unset hides the option. */
   OFF_CONTRIBUTE_USER_ID: optional,
   OFF_CONTRIBUTE_PASSWORD: optional,
+  /**
+   * Keep a local copy of Open Food Facts' products sold in OFF_COUNTRY, refreshed every
+   * OFF_DUMP_REFRESH_DAYS from their data export, for instant search as you type. Off by default:
+   * the export is a 1.5GB download, and the copy takes a few hundred MB in the database.
+   */
+  OFF_DUMP_ENABLED: bool(false),
+  OFF_DUMP_URL: z.string().default('https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz'),
+  OFF_DUMP_REFRESH_DAYS: z.coerce.number().int().min(1).max(90).default(7),
   /** Where products added to Open Food Facts are sold; empty to leave it out. */
   OFF_COUNTRY: z
     .string()

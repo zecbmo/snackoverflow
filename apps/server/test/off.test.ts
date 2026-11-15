@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contributionFields, createOff, type OffContribution, OffContributeError, parseOffResponse, splitBaseUrl } from '../src/services/off';
+import { contributionFields, createOff, type OffContribution, OffContributeError, parseOffResponse, parseOffSearch, SearchThrottle, splitBaseUrl } from '../src/services/off';
 
 describe('Open Food Facts', () => {
   it('parses a product', () => {
@@ -200,5 +200,63 @@ describe('splitBaseUrl', () => {
   it('moves a user and password into a header', () => {
     expect(splitBaseUrl('https://world.openfoodfacts.org/')).toEqual({ base: 'https://world.openfoodfacts.org', headers: {} });
     expect(splitBaseUrl('https://off:off@world.openfoodfacts.net').base).toBe('https://world.openfoodfacts.net');
+  });
+});
+
+describe('search by name', () => {
+  const body = {
+    products: [
+      { code: '5000159407236', product_name: 'Snickers', brands: 'Mars', quantity: '48 g', nutriments: { 'energy-kcal_100g': 488 } },
+      { code: '123', product_name: 'Too short a barcode' },
+      { code: '5000159461122' },
+    ],
+  };
+
+  it('keeps named products with a real barcode', () => {
+    expect(parseOffSearch(body).map((p) => [p.barcode, p.name, p.nutritionPer100g?.kcal])).toEqual([['5000159407236', 'Snickers', 488]]);
+    expect(parseOffSearch({})).toEqual([]);
+  });
+
+  it('asks for products sold in the UK, most scanned first, and remembers the answer', async () => {
+    const urls: string[] = [];
+    const off = createOff({
+      baseUrl: 'https://off.example',
+      userAgent: 'test',
+      country: 'en:united-kingdom',
+      fetch: async (url) => {
+        urls.push(String(url));
+        return new Response(JSON.stringify(body));
+      },
+    });
+    expect(await off.search('Snickers ')).toMatchObject({ status: 'ok', products: [{ name: 'Snickers' }] });
+    await off.search('snickers');
+    expect(urls).toHaveLength(1);
+    const u = new URL(urls[0]!);
+    expect(u.pathname).toBe('/cgi/search.pl');
+    expect(Object.fromEntries(u.searchParams)).toMatchObject({ search_terms: 'snickers', json: '1', sort_by: 'unique_scans_n', tagtype_0: 'countries', tag_0: 'united-kingdom' });
+  });
+
+  it("keeps under Open Food Facts' limit of searches a minute", async () => {
+    let now = 0;
+    const throttle = new SearchThrottle(2, 1000, 10, () => now);
+    const off = createOff({ baseUrl: 'https://off.example', userAgent: 'test', throttle, fetch: async () => new Response(JSON.stringify(body)) });
+    expect((await off.search('a')).status).toBe('ok');
+    expect((await off.search('b')).status).toBe('ok');
+    expect((await off.search('c')).status).toBe('busy');
+    // Answers already had don't count.
+    expect((await off.search('a')).status).toBe('ok');
+    now = 61_000;
+    expect((await off.search('c')).status).toBe('ok');
+  });
+
+  it('fails gracefully', async () => {
+    const off = createOff({
+      baseUrl: 'https://off.example',
+      userAgent: 'test',
+      fetch: async () => {
+        throw new Error('offline');
+      },
+    });
+    expect(await off.search('snickers')).toEqual({ status: 'failed' });
   });
 });

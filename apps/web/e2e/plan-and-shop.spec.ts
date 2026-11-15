@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { signIn, typeBarcode } from './helpers';
+import { signIn } from './helpers';
 
 /** Phase 4 key flow: plan a meal, see the shopping list fill itself in whole packs, tick it off and put it away; log a snack in Eat mode. */
 test('plan a dinner, shop for it and put it away', async ({ page }, info) => {
@@ -16,7 +16,7 @@ test('plan a dinner, shop for it and put it away', async ({ page }, info) => {
 
   // Plan it for dinner today.
   await page.goto('/calendar');
-  await page.getByRole('button', { name: /^Add to dinner on Today/ }).click();
+  await page.getByRole('button', { name: /^Plan dinner on Today/ }).click();
   for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'More', exact: true }).click();
   await expect(page.getByText('4 servings')).toBeVisible();
   await page.getByRole('button', { name: new RegExp(title) }).click();
@@ -41,8 +41,11 @@ test('plan a dinner, shop for it and put it away', async ({ page }, info) => {
   await page.goto('/stock');
   await expect(page.getByRole('button', { name: /Penne Pasta/ }).first()).toBeVisible();
 
-  // Eat mode: a snack logged to a meal, with its calories.
+  // Old Eat mode links open Log food's barcode scanner: a snack logged to a meal, with its calories.
   await page.goto('/scan?mode=eat&slot=snack');
-  await typeBarcode(page, '5000000000031');
-  await expect(page.getByRole('status').filter({ hasText: 'Logged to your snack' })).toBeVisible();
+  const scan = page.getByRole('dialog', { name: 'Scan a barcode' });
+  await scan.getByLabel('Or type the barcode').fill('5000000000031');
+  await scan.getByRole('button', { name: 'Find it' }).click();
+  await page.getByRole('dialog', { name: 'How much?' }).getByRole('button', { name: /^Log (it|and take it)$/ }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Logged Baked Beans to snack.' })).toBeVisible();
 });

@@ -10,6 +10,7 @@ import { HttpError } from './http';
 import { authRoutes } from './routes/auth';
 import { catalogRoutes } from './routes/catalog';
 import { chainRoutes } from './routes/chains';
+import { foodRoutes } from './routes/foods';
 import { inboxRoutes } from './routes/inbox';
 import { mcpRoutes } from './routes/mcp';
 import { recipeImportRoutes } from './routes/recipeImport';
@@ -80,6 +81,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   await app.register(peopleRoutes);
   await app.register(catalogRoutes);
   await app.register(chainRoutes);
+  await app.register(foodRoutes);
   await app.register(stockRoutes);
   await app.register(inboxRoutes);
   await app.register(recipeRoutes);

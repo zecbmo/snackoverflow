@@ -19,6 +19,11 @@ const off = new FakeOff({
   '5000000000086': { name: 'Houmous', quantity: '200 g' },
   '5000000000098': { name: 'Mature Cheddar', quantity: '400 g' },
   '5000000000104': { name: 'Red Leicester', quantity: '400 g' },
+  '5000000000111': { name: 'Strawberry Yoghurt', quantity: '125 g', nutritionPer100g: { kcal: 96 } },
+  '5000000000128': { name: 'Peach Yoghurt', quantity: '125 g', nutritionPer100g: { kcal: 96 } },
+  // Only found by searching Open Food Facts by name in Log food.
+  '5000000000135': { name: 'Nutty Choc Bar', brand: 'Snackco', quantity: '50 g', nutritionPer100g: { kcal: 500, protein: 8, carbs: 55, fat: 27 } },
+  '5000000000142': { name: 'Crunchy Choc Bar', brand: 'Snackco', quantity: '40 g', nutritionPer100g: { kcal: 480, protein: 6, carbs: 60, fat: 24 } },
 });
 /**
  * A pretend Claude for the AI features, so their flows can be tested end to end. It answers by

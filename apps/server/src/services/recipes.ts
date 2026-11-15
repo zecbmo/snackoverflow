@@ -225,6 +225,7 @@ function summary(r: RecipeRow, lines: LineRow[], ctx: Context): RecipeSummaryDto
     totalMinutes: total || null,
     // Only claim a calorie figure when most of the recipe is known.
     kcalPerServing: nutrition.coverage >= 0.6 && nutrition.perServing.kcal != null ? Math.round(nutrition.perServing.kcal) : null,
+    nutritionPerServing: nutrition.coverage >= 0.6 && nutrition.perServing.kcal != null ? nutrition.perServing : null,
     ingredientCount: lines.length,
     nutrition,
   };

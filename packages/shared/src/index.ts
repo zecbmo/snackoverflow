@@ -13,3 +13,5 @@ export * from './optimiser';
 export * from './stats';
 export * from './foodGroups';
 export * from './chains';
+export * from './search';
+export * from './nutrition';

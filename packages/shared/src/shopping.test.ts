@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignSlot, choosePacks, estimateRunOut, freePortions, onCalendarOf, portionShare, portionSlots, slotForTime } from './shopping';
+import { assignSlot, choosePacks, estimateRunOut, freePortions, kcalSplit, onCalendarOf, portionShare, portionSlots, slotForTime } from './shopping';
 
 describe('choosePacks', () => {
   it('rounds up to the pack that wastes least', () => {
@@ -101,5 +101,34 @@ describe('meal slots and shares', () => {
       { userId: 'a', portions: 1 },
       { userId: 'b', portions: 1 },
     ]);
+  });
+});
+
+describe('kcalSplit', () => {
+  const meal = {
+    kcalPerServing: 500,
+    servings: 3,
+    batch: false,
+    status: 'planned' as const,
+    people: [
+      { userId: 'a', portions: 1, eaten: true },
+      { userId: 'b', portions: 1, eaten: false },
+    ],
+  };
+
+  it("splits a person's share into eaten or planned", () => {
+    expect(kcalSplit(meal, 'a')).toEqual({ eaten: 500, planned: 0 });
+    expect(kcalSplit(meal, 'b')).toEqual({ eaten: 0, planned: 500 });
+    expect(kcalSplit(meal, 'c')).toEqual({ eaten: 0, planned: 0 });
+  });
+
+  it('counts free portions as planned for the whole meal', () => {
+    expect(kcalSplit(meal, null)).toEqual({ eaten: 500, planned: 1000 });
+  });
+
+  it('counts nothing for skipped meals, batch cooks or unknown calories', () => {
+    expect(kcalSplit({ ...meal, status: 'skipped' }, 'a')).toEqual({ eaten: 0, planned: 0 });
+    expect(kcalSplit({ ...meal, batch: true }, null)).toEqual({ eaten: 0, planned: 0 });
+    expect(kcalSplit({ ...meal, kcalPerServing: null }, 'a')).toEqual({ eaten: 0, planned: 0 });
   });
 });

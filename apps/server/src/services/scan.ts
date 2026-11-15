@@ -2,6 +2,8 @@
 import { and, eq, isNull, notInArray } from 'drizzle-orm';
 import { expandReceiptText, parsePackQuantity } from '@snackoverflow/shared';
 import type { AppContext, Auth } from '../context';
+import type { OffProduct } from './off';
+import { lookupLocalOff } from './offDump';
 import { barcodes, products } from '../db/schema';
 import { ingredientAliases } from '../db/seed';
 import { findProductByBarcode, loadCatalog, measuresFor, packFields, type ProductRow, suggestCategory, suggestIngredient } from './catalog';
@@ -15,27 +17,20 @@ export interface ResolvedProduct {
 
 export async function resolveBarcode(ctx: AppContext, auth: Auth, code: string): Promise<ResolvedProduct> {
   const existing = await findProductByBarcode(ctx.db, auth.household.id, code);
-  if (existing) return { product: existing, known: existing.name !== null, created: false };
+  if (existing && existing.name !== null) return { product: existing, known: true, created: false };
 
-  const off = ctx.config.OFF_ENABLED ? await ctx.off.lookup(code) : null;
+  // The local copy of Open Food Facts first (no network), then their API.
+  const local = ctx.config.OFF_DUMP_ENABLED ? await lookupLocalOff(ctx.db, code) : null;
+  const off = local ?? (ctx.config.OFF_ENABLED ? await ctx.off.lookup(code) : null);
   const catalog = await loadCatalog(ctx.db, auth.household.id);
-  let values: typeof products.$inferInsert = { householdId: auth.household.id, name: null, source: 'scan' };
-  if (off?.name) {
-    const ingredient = suggestIngredient(off.name, [...catalog.ingredients.values()], ingredientAliases(ctx.seed));
-    const category = ingredient ? null : suggestCategory(off.name, off.categories, [...catalog.categories.values()]);
-    const qty = parsePackQuantity(off.quantity);
-    values = {
-      householdId: auth.household.id,
-      name: off.name,
-      brand: off.brand,
-      imageUrl: off.imageUrl,
-      ingredientId: ingredient?.id ?? null,
-      shelfLifeCategoryId: category?.id ?? null,
-      nutritionPer100g: off.nutritionPer100g,
-      source: 'off',
-      ...packFields(qty?.amount, qty?.unit, ctx.seed.units, measuresFor(ingredient?.id ?? null, catalog)),
-    };
+  if (existing) {
+    // Nobody has named it yet: Open Food Facts may know it by now (or was unreachable last time).
+    if (!off?.name) return { product: existing, known: false, created: false };
+    const [named] = await ctx.db.update(products).set(offValues(ctx, auth, off, catalog)).where(eq(products.id, existing.id)).returning();
+    ctx.live.publish(auth.household.id, 'products');
+    return { product: named!, known: true, created: false };
   }
+  const values: typeof products.$inferInsert = off?.name ? offValues(ctx, auth, off, catalog) : { householdId: auth.household.id, name: null, source: 'scan' };
 
   // Bought on a receipt but never scanned: link this barcode to that product rather than making a duplicate.
   if (off?.name) {
@@ -65,6 +60,25 @@ export async function resolveBarcode(ctx: AppContext, auth: Auth, code: string):
   }
   ctx.live.publish(auth.household.id, 'products');
   return { product: result, known: result.name !== null, created: true };
+}
+
+/** A product's fields from Open Food Facts, linked to the household's ingredient or shelf-life category when one fits. */
+function offValues(ctx: AppContext, auth: Auth, off: OffProduct, catalog: Awaited<ReturnType<typeof loadCatalog>>): typeof products.$inferInsert {
+  const name = off.name!;
+  const ingredient = suggestIngredient(name, [...catalog.ingredients.values()], ingredientAliases(ctx.seed));
+  const category = ingredient ? null : suggestCategory(name, off.categories, [...catalog.categories.values()]);
+  const qty = parsePackQuantity(off.quantity);
+  return {
+    householdId: auth.household.id,
+    name,
+    brand: off.brand,
+    imageUrl: off.imageUrl,
+    ingredientId: ingredient?.id ?? null,
+    shelfLifeCategoryId: category?.id ?? null,
+    nutritionPer100g: off.nutritionPer100g,
+    source: 'off',
+    ...packFields(qty?.amount, qty?.unit, ctx.seed.units, measuresFor(ingredient?.id ?? null, catalog)),
+  };
 }
 
 export async function productById(ctx: AppContext, auth: Auth, id: string): Promise<ProductRow | null> {
