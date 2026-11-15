@@ -27,6 +27,7 @@ const off = new FakeOff({
   '5000000000180': { name: 'Corn Fed Chicken Thighs', quantity: '1 kg', nutritionPer100g: { kcal: 177 } },
   '5000000000197': { name: 'Turkey Breast Strips', quantity: '500 g', nutritionPer100g: { kcal: 110 } },
   '5000000000203': { name: 'Turkey Breast Mince', quantity: '500 g', nutritionPer100g: { kcal: 110 } },
+  '5000000000210': { name: 'Orange Squash', quantity: '1 l' },
   // Only found by searching Open Food Facts by name in Log food.
   '5000000000135': { name: 'Nutty Choc Bar', brand: 'Snackco', quantity: '50 g', nutritionPer100g: { kcal: 500, protein: 8, carbs: 55, fat: 27 } },
   '5000000000142': { name: 'Crunchy Choc Bar', brand: 'Snackco', quantity: '40 g', nutritionPer100g: { kcal: 480, protein: 6, carbs: 60, fat: 24 } },

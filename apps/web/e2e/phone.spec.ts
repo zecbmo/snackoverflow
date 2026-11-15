@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { signIn } from './helpers';
+import { signIn, typeBarcode } from './helpers';
 
 /** Phone layout: recipes open the full page, the menu has the main pages, menus stay on screen. */
 test('phone: full recipe page, menu and on-screen menus', async ({ page }, info) => {
@@ -33,4 +33,30 @@ test('phone: full recipe page, menu and on-screen menus', async ({ page }, info)
   const width = page.viewportSize()!.width;
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+});
+
+/** Stock on a phone: the page is exactly as wide as the screen, and a food's details start with its table row. */
+test('phone: stock fits the screen and details show the table row', async ({ page }, info) => {
+  test.skip(info.project.name !== 'phone', 'Phone layout only');
+  await signIn(page);
+  await page.goto('/scan');
+  await typeBarcode(page, '5000000000210');
+  await expect(page.getByLabel('1 scanned')).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Finish' }).click();
+
+  // Nothing pokes out past the right edge (a hidden label in the picker strip once did: the page slid sideways and the bottom bar shifted).
+  await expect(page).toHaveURL(/\/stock/);
+  const open = page.getByRole('button', { name: /^Orange Squash, / });
+  await expect(open).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  // Where and how much, on the one line.
+  await expect(open).toContainText(/· 1L$/);
+
+  // The details start with what the desktop table shows for the row.
+  await open.click();
+  const row = page.getByRole('dialog', { name: 'Orange Squash' }).getByLabel('In stock');
+  for (const [label, value] of [['Where', /\w+/], ['State', 'Closed'], ['Packs', '1'], ['Amount', '1L'], ['Planned', '–']] as const) {
+    await expect(row.locator('div', { hasText: label }).first()).toContainText(value);
+  }
 });

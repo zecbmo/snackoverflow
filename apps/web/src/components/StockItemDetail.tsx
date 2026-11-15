@@ -3,7 +3,7 @@
  * a link to the product. Shown in the Stock side panel and on the /stock/:id page.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 import type { StockChangeDto, StockEventDto, StockItemDto } from '@snackoverflow/shared';
 import { api, errorMessage } from '../lib/api';
@@ -76,8 +76,28 @@ function DateSheet({ item, open, onClose }: { item: StockItemDto; open: boolean;
   );
 }
 
+/** One line of the food's table row, as the side panel shows it. */
+export interface DetailRow {
+  label: string;
+  value: ReactNode;
+}
+
 /** The detail itself. `onOpenPack` switches the side panel to another pack; without it, packs are links. */
-export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: string; onOpenPack?: (id: string) => void; showActions?: boolean }) {
+export function StockItemDetail({
+  id,
+  onOpenPack,
+  showActions = true,
+  summary,
+  packs = 1,
+}: {
+  id: string;
+  onOpenPack?: (id: string) => void;
+  showActions?: boolean;
+  /** The food's row from the stock table (where, state, packs, items, amount, planned), shown first. */
+  summary?: DetailRow[];
+  /** How many packs that row covers: with more than one, this pack's own details get a heading. */
+  packs?: number;
+}) {
   const me = useMe();
   const q = useStockItem(id);
   const item = q.data?.item;
@@ -100,7 +120,19 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
         </span>
       </div>
 
-      <dl>
+      {summary && (
+        <dl aria-label="In stock">
+          {summary.map((s) => (
+            <div key={s.label} className={row}>
+              <dt className="text-muted">{s.label}</dt>
+              <dd className="font-semibold">{s.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      <dl aria-label={summary && packs > 1 ? 'This pack' : undefined}>
+        {summary && packs > 1 && <div className="pb-1 text-xs font-semibold uppercase tracking-wider text-muted">This pack</div>}
         <div className={row}>
           <dt className="text-muted">Best before</dt>
           <dd>
@@ -109,14 +141,17 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
             </button>
           </dd>
         </div>
-        <div className={row}>
-          <dt className="text-muted">Amount left</dt>
-          <dd>
-            <button type="button" onClick={() => actions.changeAmount([item])} className="font-semibold text-accent-text hover:underline">
-              {amountLabel(item)}
-            </button>
-          </dd>
-        </div>
+        {/* With one pack the row above already says how much is left. */}
+        {!(summary && packs === 1) && (
+          <div className={row}>
+            <dt className="text-muted">Amount left</dt>
+            <dd>
+              <button type="button" onClick={() => actions.changeAmount([item])} className="font-semibold text-accent-text hover:underline">
+                {amountLabel(item)}
+              </button>
+            </dd>
+          </div>
+        )}
         <div className={row}>
           <dt className="text-muted">Added</dt>
           <dd>{longDate(item.addedOn)}</dd>

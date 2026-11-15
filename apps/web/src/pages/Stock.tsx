@@ -13,7 +13,7 @@ import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { Menu, PickerMenu } from '../components/Menu';
 import { SidePanel, usePanelParam } from '../components/SidePanel';
-import { StockItemDetail } from '../components/StockItemDetail';
+import { type DetailRow, StockItemDetail } from '../components/StockItemDetail';
 import { useStockActions } from '../components/StockActions';
 import { StockRowActions } from '../components/StockRowActions';
 import { useToast } from '../components/Toast';
@@ -251,6 +251,20 @@ export function StockPage() {
   const openGroup = (g: StockGroup) => openPanel(g.first.id);
   const activeKey = rows.find((g) => g.packs.some((p) => p.id === openId))?.key ?? null;
 
+  // The side panel starts with the open row's own table cells (the same columns, so they can't drift apart):
+  // on a phone the list has room for one line, and this is where the rest is.
+  const inRow = (g: StockGroup) => g.packs.some((p) => p.id === openId);
+  const openRow = openId ? (rows.find(inRow) ?? groupStock(stock.data ?? []).find(inRow)) : undefined;
+  const summary = openRow
+    ? columns
+        .filter((c) => ['category', 'where', 'state', 'packs', 'items', 'left', 'planned'].includes(c.key))
+        .map((c) => ({
+          label: c.label ?? (typeof c.header === 'string' ? c.header : c.key),
+          // The table shows the state as an icon; here there's room for the word.
+          value: c.key === 'state' ? stateText(openRow) || 'Closed' : c.cell(openRow) || '–',
+        }))
+    : undefined;
+
   const chosen = rows.filter((g) => selected.has(g.key));
   const filterOptions = [
     { value: 'all', label: 'Everything' },
@@ -415,16 +429,16 @@ export function StockPage() {
           }
         />
       )}
-      <StockPanel id={openId} onClose={closePanel} onOpenPack={openPanel} />
+      <StockPanel id={openId} onClose={closePanel} onOpenPack={openPanel} summary={summary} packs={openRow?.packs.length} />
     </>
   );
 }
 
-function StockPanel({ id, onClose, onOpenPack }: { id: string | null; onClose: () => void; onOpenPack: (id: string) => void }) {
+function StockPanel({ id, onClose, onOpenPack, summary, packs }: { id: string | null; onClose: () => void; onOpenPack: (id: string) => void; summary?: DetailRow[]; packs?: number }) {
   const item = useStockItem(id ?? '').data?.item;
   return (
     <SidePanel open={Boolean(id)} onClose={onClose} title={item?.productName ?? 'Loading…'} subtitle={item?.brand ?? undefined}>
-      {id && <StockItemDetail id={id} onOpenPack={onOpenPack} />}
+      {id && <StockItemDetail id={id} onOpenPack={onOpenPack} summary={summary} packs={packs} />}
     </SidePanel>
   );
 }

@@ -183,6 +183,16 @@ h3 {
 
 /* In the base layer so components can turn it off (outline-none) where they draw their own. */
 @layer base {
+  /*
+   * A sideways scroller holds on to everything inside it. Without this, an absolutely placed child
+   * (a button's hidden label for screen readers) past its right edge isn't clipped by it and makes the
+   * whole page a few px wider than the screen: on a phone the page then slides sideways and the bottom
+   * bar shifts. Stock's picker strip did exactly that.
+   */
+  .overflow-x-auto,
+  .overflow-auto {
+    position: relative;
+  }
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
