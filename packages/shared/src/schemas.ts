@@ -127,6 +127,8 @@ export const productInput = z.object({
   packAmount: z.number().positive().max(1_000_000).nullish(),
   packUnit: z.string().trim().max(20).nullish(),
   nutritionPer100g: nutritionInput.nullish(),
+  /** One serving as the label gives it, in grams (or ml). */
+  servingGrams: z.number().min(1).max(2000).nullish(),
   /** One item of a multipack (a single bar of four), in grams: lets people plan and eat one at a time. */
   portionGrams: z.number().positive().max(100_000).nullish(),
   /** Overrides the ingredient's food group; null means "from its ingredient". */

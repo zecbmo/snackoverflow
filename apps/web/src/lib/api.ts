@@ -16,7 +16,13 @@ export function isOffline(e: unknown): boolean {
   return e instanceof ApiError && e.status === 0;
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+/**
+ * How long the first questions to the server (who am I, is it set up) may take. A server that's
+ * switched off or on another network often never answers, and the app must say so, not spin for minutes.
+ */
+export const FIRST_CONTACT_MS = 8000;
+
+async function request<T>(method: string, url: string, body?: unknown, timeoutMs?: number): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const token = deviceToken();
@@ -28,6 +34,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
       credentials: 'same-origin',
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
     });
   } catch {
     throw new ApiError(0, "Can't reach Snack Overflow. Check your connection.");
@@ -47,7 +54,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 }
 
 export const api = {
-  get: <T>(url: string) => request<T>('GET', url),
+  get: <T>(url: string, opts?: { timeoutMs?: number }) => request<T>('GET', url, undefined, opts?.timeoutMs),
   post: <T>(url: string, body: unknown = {}) => request<T>('POST', url, body),
   patch: <T>(url: string, body: unknown) => request<T>('PATCH', url, body),
   put: <T>(url: string, body: unknown) => request<T>('PUT', url, body),

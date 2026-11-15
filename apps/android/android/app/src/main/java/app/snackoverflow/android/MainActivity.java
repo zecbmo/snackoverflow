@@ -11,6 +11,8 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // The app's own plugin: background inbox checks, notifications (no Firebase) and shared receipts.
         registerPlugin(InboxPlugin.class);
+        // Tap to focus for the barcode scanner's camera.
+        registerPlugin(CameraFocusPlugin.class);
         super.onCreate(savedInstanceState);
         SharedFile.capture(this, getIntent());
     }

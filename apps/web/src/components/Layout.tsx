@@ -6,7 +6,7 @@ import { api, ApiError } from '../lib/api';
 import { connectLive } from '../lib/live';
 import { configureBackgroundChecks, flushSharedFile, forgetDevice, requestNotificationPermission } from '../lib/native';
 import { startQueueSync, syncQueue, useQueuedCount } from '../lib/offlineQueue';
-import { hasServer, isNative } from '../lib/platform';
+import { hasServer, isNative, serverUrl } from '../lib/platform';
 import { useToast } from './Toast';
 import { useInbox, useProducts, useRecipes, useSession, useStock } from '../lib/queries';
 import { Icon, type IconName } from './Icon';
@@ -476,10 +476,21 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
     }
     if (session.error instanceof ApiError && session.error.status === 0 && isNative()) {
       return (
-        <div className="mx-auto max-w-md p-6 text-center">
-          <p className="mb-4">{session.error.message}</p>
-          <Link to="/connect" className="font-semibold text-accent-text">
-            Check the server address
+        <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 p-6 text-center">
+          <h1 className="text-2xl font-bold">Can't reach your server</h1>
+          <p className="text-muted">
+            Snack Overflow didn't answer at <span className="break-all font-semibold text-ink">{serverUrl()}</span>. Check this phone is online and on the right network, or change the address.
+          </p>
+          <button
+            type="button"
+            disabled={session.isFetching}
+            onClick={() => void session.refetch()}
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 font-semibold text-accent-ink disabled:opacity-60"
+          >
+            {session.isFetching ? 'Trying…' : 'Try again'}
+          </button>
+          <Link to="/connect" className="inline-flex min-h-11 items-center justify-center font-semibold text-accent-text">
+            Change the server address
           </Link>
         </div>
       );

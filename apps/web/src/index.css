@@ -128,6 +128,17 @@ body,
   min-height: 100%;
 }
 
+/* A page never slides sideways: wide things (tables, button rows) scroll inside themselves. */
+html {
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+/* A row that scrolls sideways stops at its ends: the pull isn't passed on to the page (which, in the Android app, stretched the whole screen, bottom bar and all). */
+.overflow-x-auto {
+  overscroll-behavior-x: contain;
+}
+
 body {
   background: var(--bg);
   color: var(--ink);

@@ -6,9 +6,9 @@
  * you've used or eaten is taken out from the stock row or Log food (which has its own scanner).
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { formatFullDate, formatPackSize, MEAL_SLOTS, type MealSlot, type ProductDto, type ProductPhotoReadDto, type ScanAddResult, type StockItemDto } from '@snackoverflow/shared';
+import { formatFullDate, formatPackSize, MEAL_SLOTS, type MealSlot, type OffMatchDto, type OffMatchSearchDto, type ProductDto, type ProductPhotoReadDto, type ScanAddResult, type StockItemDto } from '@snackoverflow/shared';
 import { Icon, locationIcon } from '../components/Icon';
 import { useMe } from '../components/Layout';
 import { useLogFood } from '../components/LogFood';
@@ -19,6 +19,7 @@ import { enqueueScan, type QueuedScan, removeQueued } from '../lib/offlineQueue'
 import { photoBody } from '../lib/images';
 import { parsePounds } from '../lib/money';
 import { canShareWithOff, rememberedShare, rememberShare, shareWithOff } from '../lib/off';
+import { focusCameraAt } from '../lib/native';
 import { isNative } from '../lib/platform';
 import { useIngredients, useLocations } from '../lib/queries';
 import { beep, useBarcodeScanner } from '../scanner/useBarcodeScanner';
@@ -177,14 +178,26 @@ export function ScanPage() {
     }
   };
 
+  // Android app: tap the picture to focus there (a ring shows where). Buttons keep their own taps.
+  const [focusAt, setFocusAt] = useState<{ x: number; y: number; n: number } | null>(null);
+  const focusHere = (e: ReactPointerEvent) => {
+    if (!isNative() || (e.target as HTMLElement).closest('button, a, input')) return;
+    const at = { x: e.clientX, y: e.clientY, n: Date.now() };
+    setFocusAt(at);
+    void focusCameraAt(at.x, at.y);
+    setTimeout(() => setFocusAt((f) => (f?.n === at.n ? null : f)), 900);
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col bg-scan text-white">
+      {focusAt && <span key={focusAt.n} aria-hidden className="animate-pop pointer-events-none fixed z-20 size-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90" style={{ left: focusAt.x, top: focusAt.y }} />}
       {/* The Android app's camera is a native view behind the page; an empty <video> there shows the web view's play-button placeholder. */}
       {!isNative() && <video ref={videoRef} muted playsInline className="absolute inset-0 size-full object-cover opacity-70" aria-hidden />}
       <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" aria-hidden />
 
-      <div className="relative z-10 flex flex-1 flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <div className="flex items-center gap-3">
+      {/* The camera's part of the screen. It gives way to the buttons below: on a short screen the frame gets shorter, the buttons never leave. */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))]" onPointerDown={focusHere}>
+        <div className="flex shrink-0 items-center gap-3">
           <button
             type="button"
             aria-label="Close scanner"
@@ -196,7 +209,8 @@ export function ScanPage() {
           <h1 className="text-lg font-semibold">Scan shopping</h1>
         </div>
 
-        <div className="relative mx-auto mt-10 aspect-[3/2] w-full max-w-sm">
+        <div className="mx-auto mt-4 flex min-h-0 w-full max-w-sm flex-1 flex-col justify-center">
+        <div className="relative aspect-[3/2] max-h-full min-h-0 w-full">
           {(['left-0 top-0 border-l-4 border-t-4 rounded-tl-2xl', 'right-0 top-0 border-r-4 border-t-4 rounded-tr-2xl', 'bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl', 'bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl'] as const).map((c) => (
             <span key={c} aria-hidden className={`absolute size-10 border-white ${c}`} />
           ))}
@@ -212,7 +226,8 @@ export function ScanPage() {
             </div>
           )}
         </div>
-        <p className="mt-6 text-center text-[1.0625rem] text-white/80" aria-live="polite">
+        </div>
+        <p className="shrink-0 py-3 text-center text-[1.0625rem] text-white/80" aria-live="polite">
           {status === 'denied'
             ? 'Camera blocked. Allow camera access in your browser, or type the barcode.'
             : status === 'unavailable' || status === 'error'
@@ -221,7 +236,7 @@ export function ScanPage() {
         </p>
       </div>
 
-      <div className="relative z-10 flex flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="relative z-10 flex shrink-0 flex-col gap-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {current && !current.reviewed && (
           <ResultCard key={current.key} entry={current} onUndo={() => void undo(current)} onDate={() => setSheet('date')} onName={() => setSheet('name')} onSave={(r) => saveReview(current, r)} />
         )}
@@ -542,6 +557,34 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
       setReading(false);
     }
   };
+  // Not on the pack's barcode in Open Food Facts, but the same food may be there under another one: search by name and copy its details.
+  const [offQuery, setOffQuery] = useState('');
+  const [offBusy, setOffBusy] = useState(false);
+  const [offFound, setOffFound] = useState<OffMatchSearchDto | null>(null);
+  const [match, setMatch] = useState<OffMatchDto | null>(null);
+  const searchOff = async () => {
+    if (offQuery.trim().length < 2) return;
+    setOffBusy(true);
+    try {
+      setOffFound(await api.get<OffMatchSearchDto>(`/api/off/matches?q=${encodeURIComponent(offQuery.trim())}`));
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    } finally {
+      setOffBusy(false);
+    }
+  };
+  const pickMatch = (m: OffMatchDto) => {
+    setMatch(m);
+    setName(m.name);
+    setBrand(m.brand ?? '');
+    if (m.packAmount) {
+      setAmount(String(m.packAmount));
+      setUnit(m.packUnit ?? 'g');
+    }
+    if (m.ingredientId) setIngredientId(m.ingredientId);
+    if (m.nutritionPer100g) setNutrition(m.nutritionPer100g);
+    setOffFound(null);
+  };
   // Suggest the ingredient from the name as it's typed.
   const suggestion = name.length >= 3 ? ingredients.find((i) => name.toLowerCase().includes(i.name.toLowerCase().replace(/s$/, ''))) : undefined;
   const save = async () => {
@@ -549,7 +592,9 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
     try {
       const p = await api.patch<ProductDto>(`/api/products/${product.id}`, {
         name,
-        ...(share || fromPhoto ? { brand: brand.trim() || null } : {}),
+        ...(share || fromPhoto || match ? { brand: brand.trim() || null } : {}),
+        ...(match?.servingGrams ? { servingGrams: match.servingGrams } : {}),
+        ...(match?.imageUrl ? { imageUrl: match.imageUrl } : {}),
         ...(nutrition ? { nutritionPer100g: nutrition } : {}),
         packAmount: amount ? Number(amount) : null,
         packUnit: amount ? unit : null,
@@ -598,6 +643,44 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
             </p>
           </div>
         )}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end gap-2">
+            <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm font-medium">
+              Find it on Open Food Facts
+              <TextInput
+                value={offQuery}
+                onChange={(e) => setOffQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  void searchOff();
+                }}
+                enterKeyHint="search"
+                placeholder="e.g. Pringles sour cream"
+              />
+            </label>
+            <Button variant="outline" disabled={offBusy || offQuery.trim().length < 2} onClick={() => void searchOff()}>
+              {offBusy ? 'Searching…' : 'Search'}
+            </Button>
+          </div>
+          {offFound && offFound.status !== 'ok' && (
+            <p className="text-sm text-muted">{offFound.status === 'busy' ? 'Open Food Facts is busy. Try again in a minute.' : "Open Food Facts can't be reached just now. Type the details in instead."}</p>
+          )}
+          {offFound?.status === 'ok' && offFound.results.length === 0 && <p className="text-sm text-muted">Nothing found. Try fewer words, or type the details in.</p>}
+          {offFound?.status === 'ok' && offFound.results.length > 0 && (
+            <ul aria-label="Open Food Facts matches" className="max-h-56 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+              {offFound.results.map((m) => (
+                <li key={m.barcode}>
+                  <button type="button" onClick={() => pickMatch(m)} className="flex min-h-11 w-full flex-col justify-center px-3 py-1.5 text-left hover:bg-card-muted">
+                    <span className="font-semibold">{m.name}</span>
+                    <span className="text-sm text-muted">{[m.brand, m.quantity, m.kcalPer100g != null ? `${m.kcalPer100g} kcal per 100g` : null].filter(Boolean).join(' · ') || 'Open Food Facts'}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {match && <p className="text-sm text-muted">Filled in from Open Food Facts{match.nutritionPer100g ? ', with its nutrition' : ''}. Change the name if you like, then save.</p>}
+        </div>
         <Field label="Name">{(id) => <TextInput id={id} autoFocus={!me.features.ai} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Greek yogurt" />}</Field>
         <div className="grid grid-cols-[1fr_7rem] gap-3">
           <Field label="Pack size">{(id) => <TextInput id={id} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional" />}</Field>
@@ -645,7 +728,7 @@ function NameSheet({ open, product, onClose, onSaved }: { open: boolean; product
             </div>
           </div>
         )}
-        {(share || fromPhoto) && <Field label="Brand">{(id) => <TextInput id={id} value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Optional" />}</Field>}
+        {(share || fromPhoto || match) && <Field label="Brand">{(id) => <TextInput id={id} value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Optional" />}</Field>}
         <div className="grid grid-cols-2 gap-3">
           <Button variant="outline" size="lg" onClick={onClose}>
             Later

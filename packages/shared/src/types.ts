@@ -682,6 +682,28 @@ export interface OffSearchDto {
   results: FoodResultDto[];
 }
 
+/** Open Food Facts products found by name, to copy onto a scanned product nobody has named. */
+export interface OffMatchDto {
+  barcode: string;
+  /** Tidied as a scan would name it ("Pringles Original"). */
+  name: string;
+  brand: string | null;
+  /** The pack size as its label words it ("165 g"). */
+  quantity: string | null;
+  packAmount: number | null;
+  packUnit: string | null;
+  ingredientId: string | null;
+  nutritionPer100g: Nutrition | null;
+  kcalPer100g: number | null;
+  servingGrams: number | null;
+  imageUrl: string | null;
+}
+
+export interface OffMatchSearchDto {
+  status: 'ok' | 'busy' | 'unavailable';
+  results: OffMatchDto[];
+}
+
 /** A barcode scanned in Log food: the food, and whether anyone has named it yet. */
 export interface BarcodeFoodDto {
   food: FoodResultDto;

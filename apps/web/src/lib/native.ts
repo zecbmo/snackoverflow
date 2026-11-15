@@ -52,6 +52,20 @@ export function flushSharedFile(navigate: Navigate, toast: (msg: string) => void
 }
 
 const Inbox = registerPlugin<InboxPlugin>('Inbox');
+const CameraFocus = registerPlugin<{ focus(o: { x: number; y: number }): Promise<{ focused: boolean }> }>('CameraFocus');
+
+/**
+ * Android app, while scanning: focus the camera where the screen was tapped (x and y in CSS pixels).
+ * True when the camera took it; false in a browser or when the scanner isn't running.
+ */
+export async function focusCameraAt(x: number, y: number): Promise<boolean> {
+  if (!isNative()) return false;
+  try {
+    return (await CameraFocus.focus({ x: x / window.innerWidth, y: y / window.innerHeight })).focused;
+  } catch {
+    return false;
+  }
+}
 
 type Navigate = (to: string) => void;
 

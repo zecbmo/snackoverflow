@@ -72,6 +72,16 @@ Best-before estimate order: what was set last time for this product, then the pr
 
 In the Android app the camera is a native view behind the page. On the scanner the page is see-through; in Log food's scanner the page behind the sheet is hidden and the camera shows above the sheet. Both show the four-corner frame for where to hold the barcode.
 
+**Room on a short screen.** The scanner's buttons (where it goes, the count, Done) and the card after a scan always stay on screen; the frame that shows where to hold the barcode gets shorter to make room.
+
+**Tap to focus** (Android app): tapping the camera picture focuses there, with a ring where the tap was; after a few seconds the camera focuses by itself again.
+
+**A barcode nobody knows.** "What is it?" can search Open Food Facts by name (**Find it on Open Food Facts**): the same food is often there under another barcode (a multipack sleeve, a shop's own label). Picking a match fills in the name, brand, pack size, serving size and nutrition; the name can still be changed before saving, and the scanned barcode stays the product's own.
+
+**If the server can't be reached** (Android app), the app says so after a few seconds, with Try again and Change the server address, rather than loading for ever.
+
+**A page never slides sideways on a phone.** Wide things (tables, rows of buttons) scroll inside themselves.
+
 **Getting the Android app.** When the server is given an APK file (`APK_PATH`), it serves it at `/apk` and General settings shows **Download the Android app** with the file's size and date (not inside the app itself). `/apk` needs no sign-in: a new phone has no session, and the app is the same build for everyone with nothing of the household's in it. With no file there is no link and `/apk` says so.
 
 **The phone's back button** (Android app) closes whatever is open on top, a menu or a sheet, before it goes back a page.

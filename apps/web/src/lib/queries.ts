@@ -30,7 +30,7 @@ import type {
   UnmatchedGroupDto,
   UserDto,
 } from '@snackoverflow/shared';
-import { api } from './api';
+import { api, FIRST_CONTACT_MS } from './api';
 
 export const keys = {
   session: ['session'] as const,
@@ -61,7 +61,9 @@ export const keys = {
   receipt: (id: string) => ['receipts', id] as const,
 };
 
-export const useSession = () => useQuery({ queryKey: keys.session, queryFn: () => api.get<SessionDto>('/api/session'), retry: false });
+// Asked even when the phone says it's offline, and given up on after a few seconds: either way the app shell can say what's wrong.
+export const useSession = () =>
+  useQuery({ queryKey: keys.session, queryFn: () => api.get<SessionDto>('/api/session', { timeoutMs: FIRST_CONTACT_MS }), retry: false, networkMode: 'always' });
 export const useStock = () => useQuery({ queryKey: keys.stock, queryFn: () => api.get<StockItemDto[]>('/api/stock') });
 export const useStockItem = (id: string) =>
   useQuery({ queryKey: keys.stockItem(id), queryFn: () => api.get<{ item: StockItemDto; events: StockEventDto[] }>(`/api/stock/${id}`), enabled: Boolean(id) });

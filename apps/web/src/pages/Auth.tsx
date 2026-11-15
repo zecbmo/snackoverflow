@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Card, ErrorNote, Field, Spinner, TextInput } from '../components/ui';
-import { api } from '../lib/api';
+import { api, ApiError, FIRST_CONTACT_MS } from '../lib/api';
 import { nativePasswordLogin, startNativeSso } from '../lib/native';
 import { hasServer, isNative, serverUrl } from '../lib/platform';
 
@@ -11,7 +11,14 @@ interface AuthStatus {
   oidc: { enabled: boolean; displayName: string; allowPassword: boolean };
 }
 
-const useAuthStatus = () => useQuery({ queryKey: ['auth-status'], queryFn: () => api.get<AuthStatus>('/api/auth/status') });
+const useAuthStatus = () =>
+  useQuery({
+    queryKey: ['auth-status'],
+    queryFn: () => api.get<AuthStatus>('/api/auth/status', { timeoutMs: FIRST_CONTACT_MS }),
+    // A server that can't be reached is said so straight away, with the way to change its address.
+    retry: (count, err) => !(err instanceof ApiError) && count < 2,
+    networkMode: 'always',
+  });
 
 function AuthFrame({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (

@@ -1,9 +1,9 @@
 /** Turning a scanned barcode into a product: this household's products first, then Open Food Facts, else an unknown product to name later. */
 import { and, eq, isNull, notInArray } from 'drizzle-orm';
-import { expandReceiptText, parsePackQuantity, scannedProductName, tidyCapitals } from '@snackoverflow/shared';
+import { expandReceiptText, type OffMatchSearchDto, parsePackQuantity, scannedProductName, tidyCapitals } from '@snackoverflow/shared';
 import type { AppContext, Auth } from '../context';
 import type { OffProduct } from './off';
-import { lookupLocalOff } from './offDump';
+import { lookupLocalOff, searchLocalOff } from './offDump';
 import { barcodes, products } from '../db/schema';
 import { ingredientAliases } from '../db/seed';
 import { findProductByBarcode, loadCatalog, measuresFor, packFields, type ProductRow, suggestCategory, suggestIngredient } from './catalog';
@@ -126,6 +126,44 @@ function offValues(ctx: AppContext, auth: Auth, off: OffProduct, catalog: Awaite
     source: 'off',
     servingGrams: serving,
     ...pack,
+  };
+}
+
+/**
+ * Open Food Facts products by name, for a scanned barcode it doesn't have: the same food under
+ * another barcode, whose details can be copied. The local copy first (no network), else their search.
+ */
+export async function offMatches(ctx: AppContext, auth: Auth, q: string): Promise<OffMatchSearchDto> {
+  if (!q.trim()) return { status: 'ok', results: [] };
+  let found: OffProduct[] = ctx.config.OFF_DUMP_ENABLED ? await searchLocalOff(ctx.db, q, 12) : [];
+  if (!found.length) {
+    if (!ctx.config.OFF_ENABLED) return { status: ctx.config.OFF_DUMP_ENABLED ? 'ok' : 'unavailable', results: [] };
+    const r = await ctx.off.search(q);
+    if (r.status === 'busy') return { status: 'busy', results: [] };
+    if (r.status === 'failed') return { status: 'unavailable', results: [] };
+    found = r.products.slice(0, 12);
+  }
+  const catalog = await loadCatalog(ctx.db, auth.household.id);
+  return {
+    status: 'ok',
+    results: found
+      .filter((p) => p.name)
+      .map((p) => {
+        const v = offValues(ctx, auth, p, catalog);
+        return {
+          barcode: p.barcode,
+          name: v.name!,
+          brand: v.brand ?? null,
+          quantity: p.quantity,
+          packAmount: v.packGrams ? (v.packAmount ?? null) : null,
+          packUnit: v.packGrams ? (v.packUnit ?? null) : null,
+          ingredientId: v.ingredientId ?? null,
+          nutritionPer100g: p.nutritionPer100g,
+          kcalPer100g: p.nutritionPer100g?.kcal != null ? Math.round(p.nutritionPer100g.kcal) : null,
+          servingGrams: v.servingGrams ?? null,
+          imageUrl: p.imageUrl,
+        };
+      }),
   };
 }
 

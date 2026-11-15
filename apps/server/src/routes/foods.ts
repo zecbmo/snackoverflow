@@ -12,6 +12,7 @@ import {
   type FoodSuggestionsDto,
   foodSuggestionsQuery,
   logSavedMealInput,
+  type OffMatchSearchDto,
   type OffSearchDto,
   savedMealInput,
 } from '@snackoverflow/shared';
@@ -19,6 +20,7 @@ import { requireAdmin, requireAuth } from '../auth/session';
 import { badRequest, parse } from '../http';
 import { barcodeFood, deleteSavedMeal, foodSuggestions, logSavedMeal, productFood, saveMeal, searchFoods, searchOff, setFavourite } from '../services/foodSearch';
 import { offDumpStatus, startOffImport } from '../services/offDump';
+import { offMatches } from '../services/scan';
 import type { StockDeps } from '../services/stock';
 
 const barcodeParam = z.object({ code: z.string().trim().regex(/^[0-9A-Za-z-]{4,64}$/, 'Not a valid barcode') });
@@ -51,6 +53,13 @@ export async function foodRoutes(app: FastifyInstance) {
     const auth = requireAuth(req);
     const { q } = parse(foodSearchQuery, req.query);
     return searchOff(ctx, auth, q);
+  });
+
+  /** Open Food Facts by name, to copy a match's details onto a scanned product nobody has named. */
+  app.get('/api/off/matches', async (req): Promise<OffMatchSearchDto> => {
+    const auth = requireAuth(req);
+    const { q } = parse(foodSearchQuery, req.query);
+    return offMatches(ctx, auth, q);
   });
 
   /** A barcode scanned, typed or picked from Open Food Facts: becomes (or is) one of your products. */
