@@ -227,3 +227,72 @@ export function mergePacks(packs: MergeablePack[]): MergeablePack {
     defrostedOn: state === 'defrosted' ? earliest(packs.map((p) => p.defrostedOn)) : null,
   };
 }
+
+/** What the Use sheet and the stock table need to know about how a food is measured. */
+export interface MeasuredPack {
+  displayUnit: 'g' | 'ml' | 'count';
+  gramsPerCount: number | null;
+  countUnit?: string | null;
+  densityGPerMl?: number | null;
+  isMeal: boolean;
+  /** One item of a multipack (a bar of four), in grams. */
+  itemGrams?: number | null;
+  remainingGrams: number | null;
+}
+
+/**
+ * What one item is, for food that's counted: by the item (apples, eggs), portions of a cooked meal,
+ * or items of a multipack. Null for food measured by weight or volume (chicken thighs, milk), even
+ * when it has a typical item weight, so it's never shown in units it isn't measured in.
+ */
+export function itemOf(p: MeasuredPack): { grams: number; name: string } | null {
+  if (p.isMeal && p.gramsPerCount) return { grams: p.gramsPerCount, name: 'portion' };
+  if (p.itemGrams) return { grams: p.itemGrams, name: 'item' };
+  if (p.displayUnit === 'count' && p.gramsPerCount) return { grams: p.gramsPerCount, name: p.countUnit ?? 'item' };
+  return null;
+}
+
+/** One item, and how many whole ones are left (across a stock row's packs when given its total). */
+export interface OneItem {
+  grams: number;
+  /** "apple", "portion", "item". */
+  name: string;
+  /** Whole items left (rounded down), so − / + stay within what's there. */
+  left: number;
+}
+
+/**
+ * Counted food used an item at a time, when there's more than one left. Null otherwise: food
+ * measured by weight or volume, or the last one (where "Used it all" is the one).
+ */
+export function oneItem(p: MeasuredPack, totalGrams: number | null = p.remainingGrams): OneItem | null {
+  const it = itemOf(p);
+  if (!it || totalGrams === null) return null;
+  const left = Math.floor(totalGrams / it.grams + 0.05);
+  if (left < 2) return null;
+  return { ...it, left };
+}
+
+/** "6 apples", "2.5 portions", "1 item": counted food only (else null). Halves, like everywhere else. */
+export function itemsText(p: MeasuredPack, grams: number | null): string | null {
+  const it = itemOf(p);
+  if (!it || grams === null) return null;
+  const n = Math.round((grams / it.grams) * 2) / 2;
+  return `${n} ${it.name}${n === 1 ? '' : 's'}`;
+}
+
+/** Quick amounts for food measured by weight or volume: 100 / 250 / 500 (g or ml), and a cup when it can be weighed. */
+export function quickAmounts(p: MeasuredPack, totalGrams: number | null, cupMl: number | null): { label: string; grams: number }[] {
+  if (itemOf(p)) return [];
+  const out: { label: string; grams: number }[] = [];
+  if (p.displayUnit === 'ml') {
+    const density = p.densityGPerMl ?? 1;
+    for (const ml of [100, 250, 500]) out.push({ label: ml === cupMl ? `${ml}ml (a cup)` : `${ml}ml`, grams: ml * density });
+    if (cupMl && ![100, 250, 500].includes(cupMl)) out.push({ label: `1 cup (${cupMl}ml)`, grams: cupMl * density });
+  } else {
+    for (const g of [100, 250, 500]) out.push({ label: `${g}g`, grams: g });
+    // A cup of flour, rice or oats: only when the food has a density to weigh it.
+    if (cupMl && p.densityGPerMl) out.push({ label: `1 cup (${Math.round(cupMl * p.densityGPerMl)}g)`, grams: cupMl * p.densityGPerMl });
+  }
+  return out.filter((x) => totalGrams === null || x.grams < totalGrams - 0.5);
+}

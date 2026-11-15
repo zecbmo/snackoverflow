@@ -6,7 +6,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { addDays, amountText, FOOD_GROUPS, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
+import { addDays, amountText, FOOD_GROUPS, formatQuantity, itemsText, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
 import { AddItemsSheet } from '../components/AddItemsSheet';
 import { type Column, ColumnsMenu, DataTable, StatusDot, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
@@ -41,18 +41,28 @@ type GroupId = 'none' | 'location' | 'status' | 'category';
 const STATUS: Record<Tone, string> = { red: 'Use first', amber: 'This week', green: 'Fine', blue: 'Frozen', grey: 'No date' };
 const STATUS_ORDER = [STATUS.red, STATUS.amber, STATUS.green, STATUS.blue, STATUS.grey];
 
-/** What's left across the row's packs, in the food's own unit: "3.4L", "about 400g", "2 portions". */
-function leftLabel(g: StockGroup): string {
+/** Grams left across the row's packs; null when a pack's size isn't known. */
+function rowGrams(g: StockGroup): number | null {
+  return g.packs.some((x) => x.remainingGrams === null) ? null : g.packs.reduce((sum, x) => sum + x.remainingGrams!, 0);
+}
+
+/** What's left by weight or volume: "1.3kg", "~568ml". ~ means an estimate, for opened packs. */
+function amountLeft(g: StockGroup): string {
+  const total = rowGrams(g);
+  if (total === null) return '';
   const p = g.first;
-  if (p.isMeal) {
-    const portions = g.packs.reduce((n, x) => n + (x.remainingGrams !== null && x.gramsPerCount ? x.remainingGrams / x.gramsPerCount : 1), 0);
-    const r = Math.round(portions * 2) / 2;
-    return `${r} ${r === 1 ? 'portion' : 'portions'}`;
-  }
-  if (g.packs.some((x) => x.remainingGrams === null)) return '';
-  const total = g.packs.reduce((sum, x) => sum + x.remainingGrams!, 0);
-  const partial = g.packs.some((x) => x.fractionLeft < 1);
-  return `${partial ? '~' : ''}${amountText(total, p)}`;
+  const partial = !p.isMeal && g.packs.some((x) => x.fractionLeft < 1);
+  return `${partial ? '~' : ''}${formatQuantity(total, p.displayUnit === 'ml' ? 'ml' : 'g', { densityGPerMl: p.densityGPerMl })}`;
+}
+
+/** Items left, for counted food only: "6 apples", "2 portions", "8 items". */
+function itemsLeft(g: StockGroup): string {
+  return itemsText(g.first, rowGrams(g)) ?? '';
+}
+
+/** The short version for a phone's one line: items when it's counted, else the amount. */
+function leftLabel(g: StockGroup): string {
+  return itemsLeft(g) || amountLeft(g);
 }
 
 /** Opened, defrosted or frozen; blank for packs as bought. */
@@ -188,20 +198,28 @@ export function StockPage() {
     { key: 'state', label: 'State', header: <span title="Opened, frozen or defrosted">State</span>, className: 'w-14', cell: (g) => <StateIcon g={g} /> },
     { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : g.packs.length) },
     {
+      key: 'items',
+      label: 'Items',
+      header: <span title="For food that's counted: apples, eggs, bars of a multipack, portions of leftovers">Items</span>,
+      align: 'right',
+      className: 'whitespace-nowrap tabular-nums',
+      cell: (g) => itemsLeft(g),
+    },
+    {
       key: 'left',
       label: 'Amount',
-      header: <span title="What's left. ~ means an estimate, for opened packs. Click to change it.">Amount</span>,
+      header: <span title="What's left by weight or volume. ~ means an estimate, for opened packs. Click to change it.">Amount</span>,
       align: 'right',
       className: 'whitespace-nowrap tabular-nums',
       cell: (g) => (
         <button
           type="button"
-          aria-label={`Change amount of ${g.name}, ${leftLabel(g) || 'not known'}`}
+          aria-label={`Change amount of ${g.name}, ${amountLeft(g) || 'not known'}`}
           title="Change amount"
           onClick={() => actions.changeAmount(g.packs)}
           className="-mx-1.5 rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-accent-text hover:underline focus-visible:bg-accent-soft"
         >
-          {leftLabel(g) || '–'}
+          {amountLeft(g) || '–'}
         </button>
       ),
     },

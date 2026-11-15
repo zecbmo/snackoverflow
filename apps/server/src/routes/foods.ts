@@ -65,6 +65,12 @@ export async function foodRoutes(app: FastifyInstance) {
     return productFood(ctx.db, auth, ctx.now(), req.params.id);
   });
 
+  /** Measures from the seed unit table the app shows (a metric cup), so they aren't written into the web app. */
+  app.get('/api/units', async (req) => {
+    requireAuth(req);
+    return { cupMl: ctx.seed.units.fixed.cup_metric?.value ?? null };
+  });
+
   /** Settings: the local copy of Open Food Facts. */
   app.get('/api/off-dump', async (req) => {
     requireAuth(req);

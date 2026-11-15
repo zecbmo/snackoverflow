@@ -96,6 +96,8 @@ export interface CookRow {
   undoneAt: string | null;
 }
 export const useCooks = () => useQuery({ queryKey: keys.cooks, queryFn: () => api.get<CookRow[]>('/api/cooks') });
+/** Measures from the seed unit table (a metric cup). They don't change while the app runs. */
+export const useUnits = () => useQuery({ queryKey: ['units'], queryFn: () => api.get<{ cupMl: number | null }>('/api/units'), staleTime: Infinity });
 export const usePlan = (from: string, to: string, person = 'me') =>
   useQuery({ queryKey: keys.plan(from, to, person), queryFn: () => api.get<PlanDto>(`/api/plan?from=${from}&to=${to}&person=${encodeURIComponent(person)}`) });
 export const useEarmarks = () => useQuery({ queryKey: keys.earmarks, queryFn: () => api.get<EarmarkDto[]>('/api/plan/earmarks') });

@@ -173,6 +173,8 @@ export interface StockItemDto {
   gramsPerCount: number | null;
   /** What one item is called ("apple", "egg"), for counted food. */
   countUnit: string | null;
+  /** One item of a multipack (a bar of four), in grams; null otherwise. */
+  itemGrams: number | null;
   addedAt: string;
   /** A cooked meal (leftovers or batch-cook portions), counted in portions. */
   isMeal: boolean;
@@ -207,6 +209,10 @@ export interface StockEventDto {
 export interface StockChangeDto {
   item: StockItemDto;
   eventId: string;
+  /** Used and logged as eaten: the meal logged (Undo removes it and puts the food back). */
+  entryId?: string;
+  /** Every change made, oldest first, when it took from more than one pack (Undo all of them). */
+  eventIds?: string[];
   askStillSome?: boolean;
   askOpened?: boolean;
   message?: string;

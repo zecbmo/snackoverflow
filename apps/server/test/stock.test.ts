@@ -300,6 +300,33 @@ describe('undo', () => {
     expect(r.statusCode).toBe(409);
   });
 
+  it('undoing a use also undoes the answers to its follow-up questions', async () => {
+    const { change } = await scanAdd(MILK, loc.fridge.id);
+    const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'fraction', fraction: 0.25 } });
+    // "Is it opened now?" Yes.
+    await api.post(`/api/stock/${change.item.id}/open`);
+    await api.post(`/api/events/${used.eventId}/undo`);
+    const [item] = await api.get<StockItemDto[]>('/api/stock');
+    expect(item).toMatchObject({ fractionLeft: 1, state: 'closed', bestBefore: change.item.bestBefore, openedOn: null });
+  });
+
+  it('and "Is there still some left?"', async () => {
+    const { change } = await scanAdd(BEANS, loc.cupboard.id);
+    const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'grams', grams: 500 } });
+    await api.post(`/api/stock/${change.item.id}/still-some`, { answer: 'yes' });
+    await api.post(`/api/events/${used.eventId}/undo`);
+    const [item] = await api.get<StockItemDto[]>('/api/stock');
+    expect(item).toMatchObject({ fractionLeft: 1, remainingGrams: 415 });
+  });
+
+  it('but not a change made later on', async () => {
+    const { change } = await scanAdd(MILK, loc.fridge.id);
+    const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'fraction', fraction: 0.25 } });
+    t.setNow('2026-11-12T13:00:00Z');
+    await api.post(`/api/stock/${change.item.id}/open`);
+    expect((await api.raw('POST', `/api/events/${used.eventId}/undo`, {})).statusCode).toBe(409);
+  });
+
   it('undoes freezing, putting the pack back as it was', async () => {
     const { change } = await scanAdd(CHICKEN, loc.fridge.id);
     const frozen = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/freeze`);

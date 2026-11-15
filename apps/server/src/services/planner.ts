@@ -21,6 +21,8 @@ import {
   type PlanEatDto,
   type PlanEntryDto,
   type PlanEntryInput,
+  type StockChangeDto,
+  type UseAmount,
   onCalendarOf,
   slotForTime,
   wallClockIn,
@@ -31,7 +33,7 @@ import { chainMenuItems, chains, ingredients, locations, mealPlanEntries, mealPl
 import { badRequest, forbidden, HttpError, notFound } from '../http';
 import type { ProductRow } from './catalog';
 import { listRecipes } from './recipes';
-import { householdToday, type StockDeps, undoEvent, usePack } from './stock';
+import { householdToday, type StockDeps, undoEvent, useFromRow, usePack } from './stock';
 
 type EntryRow = typeof mealPlanEntries.$inferSelect;
 const SLOT_ORDER: Record<MealSlot, number> = Object.fromEntries(MEAL_SLOTS.map((s, i) => [s, i])) as Record<MealSlot, number>;
@@ -586,6 +588,41 @@ async function takeFromStock(d: StockDeps, row: EntryRow, servings: number): Pro
     }
   }
   return events;
+}
+
+/**
+ * Use some of a pack and log it as eaten by you, in one go: the use is linked to the meal, so
+ * removing the meal with restoreStock puts the food back. The meal's amount is what was used, in
+ * its own servings (packs, items or portions), so its calories are right.
+ */
+export async function useAndLog(deps: StockDeps, stockItemId: string, amount: UseAmount, log: { date?: CalendarDate; slot?: MealSlot }): Promise<StockChangeDto> {
+  const { db, auth, now } = deps;
+  const [item] = await db.select().from(stockItems).where(and(eq(stockItems.id, stockItemId), eq(stockItems.householdId, auth.household.id)));
+  if (!item) throw notFound("That item isn't in stock.");
+  const [product] = await db.select().from(products).where(eq(products.id, item.productId));
+  const meal = product?.recipeId != null;
+  const r = await createEntryWithStock(deps, {
+    date: log.date ?? householdToday(auth, now),
+    slot: log.slot ?? slotForTime(wallClockIn(auth.household.timeZone, now).hour),
+    kind: meal ? 'stock' : 'product',
+    stockItemId: meal ? item.id : null,
+    productId: meal ? null : item.productId,
+    servings: 1,
+    people: [{ userId: auth.user.id, portions: 1 }],
+    batch: false,
+    eaten: true,
+    fromStock: false,
+  });
+  const change = await useFromRow({ ...deps, mealPlanEntryId: r.entry.id }, item.id, amount);
+  // Everything it took, from every pack (in grams when the packs' sizes are known, else packs).
+  const used = await db.select({ grams: stockEvents.grams, fraction: stockEvents.fraction }).from(stockEvents).where(eq(stockEvents.mealPlanEntryId, r.entry.id));
+  const usedGrams = used.every((u) => u.grams !== null) ? used.reduce((n, u) => n + u.grams!, 0) : null;
+  const usedPacks = used.reduce((n, u) => n + (u.fraction ?? 0), 0);
+  const unitGrams = product?.portionGrams ?? product?.packGrams ?? null;
+  const servings = Math.max(0.001, Math.round((usedGrams !== null && unitGrams ? usedGrams / unitGrams : usedPacks || 1) * 1000) / 1000);
+  await db.update(mealPlanEntries).set({ servings }).where(eq(mealPlanEntries.id, r.entry.id));
+  await db.update(mealPlanPeople).set({ portions: servings }).where(eq(mealPlanPeople.entryId, r.entry.id));
+  return { ...change, entryId: r.entry.id };
 }
 
 /** Eat mode: log a scanned product to your current meal and take one from stock if it's there. */

@@ -7,6 +7,7 @@ import type {
   FoodSuggestionsDto,
   OffSearchDto,
   SavedMealDto,
+  StockChangeDto,
   FoodResultDto,
   IngredientDto,
   InviteDto,
@@ -278,5 +279,87 @@ describe('Open Food Facts and barcodes', () => {
     const unknown = await api.get<BarcodeFoodDto>('/api/foods/barcode/0987654321');
     await api.patch(`/api/products/${unknown.productId}`, { name: 'Corner shop samosa', packAmount: 120, packUnit: 'g', nutritionPer100g: { kcal: 250 } });
     expect(await api.get<FoodResultDto>(`/api/foods/product/${unknown.productId}`)).toMatchObject({ title: 'Corner shop samosa', kcalPerServing: 300, servingLabel: '1 pack (120g)' });
+  });
+});
+
+describe('using stock and logging it as eaten', () => {
+  it('uses a pack and logs it in one go, and Undo puts both back', async () => {
+    await yoghurts(2);
+    const [pack] = await api.get<StockItemDto[]>('/api/stock');
+    const r = await api.post<StockChangeDto>(`/api/stock/${pack!.id}/use`, { amount: { kind: 'all' }, log: { slot: 'snack', date: '2026-11-12' } });
+    expect(r.entryId).toBeTruthy();
+    expect(await api.get<StockItemDto[]>('/api/stock')).toHaveLength(1);
+    const d = await day(api);
+    expect(d.entries[0]).toMatchObject({ title: 'Greek yoghurt pot', kcal: 150, eaten: true, servings: 1 });
+    expect(d.eatenKcal).toBe(150);
+    // Undo: the meal goes and the yoghurt comes back.
+    await api.del(`/api/plan/${r.entryId}?restoreStock=1`);
+    expect(await api.get<StockItemDto[]>('/api/stock')).toHaveLength(2);
+    expect((await day(api)).eatenKcal).toBe(0);
+  });
+
+  it('logs what was used: one apple from a bag', async () => {
+    const p = await api.post<ProductDto>('/api/products', { name: 'Gala apples', ingredientId: ing.apples!.id, packAmount: 900, packUnit: 'g', nutritionPer100g: { kcal: 52 } });
+    await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id });
+    const [bag] = await api.get<StockItemDto[]>('/api/stock');
+    const r = await api.post<StockChangeDto>(`/api/stock/${bag!.id}/use`, { amount: { kind: 'grams', grams: 150 }, log: { date: '2026-11-12' } });
+    expect(r.item.remainingGrams).toBeCloseTo(750, 0);
+    // The time of day picks the meal: 12:00 is lunch.
+    expect((await day(api)).entries[0]).toMatchObject({ slot: 'lunch', kcal: 78, servings: 0.167 });
+  });
+
+  it('without log, a use is just a use', async () => {
+    await yoghurts(1);
+    const [pack] = await api.get<StockItemDto[]>('/api/stock');
+    const r = await api.post<StockChangeDto>(`/api/stock/${pack!.id}/use`, { amount: { kind: 'all' } });
+    expect(r.entryId).toBeUndefined();
+    expect((await day(api)).entries).toEqual([]);
+  });
+});
+
+describe('using from a stock row with several packs', () => {
+  async function chicken() {
+    const p = await api.post<ProductDto>('/api/products', { name: 'British chicken thighs', ingredientId: ing.chicken_thighs!.id, packAmount: 1000, packUnit: 'g', nutritionPer100g: { kcal: 177 } });
+    await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id, bestBefore: '2026-11-14' });
+    await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id, bestBefore: '2026-11-16' });
+    const [open, next] = await api.get<StockItemDto[]>('/api/stock');
+    // The open pack has 300g left.
+    await api.post(`/api/stock/${open!.id}/use`, { amount: { kind: 'grams', grams: 700 } });
+    return { open: open!, next: next! };
+  }
+
+  it('is measured in grams, not thighs', async () => {
+    const { open } = await chicken();
+    const [item] = (await api.get<StockItemDto[]>('/api/stock')).filter((s) => s.id === open.id);
+    expect(item).toMatchObject({ displayUnit: 'g', itemGrams: null });
+  });
+
+  it('takes the rest from the next pack when the open one runs out, and Undo puts both back', async () => {
+    const { open, next } = await chicken();
+    const r = await api.post<StockChangeDto>(`/api/stock/${open.id}/use`, { amount: { kind: 'grams', grams: 500 } });
+    expect(r.eventIds).toHaveLength(2);
+    expect(r.item).toMatchObject({ id: next.id, remainingGrams: 800 });
+    expect((await api.get<StockItemDto[]>('/api/stock')).map((s) => s.remainingGrams)).toEqual([800]);
+    for (const e of [...r.eventIds!].reverse()) await api.post(`/api/events/${e}/undo`);
+    expect((await api.get<StockItemDto[]>('/api/stock')).map((s) => s.remainingGrams)).toEqual([300, 1000]);
+  });
+
+  it('logs everything it took, from both packs', async () => {
+    const { open } = await chicken();
+    const r = await api.post<StockChangeDto>(`/api/stock/${open.id}/use`, { amount: { kind: 'grams', grams: 500 }, log: { date: '2026-11-12', slot: 'dinner' } });
+    expect((await day(api)).entries[0]).toMatchObject({ title: 'British chicken thighs', servings: 0.5, kcal: 885 });
+    await api.del(`/api/plan/${r.entryId}?restoreStock=1`);
+    expect((await api.get<StockItemDto[]>('/api/stock')).map((s) => s.remainingGrams)).toEqual([300, 1000]);
+  });
+
+  it('uses what there is when asked for more', async () => {
+    const { open } = await chicken();
+    const r = await api.post<StockChangeDto>(`/api/stock/${open.id}/use`, { amount: { kind: 'grams', grams: 5000 } });
+    expect(r.message).toContain('That was all there was');
+    expect(await api.get<StockItemDto[]>('/api/stock')).toEqual([]);
+  });
+
+  it('knows how big a cup is, from the seed data', async () => {
+    expect(await api.get('/api/units')).toEqual({ cupMl: 250 });
   });
 });

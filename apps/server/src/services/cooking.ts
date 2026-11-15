@@ -19,7 +19,7 @@ import { cooks, locations, mealPlanEntries, mealPlanPeople, products, recipes, s
 import { badRequest, conflict, notFound } from '../http';
 import { loadCatalog } from './catalog';
 import { getRecipe } from './recipes';
-import { addPack, type StockDeps, usePack } from './stock';
+import { addPack, restored, type StockDeps, usePack } from './stock';
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -235,7 +235,7 @@ export async function undoCook(deps: StockDeps, cookId: string): Promise<void> {
     if (ev.type === 'add') {
       await db.delete(stockItems).where(eq(stockItems.id, ev.stockItemId));
     } else if (ev.before) {
-      await db.update(stockItems).set(ev.before).where(eq(stockItems.id, ev.stockItemId));
+      await db.update(stockItems).set(restored(ev.before)).where(eq(stockItems.id, ev.stockItemId));
       await db.update(stockEvents).set({ undoneAt: now }).where(eq(stockEvents.id, ev.id));
     } else {
       throw badRequest("That cook can't be undone.");

@@ -105,6 +105,7 @@ export function toStockDto(
     densityGPerMl: measures.densityGPerMl ?? null,
     gramsPerCount: measures.gramsPerCount ?? null,
     countUnit: product.portionGrams ? null : (ingredient?.countUnit ?? null),
+    itemGrams: product.portionGrams && product.recipeId === null ? product.portionGrams : null,
     addedAt: item.addedAt.toISOString(),
     isMeal: product.recipeId !== null,
     foodGroup: product.foodGroup ?? (product.ingredientId ? (catalog.ingredients.get(product.ingredientId)?.foodGroup ?? null) : null),
@@ -310,6 +311,48 @@ export async function usePack(deps: StockDeps, id: string, amount: UseAmount): P
   const change = await finishChange(db, auth, now, item.id, eventId, { askStillSome: result.askStillSome });
   // Only ask "Is it opened now?" when opening would change its date (`actions.open` is null when allowed).
   return { ...change, askOpened: shouldAskOpened(item.state, amount, result.after, change.item.actions.open === null) };
+}
+
+/**
+ * Use an amount from a stock row: this pack first, then the row's other packs (the same food in
+ * the same place, frozen or not), earliest first. So using 500g of chicken when the open pack has
+ * 300g left takes the other 200g from the next pack. Fractions and "all" are of this pack only.
+ */
+export async function useFromRow(deps: StockDeps, id: string, amount: UseAmount): Promise<StockChangeDto> {
+  const { db, auth } = deps;
+  const { item } = await loadItem(db, auth, id);
+  if (amount.kind !== 'grams' || item.remainingGrams === null || amount.grams <= item.remainingGrams + 0.5) return usePack(deps, id, amount);
+  const others = orderForUse(
+    (
+      await db
+        .select()
+        .from(stockItems)
+        .where(and(eq(stockItems.householdId, auth.household.id), eq(stockItems.productId, item.productId), eq(stockItems.locationId, item.locationId), isNull(stockItems.finishedAt)))
+    )
+      .filter((p) => p.id !== item.id && (p.state === 'frozen') === (item.state === 'frozen'))
+      .map((p) => ({ ...p })),
+  );
+  // Only pack in the row: as before (our numbers may be off, so it asks "Is there still some left?").
+  if (!others.length) return usePack(deps, id, amount);
+  const first = await usePack(deps, id, { kind: 'all' });
+  const eventIds = [first.eventId];
+  let last = first;
+  let left = amount.grams - item.remainingGrams;
+  for (const p of others) {
+    if (left <= 0.5) break;
+    if (p.remainingGrams === null) {
+      // A pack of unknown size: count it as used up.
+      last = await usePack(deps, p.id, { kind: 'all' });
+      eventIds.push(last.eventId);
+      break;
+    }
+    const take = Math.min(p.remainingGrams, left);
+    last = await usePack(deps, p.id, take >= p.remainingGrams - 0.5 ? { kind: 'all' } : { kind: 'grams', grams: take });
+    eventIds.push(last.eventId);
+    left -= take;
+  }
+  // Follow-up questions ("Is it opened now?") are about the pack it ended on.
+  return { ...last, eventIds, ...(left > 0.5 ? { message: `That was all there was: used up all ${others.length + 1} packs.` } : {}) };
 }
 
 /** Bin a pack (or part of it). Kept separate from use so waste can be counted. */
@@ -518,8 +561,20 @@ export async function mergeStockPacks(deps: StockDeps, ids: string[]): Promise<S
 }
 
 /**
+ * A pack as it was before a change, ready to write back. Snapshots are stored as JSON, so the
+ * time it was finished comes back as text and has to be a date again.
+ */
+export function restored(before: StockSnapshot): StockSnapshot {
+  return { ...before, finishedAt: before.finishedAt ? new Date(before.finishedAt as unknown as string) : null };
+}
+
+/** How soon after a use its follow-up answers come, for undoing them together. */
+const FOLLOW_UP_MS = 15 * 60_000;
+
+/**
  * Undo a stock change. Only the latest change to a pack can be undone, so
- * later changes are never silently overwritten. Undoing an add removes the pack.
+ * later changes are never silently overwritten, except the answers to a use's follow-up
+ * questions, which are undone with it. Undoing an add removes the pack.
  */
 export async function undoEvent(deps: StockDeps, eventId: string): Promise<{ item: StockItemDto | null }> {
   const { db, auth, now } = deps;
@@ -530,19 +585,30 @@ export async function undoEvent(deps: StockDeps, eventId: string): Promise<{ ite
     .limit(1);
   if (!ev) throw notFound("Couldn't find that change.");
   if (ev.undoneAt) throw conflict('That has already been undone.');
-  const [later] = await db
-    .select({ id: stockEvents.id })
+  const later = await db
+    .select()
     .from(stockEvents)
     .where(and(eq(stockEvents.stockItemId, ev.stockItemId), isNull(stockEvents.undoneAt), gt(stockEvents.seq, ev.seq)))
-    .limit(1);
-  if (later) throw conflict('Something else has changed this item since, so it can no longer be undone.');
+    .orderBy(desc(stockEvents.seq));
+  if (later.length) {
+    // The answers to a use's follow-up questions ("Is it opened now?", "Is there still some
+    // left?") go with it: same person, just after. Anything else later blocks the undo.
+    const followUps =
+      (ev.type === 'use' || ev.type === 'discard') &&
+      later.every((l) => (l.type === 'open' || l.type === 'adjust') && l.userId === ev.userId && l.before && l.createdAt.getTime() - ev.createdAt.getTime() <= FOLLOW_UP_MS);
+    if (!followUps) throw conflict('Something else has changed this item since, so it can no longer be undone.');
+    for (const l of later) {
+      await db.update(stockItems).set(restored(l.before!)).where(eq(stockItems.id, l.stockItemId));
+      await db.update(stockEvents).set({ undoneAt: now }).where(eq(stockEvents.id, l.id));
+    }
+  }
 
   if (ev.type === 'add') {
     await db.delete(stockItems).where(eq(stockItems.id, ev.stockItemId));
     return { item: null };
   }
   if (!ev.before) throw conflict("That change can't be undone.");
-  await db.update(stockItems).set(ev.before).where(eq(stockItems.id, ev.stockItemId));
+  await db.update(stockItems).set(restored(ev.before)).where(eq(stockItems.id, ev.stockItemId));
   await db.update(stockEvents).set({ undoneAt: now }).where(eq(stockEvents.id, ev.id));
   return { item: await getStockItem(db, auth, now, ev.stockItemId) };
 }

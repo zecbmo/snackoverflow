@@ -143,7 +143,11 @@ export const useAmountInput = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('grams'), grams: z.number().gt(0).max(1_000_000) }),
 ]);
 
-export const useStockInput = z.object({ amount: useAmountInput });
+export const useStockInput = z.object({
+  amount: useAmountInput,
+  /** Also log it as eaten by you (default: today, the meal for the time of day). */
+  log: z.object({ date: calendarDate.optional(), slot: z.enum(MEAL_SLOTS).optional() }).optional(),
+});
 export const discardStockInput = z.object({ amount: useAmountInput.default({ kind: 'all' }) });
 export const moveStockInput = z.object({ locationId: id });
 export const freezeStockInput = z.object({ locationId: id.optional() });

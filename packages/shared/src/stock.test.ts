@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { productInput, scanInput, useAmountInput } from './schemas';
-import { amountStepper, applyStillSome, applyUse, mergePacks, orderForUse, shouldAskOpened, stepAmount, stepperGrams } from './stock';
+import { amountStepper, applyStillSome, applyUse, itemsText, mergePacks, oneItem, orderForUse, quickAmounts, shouldAskOpened, stepAmount, stepperGrams } from './stock';
 
 const fullPack = { fractionLeft: 1, initialGrams: 400, remainingGrams: 400 };
 
@@ -195,3 +195,54 @@ describe('mergePacks', () => {
     expect(() => mergePacks([pack])).toThrow();
   });
 });
+
+describe('counted food', () => {
+  const apples = { displayUnit: 'count' as const, gramsPerCount: 150, countUnit: 'apple', isMeal: false, remainingGrams: 900 };
+  const chicken = { displayUnit: 'g' as const, gramsPerCount: 100, countUnit: 'thigh', isMeal: false, remainingGrams: 1000 };
+
+  it('uses counted food an item at a time, across the row when given its total', () => {
+    expect(oneItem(apples)).toEqual({ grams: 150, name: 'apple', left: 6 });
+    expect(oneItem(apples, 1800)?.left).toBe(12);
+    expect(oneItem({ ...apples, countUnit: null })?.name).toBe('item');
+    expect(oneItem({ ...apples, displayUnit: 'g', isMeal: true, gramsPerCount: 400, remainingGrams: 1200 })).toEqual({ grams: 400, name: 'portion', left: 3 });
+    // A bar from a multipack of four.
+    expect(oneItem({ ...chicken, itemGrams: 45, remainingGrams: 180 })).toEqual({ grams: 45, name: 'item', left: 4 });
+  });
+
+  it('never counts food measured by weight, and leaves the last one to "Used it all"', () => {
+    expect(oneItem(chicken)).toBeNull();
+    expect(oneItem({ ...apples, remainingGrams: 150 })).toBeNull();
+    expect(oneItem({ ...apples, gramsPerCount: null })).toBeNull();
+    expect(oneItem({ ...apples, remainingGrams: null })).toBeNull();
+  });
+
+  it('says how many items are left', () => {
+    expect(itemsText(apples, 900)).toBe('6 apples');
+    expect(itemsText(apples, 160)).toBe('1 apple');
+    expect(itemsText({ ...apples, isMeal: true, gramsPerCount: 400 }, 1000)).toBe('2.5 portions');
+    expect(itemsText(chicken, 1000)).toBeNull();
+  });
+});
+
+describe('quickAmounts', () => {
+  const chicken = { displayUnit: 'g' as const, gramsPerCount: 100, isMeal: false, remainingGrams: 1000 };
+
+  it('offers 100g, 250g and 500g, up to what there is', () => {
+    expect(quickAmounts(chicken, 1300, 250).map((x) => x.label)).toEqual(['100g', '250g', '500g']);
+    expect(quickAmounts(chicken, 300, 250).map((x) => x.label)).toEqual(['100g', '250g']);
+  });
+
+  it('weighs a cup when the food has a density, and measures liquids in ml', () => {
+    expect(quickAmounts({ ...chicken, densityGPerMl: 0.85 }, null, 250).at(-1)).toEqual({ label: '1 cup (213g)', grams: 212.5 });
+    expect(quickAmounts({ ...chicken, displayUnit: 'ml', densityGPerMl: 1.03 }, 2338, 250)).toEqual([
+      { label: '100ml', grams: 103 },
+      { label: '250ml (a cup)', grams: 257.5 },
+      { label: '500ml', grams: 515 },
+    ]);
+  });
+
+  it('has none for counted food', () => {
+    expect(quickAmounts({ ...chicken, displayUnit: 'count', countUnit: 'apple', gramsPerCount: 150 }, 900, 250)).toEqual([]);
+  });
+});
+

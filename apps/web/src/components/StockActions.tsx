@@ -6,18 +6,20 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
-import { amountText, type EarmarkDto, type StockChangeDto, type StockItemDto, type UseAmountInput } from '@snackoverflow/shared';
+import { amountText, type EarmarkDto, formatQuantity, itemsText, MEAL_SLOTS, type MealSlot, oneItem, quickAmounts, type StockChangeDto, type StockItemDto, type UseAmountInput } from '@snackoverflow/shared';
 import { api, errorMessage } from '../lib/api';
-import { useLocations } from '../lib/queries';
+import { useLocations, useStock, useUnits } from '../lib/queries';
 import { amountLabel, longDate } from '../lib/format';
 import { AmountSheet } from './AmountSheet';
 import { Icon, locationIcon } from './Icon';
+import { currentSlot, SLOT_LABEL } from './LogFood';
 import { useToast } from './Toast';
-import { Button, Field, Sheet, TextInput } from './ui';
+import { Button, Field, Sheet, TextInput, Toggle } from './ui';
 
 interface StockActions {
   use(item: StockItemDto): void;
-  useAmount(item: StockItemDto, amount: UseAmountInput): Promise<StockChangeDto | null>;
+  /** Use some of a pack; with `log`, it's also logged as eaten by you (one Undo for both). */
+  useAmount(item: StockItemDto, amount: UseAmountInput, log?: { slot: MealSlot }): Promise<StockChangeDto | null>;
   open(item: StockItemDto): Promise<void>;
   freeze(item: StockItemDto): Promise<void>;
   defrost(item: StockItemDto): Promise<void>;
@@ -130,14 +132,38 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
       try {
         const change = await fn();
         await refresh();
-        toast.show(change.message ?? message(change), change.eventId ? { action: { label: 'Undo', onClick: () => undo(change.eventId) } } : undefined);
+        // Used and logged: Undo removes the meal, which puts the food back too.
+        const undoIt = change.entryId
+          ? async () => {
+              try {
+                await api.del(`/api/plan/${change.entryId}?restoreStock=1`);
+                toast.show('Undone.');
+              } catch (e) {
+                toast.show(errorMessage(e), { tone: 'error' });
+              }
+              await Promise.all([refresh(), qc.invalidateQueries({ queryKey: ['plan'] })]);
+            }
+          : change.eventIds && change.eventIds.length > 1
+            ? async () => {
+                // Took from more than one pack: put them all back, newest first.
+                try {
+                  for (const e of [...change.eventIds!].reverse()) await api.post(`/api/events/${e}/undo`);
+                  toast.show('Undone.');
+                } catch (e) {
+                  toast.show(errorMessage(e), { tone: 'error' });
+                }
+                await refresh();
+              }
+            : () => undo(change.eventId);
+        if (change.entryId) await qc.invalidateQueries({ queryKey: ['plan'] });
+        toast.show(change.message ?? message(change), change.eventId ? { action: { label: 'Undo', onClick: undoIt } } : undefined);
         return change;
       } catch (e) {
         toast.show(errorMessage(e), { tone: 'error' });
         return null;
       }
     },
-    [refresh, toast, undo],
+    [refresh, toast, undo, qc],
   );
 
   const followUp = useCallback((change: StockChangeDto) => {
@@ -150,11 +176,12 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<StockActions>(
     () => ({
       use: (item) => setUseFor(item),
-      async useAmount(item, amount) {
+      async useAmount(item, amount, log) {
         if (!(await checkPlan(item, amount))) return null;
         const change = await run(
-          () => api.post<StockChangeDto>(`/api/stock/${item.id}/use`, { amount }),
-          (c) => (c.item.fractionLeft <= 0 ? `Used up the ${item.productName}.` : `Used some ${item.productName}.`),
+          () => api.post<StockChangeDto>(`/api/stock/${item.id}/use`, { amount, ...(log ? { log } : {}) }),
+          (c) =>
+            `${c.item.fractionLeft <= 0 ? `Used up the ${item.productName}` : `Used some ${item.productName}`}${c.entryId && log ? ` and logged it to your ${SLOT_LABEL[log.slot].toLowerCase()}` : ''}.`,
         );
         if (change) followUp(change);
         return change;
@@ -191,7 +218,7 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={actions}>
       {children}
-      <UseSheet item={useFor} onClose={() => setUseFor(null)} onUse={(item, amount) => void actions.useAmount(item, amount)} />
+      <UseSheet item={useFor} onClose={() => setUseFor(null)} onUse={(item, amount, log) => void actions.useAmount(item, amount, log)} />
       <AmountSheet packs={amountFor} onClose={() => setAmountFor(null)} onReplace={setAmountFor} />
       <MoveSheet
         item={moveFor}
@@ -284,34 +311,139 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function UseSheet({ item, onClose, onUse }: { item: StockItemDto | null; onClose: () => void; onUse: (item: StockItemDto, amount: UseAmountInput) => void }) {
+const LOG_KEY = 'so.use.log';
+
+function rememberedLog(): boolean {
+  try {
+    return localStorage.getItem(LOG_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Use: one at a time for counted food (an apple, an egg, a bar, a portion), else the whole pack,
+ * part of it, or an exact amount. "Log it as eaten" also adds it to your diary (remembered on this
+ * device), so eating something from the fridge is one step.
+ */
+function UseSheet({ item, onClose, onUse }: { item: StockItemDto | null; onClose: () => void; onUse: (item: StockItemDto, amount: UseAmountInput, log?: { slot: MealSlot }) => void }) {
   const [exact, setExact] = useState('');
-  const unit = item?.displayUnit === 'ml' ? 'ml' : item?.displayUnit === 'count' && item.gramsPerCount ? 'count' : 'g';
+  const [count, setCount] = useState(1);
+  const [logIt, setLogIt] = useState(rememberedLog);
+  const [slot, setSlot] = useState<MealSlot>(currentSlot);
+  // The whole stock row: this pack (used first) and the others of the same food in the same place.
+  const stock = useStock().data;
+  const cupMl = useUnits().data?.cupMl ?? null;
+  const row = item ? (stock ?? [item]).filter((s) => s.productId === item.productId && s.locationId === item.locationId && (s.state === 'frozen') === (item.state === 'frozen')) : [];
+  const packs = row.length || 1;
+  const total = row.some((s) => s.remainingGrams === null) ? null : row.reduce((n, s) => n + s.remainingGrams!, 0);
+  const one = item ? oneItem(item, total) : null;
+  const unit = item?.displayUnit === 'ml' ? 'ml' : one ? 'count' : 'g';
+  const quick = item ? quickAmounts(item, total, cupMl) : [];
+  const n = one ? Math.min(count, one.left) : 1;
+  const thisPack = item?.remainingGrams ?? null;
   const choose = (amount: UseAmountInput) => {
     if (!item) return;
-    onUse(item, amount);
+    onUse(item, amount, logIt ? { slot } : undefined);
     setExact('');
+    setCount(1);
     onClose();
   };
-  const exactGrams = () => {
-    const n = Number(exact);
-    if (!item || !Number.isFinite(n) || n <= 0) return null;
-    if (unit === 'ml') return n * (item.densityGPerMl ?? 1);
-    if (unit === 'count') return n * (item.gramsPerCount ?? 0);
-    return n;
+  const setLog = (on: boolean) => {
+    setLogIt(on);
+    try {
+      localStorage.setItem(LOG_KEY, on ? '1' : '0');
+    } catch {
+      // Remembering is a nicety.
+    }
   };
+  const exactGrams = () => {
+    const v = Number(exact);
+    if (!item || !Number.isFinite(v) || v <= 0) return null;
+    if (unit === 'ml') return v * (item.densityGPerMl ?? 1);
+    if (unit === 'count') return one ? v * one.grams : null;
+    return v;
+  };
+  // Whole items from the row: all of this pack when that's exactly it, else by weight (spilling into the next pack).
+  const itemsAmount = (k: number) => (thisPack !== null && Math.abs(k * one!.grams - thisPack) < 1 ? { kind: 'all' as const } : { kind: 'grams' as const, grams: k * one!.grams });
+  const words = (k: number) => `${k} ${one!.name}${k === 1 ? '' : 's'}`;
   return (
     <Sheet open={item !== null} onClose={onClose} title={item ? `Use ${item.productName}` : 'Use'}>
       {item && (
         <div className="flex flex-col gap-4">
           <p className="text-muted">
-            {item.locationName} · {amountLabel(item)}
+            {[
+              item.locationName,
+              packs > 1 ? `${packs} packs` : null,
+              total !== null ? itemsText(item, total) : null,
+              total !== null ? formatQuantity(total, item.displayUnit === 'ml' ? 'ml' : 'g', { densityGPerMl: item.densityGPerMl }) : amountLabel(item),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
-          <Button variant="dark" size="lg" onClick={() => choose({ kind: 'all' })}>
-            Used it all
-          </Button>
+          <div className="flex flex-col gap-2 rounded-lg bg-card-muted p-3">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">Log it as eaten</p>
+                <p className="text-sm text-muted">{logIt ? `Adds it to your ${SLOT_LABEL[slot].toLowerCase()} today, with its calories.` : "Just using it, say in cooking: it isn't logged."}</p>
+              </div>
+              <Toggle checked={logIt} onChange={setLog} label="Log it as eaten" />
+            </div>
+            {logIt && (
+              <div role="radiogroup" aria-label="Meal" className="flex self-start rounded-lg bg-card p-0.5">
+                {MEAL_SLOTS.map((x) => (
+                  <button
+                    key={x}
+                    type="button"
+                    role="radio"
+                    aria-checked={x === slot}
+                    onClick={() => setSlot(x)}
+                    className={`min-h-10 rounded-md px-2.5 text-sm font-medium lg:min-h-7 lg:px-2 ${x === slot ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted'}`}
+                  >
+                    {SLOT_LABEL[x]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {one ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Button aria-label={`One fewer ${one.name}`} className="min-w-11 lg:min-w-8" disabled={n <= 1} onClick={() => setCount(Math.max(1, n - 1))}>
+                  <Icon name="minus" className="size-4" />
+                </Button>
+                <Button variant="dark" size="lg" className="flex-1" onClick={() => choose(itemsAmount(n))}>
+                  Use {words(n)}
+                </Button>
+                <Button aria-label={`One more ${one.name}`} className="min-w-11 lg:min-w-8" disabled={n >= one.left} onClick={() => setCount(Math.min(one.left, n + 1))}>
+                  <Icon name="plus" className="size-4" />
+                </Button>
+              </div>
+              <Button size="lg" onClick={() => choose({ kind: 'all' })}>
+                {packs > 1 ? 'Used up this pack' : 'Used it all'}
+              </Button>
+            </div>
+          ) : (
+            <>
+              {quick.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium">Used</p>
+                  <div className="grid grid-cols-3 gap-2" role="group" aria-label="Quick amounts">
+                    {quick.map((x) => (
+                      <Button key={x.label} variant="outline" size="lg" className="px-2" aria-label={`Used ${x.label}`} onClick={() => choose({ kind: 'grams', grams: x.grams })}>
+                        {x.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <Button variant="dark" size="lg" onClick={() => choose({ kind: 'all' })}>
+                {packs > 1 ? 'Used up this pack' : 'Used it all'}
+              </Button>
+            </>
+          )}
           <div>
-            <p className="mb-2 text-sm font-medium">Used some of what's left</p>
+            <p className="mb-2 text-sm font-medium">{packs > 1 ? 'Used some of this pack' : "Used some of what's left"}</p>
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
@@ -336,7 +468,7 @@ function UseSheet({ item, onClose, onUse }: { item: StockItemDto | null; onClose
               }}
             >
               <div className="flex-1">
-                <Field label={`Exact amount (${unit === 'count' ? 'items' : unit})`}>
+                <Field label={`Exact amount (${unit === 'count' ? `${one!.name}s` : unit})${packs > 1 ? ', from any pack' : ''}`}>
                   {(id) => <TextInput id={id} inputMode="decimal" value={exact} onChange={(e) => setExact(e.target.value)} placeholder="Optional" />}
                 </Field>
               </div>

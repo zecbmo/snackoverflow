@@ -117,3 +117,77 @@ test('find food anywhere, star it, name a new barcode and save a meal', async ({
   await page.getByRole('dialog', { name: 'Log a meal' }).getByRole('button', { name: 'Log only, ate it elsewhere' }).click();
   await expect(page.getByRole('status').filter({ hasText: `Logged ${samosa} combo to` })).toBeVisible();
 });
+
+/** From the stock table: use one apple from a bag, and log it as eaten in the same step. */
+test('use one from stock and log it as eaten', async ({ page }, info) => {
+  const phone = info.project.name === 'phone';
+  const apples = phone ? 'Braeburn Apples' : 'Gala Apples';
+  await signIn(page);
+  await page.goto('/scan');
+  await typeBarcode(page, phone ? '5000000000159' : '5000000000166');
+  await expect(page.getByRole('status').filter({ hasText: apples })).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Finish' }).click();
+  await expect(page).toHaveURL(/\/stock$/);
+
+  await page.getByRole('button', { name: `Use ${apples}`, exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: `Use ${apples}` });
+  // Counted food: one at a time by default.
+  await expect(sheet.getByRole('button', { name: 'Use 1 apple' })).toBeVisible();
+  const log = sheet.getByRole('switch', { name: 'Log it as eaten' });
+  if ((await log.getAttribute('aria-checked')) !== 'true') await log.click();
+  await sheet.getByRole('radio', { name: 'Snack' }).click();
+  await sheet.getByRole('button', { name: 'Use 1 apple' }).click();
+  await expect(page.getByRole('status').filter({ hasText: `Used some ${apples} and logged it to your snack.` })).toBeVisible();
+
+  // Five left, and it's in today's diary.
+  await expect(page.getByRole('button', { name: new RegExp(`^${apples}, `) }).locator('xpath=ancestor::*[self::tr or self::li][1]')).toContainText('5 apples');
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: /food diary/ }).getByRole('region', { name: 'Snack' })).toContainText(apples);
+});
+
+/** Food measured by weight: grams (never thighs), quick amounts, and using more than the open pack has. */
+test('use chicken thighs by weight across two packs', async ({ page }, info) => {
+  const phone = info.project.name === 'phone';
+  const chicken = phone ? 'Free Range Chicken Thighs' : 'Corn Fed Chicken Thighs';
+  const code = phone ? '5000000000173' : '5000000000180';
+  await signIn(page);
+  await page.goto('/scan');
+  await typeBarcode(page, code);
+  await expect(page.getByLabel('1 scanned')).toBeVisible();
+  // The scanner ignores the same barcode twice within two seconds (no double beeps).
+  await page.waitForTimeout(2100);
+  await typeBarcode(page, code);
+  await expect(page.getByLabel('2 scanned')).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Finish' }).click();
+  const row = page.getByRole('button', { name: new RegExp(`^${chicken}, `) }).locator('xpath=ancestor::*[self::tr or self::li][1]');
+  await expect(row).toContainText('2kg');
+
+  // The open pack: 300g left after using 700g.
+  await page.getByRole('button', { name: `Use ${chicken}`, exact: true }).click();
+  let sheet = page.getByRole('dialog', { name: `Use ${chicken}` });
+  await expect(sheet).toContainText('2 packs · 2kg');
+  await expect(sheet.getByRole('button', { name: /^Use \d+ thigh/ })).toHaveCount(0);
+  await expect(sheet.getByRole('group', { name: 'Quick amounts' })).toContainText('500g');
+  const log = sheet.getByRole('switch', { name: 'Log it as eaten' });
+  if ((await log.getAttribute('aria-checked')) === 'true') await log.click();
+  await sheet.getByLabel(/^Exact amount \(g\)/).fill('700');
+  await sheet.getByRole('button', { name: 'Use', exact: true }).click();
+  // Part of a closed pack: it asks whether it's opened now.
+  await page.getByRole('dialog', { name: 'Is it opened now?' }).getByRole('button', { name: "Yes, it's open" }).click();
+  await expect(row).toContainText('~1.3kg');
+
+  // 500g is more than the open pack has: the rest comes from the next pack.
+  await page.getByRole('button', { name: `Use ${chicken}`, exact: true }).click();
+  sheet = page.getByRole('dialog', { name: `Use ${chicken}` });
+  await sheet.getByRole('button', { name: 'Used 500g' }).click();
+  await page.getByRole('dialog', { name: 'Is it opened now?' }).getByRole('button', { name: "Yes, it's open" }).click();
+  await expect(row).toContainText('~800g');
+  await expect(row).toContainText(phone ? '1 pack' : '1');
+  // One Undo puts both packs back, and the second pack is closed again.
+  await page.getByRole('status').filter({ hasText: `Used some ${chicken}` }).last().getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Undone.' })).toBeVisible();
+  await expect(row).toContainText('~1.3kg');
+  await expect(row).toContainText('2');
+});
