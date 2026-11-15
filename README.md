@@ -30,9 +30,9 @@ Refinements from real use. The full design is in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Try it on Windows (one click)
 
-With Docker Desktop installed, double-click **`start-test-env.bat`**. It builds and starts a separate test copy on <http://localhost:3080>, opens your browser and shows the admin login (stored in the git-ignored `.env.test`). **`stop-test-env.bat`** stops it and keeps the data; `scripts	est-env.ps1 reset` wipes it, and `scripts	est-env.ps1 logs` follows the logs. Phones on the same Wi-Fi can open the address it prints, but they only allow the camera over HTTPS, so type barcodes there.
+With Docker Desktop installed, double-click **`start-test-env.bat`**. It builds and starts a separate test copy on <http://localhost:3080>, opens your browser and shows the admin login (stored in the git-ignored `.env.test`). **`stop-test-env.bat`** stops it and keeps the data; `scripts\test-env.ps1 reset` wipes it, and `scripts\test-env.ps1 logs` follows the logs. Phones on the same Wi-Fi can open the address it prints, but they only allow the camera over HTTPS, so type barcodes there.
 
-To see it with a full house of made-up data (three people, stock going off, recipes, two weeks of meals, a plan, a shopping list and receipts), run `node --env-file=.env.test scripts/demo-data.mjs` once the test copy is up.
+The test copy runs with `TEST_MODE=true`, so **Settings → General → Reset test data** puts it back to a full house of made-up data whenever you like (three people, stock going off, recipes, two weeks of meals eaten, a plan for the week, a takeaway, a favourite and a saved breakfast, a shopping list and receipts). It deletes the food data and keeps people, locations and settings. `node --env-file=.env.test scripts/demo-data.mjs` does the same from the command line. A test copy made before this needs `TEST_MODE=true` added to its `.env.test`.
 
 ## Android app
 

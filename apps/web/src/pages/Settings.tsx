@@ -5,7 +5,7 @@ import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
 import { PageTop, Segmented } from '../components/Toolbar';
-import { Button, Card, ErrorNote, Field, Select, Spinner, TextInput, Toggle } from '../components/ui';
+import { Button, Card, ErrorNote, Field, Select, Sheet, Spinner, TextInput, Toggle } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { keys, useShelfLife } from '../lib/queries';
 import { PALETTES, type PaletteId } from '../lib/palettes';
@@ -25,6 +25,7 @@ export function SettingsPage() {
           <SuggestionsCard />
           {isAdmin && me.features.backups && <BackupsCard />}
           {me.features.offDump && <OffCopyCard canRefresh={isAdmin} />}
+          {isAdmin && me.features.testMode && <TestDataCard />}
           <AssistantsCard />
           {isAdmin && (
             <Card className="p-4" id="data">
@@ -429,6 +430,58 @@ function BackupsCard() {
           ))}
         </ul>
       )}
+    </Card>
+  );
+}
+
+/** A test copy (TEST_MODE): put the food data back to the made-up demo household. */
+function TestDataCard() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const reset = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post<{ steps: string[] }>('/api/test-data/reset');
+      // Everything has changed: fetch it all again.
+      await qc.invalidateQueries();
+      setAsking(false);
+      toast.show(`Test data reset. ${r.steps.length} steps: ${r.steps[0]}…`);
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="border-accent/50 p-4" id="test-data">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-bold">Test data</h2>
+          <p className="text-sm text-muted">This is a test copy (TEST_MODE). Put it back to the made-up demo household whenever you like.</p>
+        </div>
+        <Button variant="danger" onClick={() => setAsking(true)}>
+          Reset test data
+        </Button>
+      </div>
+      <Sheet open={asking} onClose={() => !busy && setAsking(false)} title="Reset test data?">
+        <div className="flex flex-col gap-3">
+          <p>
+            This deletes all the food data: meals eaten and planned, stock and its history, recipes, products, prices, receipts, the shopping list, favourites and saved meals.
+            Then it fills the household with made-up data: two weeks of meals, stock (some going off), a dozen recipes, a plan for the week ahead, a shopping list and receipts.
+          </p>
+          <p className="text-sm text-muted">People, locations, shelf life, ingredients and settings stay. Sam and Jo (made up) sign in with "demo password 123".</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button onClick={() => setAsking(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void reset()} disabled={busy}>
+              {busy ? 'Resetting… (a few seconds)' : 'Delete and reset'}
+            </Button>
+          </div>
+        </div>
+      </Sheet>
     </Card>
   );
 }

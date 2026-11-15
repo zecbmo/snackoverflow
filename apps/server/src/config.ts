@@ -78,6 +78,11 @@ const envSchema = z.object({
   SEED_DATA_DIR: optional,
   WEB_DIST_DIR: optional,
   SCHEDULER_ENABLED: bool(true),
+  /**
+   * A test copy, not a real household: Settings gets "Reset test data", which deletes the
+   * household's food data and fills it with made-up demo data. Never set it on a real install.
+   */
+  TEST_MODE: bool(false),
   /** Starting value of the household's pricing switch (changeable in Settings). */
   PRICING_ENABLED: bool(false),
   OPEN_PRICES_BASE_URL: z.string().default('https://prices.openfoodfacts.org'),

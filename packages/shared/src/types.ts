@@ -37,6 +37,8 @@ export interface FeaturesDto {
   offContribute: boolean;
   /** A local copy of Open Food Facts is kept for search as you type (OFF_DUMP_ENABLED). */
   offDump: boolean;
+  /** A test copy (TEST_MODE): admins can reset the food data to made-up demo data. */
+  testMode: boolean;
 }
 
 /** Settings → the local copy of Open Food Facts. */

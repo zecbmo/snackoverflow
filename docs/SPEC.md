@@ -316,6 +316,10 @@ flowchart LR
 
 Configuration and secrets come from environment variables (`.env`, never committed); an `.env.example` documents them.
 
+## Test copies
+
+`TEST_MODE=true` marks an install as a test copy (the local test environment sets it). Admins then get **Reset test data** in Settings → General: after a confirmation, it deletes the household's food data (meals eaten and planned, stock and its history, cooks, recipes, products and barcodes, prices, receipts, the shopping list, favourites, saved meals and inbox messages) and fills it with made-up demo data through the app's own API, so it all follows the usual rules. People, locations, shelf life, ingredients, swap groups and settings stay; two made-up people (Sam and Jo) are added the first time. Without `TEST_MODE` the endpoint refuses, so a real household can't be wiped. `scripts/demo-data.mjs` does the same from the command line.
+
 ## Build phases
 
 Each phase ends with a working, deployable app.

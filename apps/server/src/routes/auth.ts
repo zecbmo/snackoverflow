@@ -28,6 +28,7 @@ export function features(ctx: AppContext): SessionDto['features'] {
     mcp: Boolean(c.MCP_TOKEN),
     offContribute: offContributeEnabled(c),
     offDump: c.OFF_DUMP_ENABLED,
+    testMode: c.TEST_MODE,
   };
 }
 

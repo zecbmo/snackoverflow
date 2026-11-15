@@ -83,7 +83,9 @@ function New-TestEnvFile {
         "VAPID_PUBLIC_KEY=$vapidPublic",
         "VAPID_PRIVATE_KEY=$vapidPrivate",
         'VAPID_SUBJECT=mailto:admin@example.com',
-        'BACKUP_KEEP_DAYS=3'
+        'BACKUP_KEEP_DAYS=3',
+        '# A test copy: Settings has "Reset test data" (made-up demo data).',
+        'TEST_MODE=true'
     )
     Set-Content -Path $EnvFile -Value $lines -Encoding ascii
 }
