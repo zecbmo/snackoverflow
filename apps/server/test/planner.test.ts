@@ -418,10 +418,50 @@ describe('review 2: cooking', () => {
     return { pie, res: await api.raw('POST', `/api/recipes/${pie.id}/cook`, { servings: 2, lines, ...body }) };
   };
 
-  it("doesn't ask whether potatoes are opened (their date doesn't change)", async () => {
+  it('logs the meal for the people eating now, and shows a kept serving as kept, not free', async () => {
+    const sam = await invite('Sam');
+    const samId = (await sam.get<SessionDto>('/api/session')).user.id;
+    const pie = await fishPie();
+    await api.post<ScanAddResult>('/api/scan/add', { barcode: '3002' });
+    // Three servings for two people: one is spare.
+    const entry = await api.post<PlanEntryDto>('/api/plan', {
+      date: '2026-11-12',
+      slot: 'dinner',
+      kind: 'recipe',
+      recipeId: pie.id,
+      servings: 3,
+      people: [
+        { userId: me.user.id, portions: 1 },
+        { userId: samId, portions: 1 },
+      ],
+    });
+    const plan = await api.get<CookPlanDto>(`/api/recipes/${pie.id}/cook-plan?servings=3`);
+    const cooked = await api.post<CookResultDto>(`/api/recipes/${pie.id}/cook`, {
+      servings: 3,
+      mealPlanEntryId: entry.id,
+      // Sam's having theirs later.
+      eaters: [me.user.id],
+      lines: [{ takes: plan.lines[0]!.takes.map((tk) => ({ stockItemId: tk.stockItemId, grams: tk.grams! })) }],
+      leftovers: [{ locationId: loc.fridge.id, portions: 1 }],
+    });
+    const after = await api.get<PlanEntryDto>(`/api/plan/${entry.id}`);
+    expect(after).toMatchObject({ status: 'cooked', keptServings: 1 });
+    expect(after.people.map((p) => [p.name, p.eaten])).toEqual([
+      ['Alex', true],
+      ['Sam', false],
+    ]);
+    // The kept serving is in the fridge, so nobody can take it as a free portion.
+    const jo = await invite('Jo');
+    expect((await jo.raw('POST', `/api/plan/${entry.id}/eat`, {})).statusCode).toBe(400);
+    // Undoing the cook un-keeps it.
+    await api.post(`/api/cooks/${cooked.cookId}/undo`);
+    expect(await api.get<PlanEntryDto>(`/api/plan/${entry.id}`)).toMatchObject({ status: 'planned', keptServings: 0 });
+  });
+
+  it("doesn't mark potatoes as opened (their date doesn't change)", async () => {
     const { res } = await cookPie({});
     expect(res.statusCode).toBe(200);
-    expect((res.json() as CookResultDto).askOpened).toEqual([]);
+    expect((res.json() as CookResultDto).opened).toEqual([]);
   });
 
   it('keeps half portions, never more than was cooked', async () => {

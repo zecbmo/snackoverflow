@@ -7,6 +7,7 @@
 import { and, desc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
 import {
   amountText,
+  itemOf,
   type BarcodeFoodDto,
   type CalendarDate,
   type FoodResultDto,
@@ -30,7 +31,7 @@ import { barcodes, chainMenuItems, chains, foodFavourites, ingredients, mealPlan
 import { badRequest, notFound } from '../http';
 import { packFields, type ProductRow } from './catalog';
 import { searchChainItems } from './chains';
-import { createEntryWithStock, getEntry, ingredientServing, productKcal, productNutrition } from './planner';
+import { createEntryWithStock, getEntry, ingredientServing, productKcal, productNutrition, productServingGrams } from './planner';
 import { listRecipes } from './recipes';
 import { resolveBarcode } from './scan';
 import { listStock, type StockDeps } from './stock';
@@ -54,7 +55,8 @@ function byRank<T>(rows: T[], name: (r: T) => string, q: string, limit: number):
 function productServing(p: ProductRow, measures: Pick<StockItemDto, 'displayUnit' | 'densityGPerMl' | 'gramsPerCount' | 'countUnit'> | null): string {
   if (p.portionGrams) return `1 item (${amountText(p.portionGrams, measures)})`;
   if (p.packGrams) return `1 pack (${amountText(p.packGrams, measures)})`;
-  return '1 pack';
+  // No pack size (some Open Food Facts entries): by the 100g, when the nutrition is known.
+  return productServingGrams(p) ? '100g' : '1 pack';
 }
 
 /** What's in the house, by product and by generic food, for "in stock" and "In your kitchen". */
@@ -99,17 +101,34 @@ function personalise(r: FoodResultDto, me: Personal | null): FoodResultDto {
 
 const blank = { favourite: false, usualServings: null } as const;
 
+/**
+ * How food in the kitchen is eaten when that isn't a pack at a time: by the item or the slice
+ * (bananas, a loaf), else by weight from 100g (chicken, rice). Snacks and multipacks keep their pack or item.
+ */
+function eatBy(p: ProductRow, first: StockItemDto | undefined): FoodResultDto['eatBy'] {
+  if (!first || !p.ingredientId || !p.packGrams || p.portionGrams || p.recipeId) return null;
+  const per100 = p.nutritionPer100g?.kcal;
+  const kcal = (grams: number) => (per100 == null ? null : Math.round((per100 * grams) / 100));
+  const one = itemOf(first);
+  if (one) return { grams: one.grams, unit: one.name, label: `1 ${one.name} (${Math.round(one.grams)}g)`, kcal: kcal(one.grams) };
+  const ml = first.displayUnit === 'ml';
+  const grams = ml ? 100 * (first.densityGPerMl ?? 1) : 100;
+  return { grams, unit: null, label: ml ? '100ml' : '100g', kcal: kcal(grams) };
+}
+
 export function productResult(p: ProductRow, kitchen: Kitchen | null): FoodResultDto {
   const packs = kitchen?.byProduct.get(p.id) ?? [];
   const first = packs[0];
   return {
+    eatBy: eatBy(p, first),
+    ingredientId: p.ingredientId,
     source: first ? 'stock' : 'product',
     id: p.id,
     title: p.name ?? 'Unnamed product',
     subtitle: first ? `${first.locationName} · ${packs.length} ${packs.length === 1 ? 'pack' : 'packs'}` : p.brand,
     kcalPerServing: productKcal(p),
     servingLabel: productServing(p, first ?? null),
-    unitGrams: p.portionGrams ?? p.packGrams ?? null,
+    unitGrams: productServingGrams(p),
     displayUnit: p.displayUnit,
     countUnit: null,
     inStock: first ? { packs: packs.length, locationName: first.locationName } : null,
@@ -120,6 +139,8 @@ export function productResult(p: ProductRow, kitchen: Kitchen | null): FoodResul
 
 function leftoverResult(s: StockItemDto, p: ProductRow | undefined): FoodResultDto {
   return {
+    eatBy: null,
+    ingredientId: null,
     source: 'leftovers',
     id: s.id,
     title: `Leftover ${s.productName.charAt(0).toLowerCase()}${s.productName.slice(1)}`,
@@ -139,6 +160,8 @@ function ingredientResult(i: IngredientRow, kitchen: Kitchen | null): FoodResult
   const serving = ingredientServing(i);
   const packs = kitchen?.byIngredient.get(i.id) ?? [];
   return {
+    eatBy: null,
+    ingredientId: i.id,
     source: 'ingredient',
     id: i.id,
     title: i.name,
@@ -156,6 +179,8 @@ function ingredientResult(i: IngredientRow, kitchen: Kitchen | null): FoodResult
 
 function recipeResult(r: RecipeSummaryDto): FoodResultDto {
   return {
+    eatBy: null,
+    ingredientId: null,
     source: 'recipe',
     id: r.id,
     title: r.title,
@@ -173,6 +198,8 @@ function recipeResult(r: RecipeSummaryDto): FoodResultDto {
 
 function chainResult(c: ChainItem): FoodResultDto {
   return {
+    eatBy: null,
+    ingredientId: null,
     source: 'chain',
     id: c.id,
     title: c.name,
@@ -190,6 +217,8 @@ function chainResult(c: ChainItem): FoodResultDto {
 
 function quickResult(text: string, kcal: number | null): FoodResultDto {
   return {
+    eatBy: null,
+    ingredientId: null,
     source: 'quick',
     id: '',
     title: text,
@@ -326,6 +355,27 @@ async function personal(db: Db, auth: Auth, now: Date, slot?: MealSlot): Promise
   };
 }
 
+/**
+ * Products picked from Open Food Facts that were never logged, put in stock or starred. Picking
+ * one makes it a product (so it can be logged), but until it's used it's still just a search
+ * result: it stays under Open Food Facts and out of Foods.
+ */
+async function unusedOffProducts(db: Db, auth: Auth): Promise<Set<string>> {
+  const rows = await db
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.householdId, auth.household.id), eq(products.source, 'off')));
+  const ids = rows.map((r) => r.id);
+  if (!ids.length) return new Set();
+  const [stocked, logged, starred] = await Promise.all([
+    db.selectDistinct({ id: stockItems.productId }).from(stockItems).where(inArray(stockItems.productId, ids)),
+    db.selectDistinct({ id: mealPlanEntries.productId }).from(mealPlanEntries).where(inArray(mealPlanEntries.productId, ids)),
+    db.select({ id: foodFavourites.refId }).from(foodFavourites).where(and(eq(foodFavourites.kind, 'product'), inArray(foodFavourites.refId, ids))),
+  ]);
+  const used = new Set([...stocked, ...logged, ...starred].map((r) => r.id));
+  return new Set(ids.filter((id) => !used.has(id)));
+}
+
 // --- Search --------------------------------------------------------------------------------
 
 export async function searchFoods(ctx: AppContext, auth: Auth, q: string): Promise<FoodResultDto[]> {
@@ -363,11 +413,13 @@ export async function searchFoods(ctx: AppContext, auth: Auth, q: string): Promi
       out.push(recipeResult(r));
     }
     // Food you've bought before but haven't got now (cooked meals are leftovers, above).
-    const others = productRows.filter((p) => !kitchen.byProduct.has(p.id) && p.recipeId === null && matchesSearch(`${p.name} ${p.brand ?? ''}`, query));
+    const unused = await unusedOffProducts(db, auth);
+    const others = productRows.filter((p) => !kitchen.byProduct.has(p.id) && p.recipeId === null && !unused.has(p.id) && matchesSearch(`${p.name} ${p.brand ?? ''}`, query));
     for (const p of byRank(others, (x) => x.name ?? '', query, LIMITS.products)) out.push(productResult(p, kitchen));
-    // Generic foods ("banana", "rice"). If there's some in the house, logging can take from it.
+    // Generic foods ("banana", "rice"), unless the kitchen row above is the same food already.
+    const inKitchen = new Set(out.filter((r) => r.source === 'stock' && r.eatBy).map((r) => r.ingredientId));
     for (const i of byRank(
-      ingredientRows.filter((x) => matchesSearch(x.name, query)),
+      ingredientRows.filter((x) => !inKitchen.has(x.id) && matchesSearch(x.name, query)),
       (x) => x.name,
       query,
       LIMITS.ingredients,
@@ -516,12 +568,16 @@ export async function searchOff(ctx: AppContext, auth: Auth, q: string): Promise
   return { status: 'ok', results };
 }
 
-/** Open Food Facts products as results: per pack when its weight is known, else per 100g. Barcodes you have are left out. */
+/** Open Food Facts products as results: per pack when its weight is known, else per 100g. Ones you've logged, stocked or starred are left out (they're your Foods). */
 async function offResults(ctx: AppContext, auth: Auth, products: OffProduct[]): Promise<FoodResultDto[]> {
   const codes = products.map((p) => p.barcode);
+  // Ones you've only looked at (picked, never logged) still belong here.
+  const unused = await unusedOffProducts(ctx.db, auth);
   const known = new Set(
     codes.length
-      ? (await ctx.db.select({ code: barcodes.code }).from(barcodes).where(and(eq(barcodes.householdId, auth.household.id), inArray(barcodes.code, codes)))).map((b) => b.code)
+      ? (await ctx.db.select({ code: barcodes.code, productId: barcodes.productId }).from(barcodes).where(and(eq(barcodes.householdId, auth.household.id), inArray(barcodes.code, codes))))
+          .filter((b) => !unused.has(b.productId))
+          .map((b) => b.code)
       : [],
   );
   const results: FoodResultDto[] = [];
@@ -532,6 +588,8 @@ async function offResults(ctx: AppContext, auth: Auth, products: OffProduct[]): 
     const grams = pack.packGrams ?? 100;
     const per100 = p.nutritionPer100g?.kcal;
     results.push({
+      eatBy: null,
+      ingredientId: null,
       source: 'off',
       id: p.barcode,
       title: p.name,

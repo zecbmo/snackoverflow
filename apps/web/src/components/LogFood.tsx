@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
+  amountText,
   type BarcodeFoodDto,
   type CalendarDate,
   type FoodResultDto,
@@ -17,6 +18,7 @@ import {
   MEAL_SLOTS,
   type MealSlot,
   type OffSearchDto,
+  type PlanEatDto,
   type PlanEntryDto,
   type SavedMealDto,
   slotForTime,
@@ -46,11 +48,11 @@ interface LogFood {
   /** Open the "+" chooser: Log food, Scan shopping, Add by hand, Plan a meal. */
   openChooser(): void;
   /**
-   * Tick someone's portion of a meal as eaten (anyone can tick for anyone). When the meal's food
-   * comes from stock, asks whether to take it first. Toast with Undo.
+   * Tick someone's portion of a meal as eaten (anyone can tick for anyone). Food that's in stock
+   * comes out of it (the line remembers, so it's never taken twice); the toast says so, with Undo.
    */
   tickEaten(entry: PlanEntryDto, userId: string): Promise<void>;
-  /** Untick: they haven't eaten it after all. */
+  /** Untick: they haven't eaten it after all. Anything it took goes back into stock. */
   untickEaten(entry: PlanEntryDto, userId: string): Promise<void>;
 }
 
@@ -74,7 +76,6 @@ export function currentSlot(): MealSlot {
 export function LogFoodProvider({ children }: { children: ReactNode }) {
   const [log, setLog] = useState<Required<LogOptions> | null>(null);
   const [choosing, setChoosing] = useState(false);
-  const [asking, setAsking] = useState<{ title: string; resolve: (answer: boolean | null) => void } | null>(null);
   const me = useMe();
   const qc = useQueryClient();
   const toast = useToast();
@@ -87,22 +88,17 @@ export function LogFoodProvider({ children }: { children: ReactNode }) {
   );
   const tickEaten = useCallback(
     async (entry: PlanEntryDto, userId: string) => {
-      let fromStock = false;
-      if (stockable(entry)) {
-        const answer = await new Promise<boolean | null>((resolve) => setAsking({ title: entry.title, resolve }));
-        setAsking(null);
-        if (answer === null) return;
-        fromStock = answer;
-      }
       try {
-        const r = await api.post<{ entry: PlanEntryDto; stockEventIds: string[] }>(`/api/plan/${entry.id}/eat`, { fromStock, people: [userId] });
+        const r = await api.post<PlanEatDto>(`/api/plan/${entry.id}/eat`, { people: [userId] });
         await refresh();
-        toast.show(`${nameOf(userId)} had ${userId === me.user.id ? 'the' : 'their'} ${entry.title.toLowerCase()}.`, {
+        const took = r.entry.stockGrams - entry.stockGrams;
+        const stock = took > 0.5 ? ` ${amountText(took, { displayUnit: entry.displayUnit === 'ml' ? 'ml' : 'g' })} taken from stock.` : '';
+        toast.show(`${nameOf(userId)} had ${userId === me.user.id ? 'the' : 'their'} ${entry.title.toLowerCase()}.${stock}`, {
           action: {
             label: 'Undo',
             onClick: async () => {
               try {
-                for (const e of [...r.stockEventIds].reverse()) await api.post(`/api/events/${e}/undo`);
+                // Unticking puts back anything it took.
                 await api.post(`/api/plan/${entry.id}/uneat`, { people: [userId] });
               } catch (e) {
                 toast.show(errorMessage(e), { tone: 'error' });
@@ -120,9 +116,23 @@ export function LogFoodProvider({ children }: { children: ReactNode }) {
   const untickEaten = useCallback(
     async (entry: PlanEntryDto, userId: string) => {
       try {
-        await api.post(`/api/plan/${entry.id}/uneat`, { people: [userId] });
+        const r = await api.post<PlanEntryDto>(`/api/plan/${entry.id}/uneat`, { people: [userId] });
         await refresh();
-        toast.show(`${entry.title}: not eaten yet.`);
+        const back = entry.stockGrams - r.stockGrams;
+        const stock = back > 0.5 ? ` ${amountText(back, { displayUnit: entry.displayUnit === 'ml' ? 'ml' : 'g' })} put back in stock.` : '';
+        toast.show(`${entry.title}: not eaten yet.${stock}`, {
+          action: {
+            label: 'Undo',
+            onClick: async () => {
+              try {
+                await api.post(`/api/plan/${entry.id}/eat`, { people: [userId] });
+              } catch (e) {
+                toast.show(errorMessage(e), { tone: 'error' });
+              }
+              await refresh();
+            },
+          },
+        });
       } catch (e) {
         toast.show(errorMessage(e), { tone: 'error' });
       }
@@ -134,19 +144,6 @@ export function LogFoodProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={value}>
       {children}
       <Chooser open={choosing} onClose={() => setChoosing(false)} onLog={() => openLog()} />
-      <Sheet open={asking !== null} onClose={() => asking?.resolve(null)} title="Take it from stock?">
-        {asking && (
-          <div className="flex flex-col gap-3">
-            <p className="text-muted">If the {asking.title.toLowerCase()} came from your kitchen, we'll take it out of stock.</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button variant="primary" onClick={() => asking.resolve(true)}>
-                Yes, take it
-              </Button>
-              <Button onClick={() => asking.resolve(false)}>No, ate it elsewhere</Button>
-            </div>
-          </div>
-        )}
-      </Sheet>
       {log && <LogFoodSheet key={`${log.date}-${log.slot}`} initial={log} onClose={() => setLog(null)} />}
     </Ctx.Provider>
   );
@@ -541,8 +538,8 @@ function ResultRow({ food, onClick, busy = false }: { food: FoodResultDto; onCli
           {food.subtitle && <span className="block truncate text-sm text-muted lg:text-xs">{food.subtitle}</span>}
         </span>
         <span className="shrink-0 text-right text-sm tabular-nums">
-          <span className="block font-semibold">{food.kcalPerServing === null ? '–' : `${food.kcalPerServing} kcal`}</span>
-          <span className="block max-w-[9rem] truncate text-xs text-muted">{food.servingLabel}</span>
+          <span className="block font-semibold">{(food.eatBy ? food.eatBy.kcal : food.kcalPerServing) === null ? '–' : `${food.eatBy ? food.eatBy.kcal : food.kcalPerServing} kcal`}</span>
+          <span className="block max-w-[9rem] truncate text-xs text-muted">{food.eatBy?.label ?? food.servingLabel}</span>
         </span>
       </button>
     </li>
@@ -701,9 +698,13 @@ function AmountStep({ picked, date, slot, onBack, onLogged }: { picked: Picked; 
   const members = useUsers().data ?? [];
   const food = picked.kind === 'food' ? picked.food : null;
   const entry = picked.kind === 'planned' ? picked.entry : null;
-  const [servings, setServings] = useState(food?.usualServings ?? 1);
-  const [byWeight, setByWeight] = useState(false);
-  const [grams, setGrams] = useState('');
+  // Food from the kitchen starts at what you'd eat (a banana, a slice, 100g), not a whole pack.
+  const eatBy = food?.eatBy && food.unitGrams ? food.eatBy : null;
+  // Servings in one step of the − / + counter: one item or slice when the food has them, else one serving.
+  const per = eatBy?.unit ? eatBy.grams / food!.unitGrams! : 1;
+  const [servings, setServings] = useState(() => (food?.usualServings ? Math.max(0.5, Math.round((food.usualServings / per) * 2) / 2) : 1));
+  const [byWeight, setByWeight] = useState(Boolean(eatBy && !eatBy.unit));
+  const [grams, setGrams] = useState(() => (eatBy && !eatBy.unit ? show(food!.usualServings ? Math.round(food!.usualServings * food!.unitGrams!) : eatBy.grams) : ''));
   const [who, setWho] = useState<string[]>([me.user.id]);
   const [name, setName] = useState('');
   const [kcalText, setKcalText] = useState('');
@@ -715,16 +716,16 @@ function AmountStep({ picked, date, slot, onBack, onLogged }: { picked: Picked; 
   const unitGrams = food?.unitGrams ?? null;
   const weightUnit = food?.displayUnit === 'ml' ? 'ml' : 'g';
   const gramsNum = Number(grams);
-  const amount = byWeight && unitGrams ? (gramsNum > 0 ? gramsNum / unitGrams : 0) : servings;
+  const amount = byWeight && unitGrams ? (gramsNum > 0 ? gramsNum / unitGrams : 0) : servings * per;
   const quickKcal = Number(kcalText);
   const total = picked.kind === 'quick' ? (kcalText && quickKcal >= 0 ? Math.round(quickKcal) : null) : kcalPer === null ? null : Math.round(kcalPer * amount);
   const macros = macroLine(food?.nutritionPerServing ?? entry?.nutritionPerServing ?? null, entry ? (entry.people.find((p) => p.userId === me.user.id)?.portions ?? 1) : amount);
   // In stock: the final step asks whether to take it. A planned meal asks if its food can come from stock.
-  const stockQuestion = food ? food.inStock : entry && stockable(entry) ? { packs: 0, locationName: '' } : null;
+  const stockQuestion = food ? food.inStock : entry && stockable(entry) && entry.fromStock === null ? { packs: 0, locationName: '' } : null;
   // Halves for recipes and leftovers (and below one of anything), whole items otherwise.
   const step = food?.source === 'recipe' || food?.source === 'leftovers' ? 0.5 : 1;
   // "1 pack (125g)", "1 banana (120g)", "1 burger": count in that, else servings.
-  const unitWord = `${food?.servingLabel.match(/^1 ([a-z]+)/i)?.[1]?.toLowerCase() ?? 'serving'}s`;
+  const unitWord = `${eatBy?.unit ?? food?.servingLabel.match(/^1 ([a-z]+)/i)?.[1]?.toLowerCase() ?? 'serving'}s`;
   const canLog = picked.kind === 'quick' ? kcalText.trim() !== '' && quickKcal >= 0 : amount > 0 && who.length > 0;
   const favKind = food ? FAVOURITE_KIND[food.source] : undefined;
 
@@ -753,13 +754,15 @@ function AmountStep({ picked, date, slot, onBack, onLogged }: { picked: Picked; 
           people: who.map((userId) => ({ userId, portions: each })),
           eaten: true,
           fromStock,
+          // More of something you've already logged at this meal goes on the same line.
+          merge: who.length === 1,
         };
     try {
       let created: PlanEntryDto | null = null;
-      let ticked: { id: string; events: string[] } | null = null;
+      let ticked: string | null = null;
       if (entry) {
-        const r = await api.post<{ entry: PlanEntryDto; stockEventIds: string[] }>(`/api/plan/${entry.id}/eat`, { fromStock, people: [me.user.id] });
-        ticked = { id: entry.id, events: r.stockEventIds };
+        await api.post<PlanEatDto>(`/api/plan/${entry.id}/eat`, { ...(stockQuestion ? { fromStock } : {}), people: [me.user.id] });
+        ticked = entry.id;
       } else {
         created = await api.post<PlanEntryDto>('/api/plan', body);
       }
@@ -771,11 +774,10 @@ function AmountStep({ picked, date, slot, onBack, onLogged }: { picked: Picked; 
           label: 'Undo',
           onClick: async () => {
             try {
-              if (created) await api.del(`/api/plan/${created.id}?restoreStock=1`);
-              if (ticked) {
-                for (const e of [...ticked.events].reverse()) await api.post(`/api/events/${e}/undo`);
-                await api.post(`/api/plan/${ticked.id}/uneat`, { people: [me.user.id] });
-              }
+              // Added to a line that was there already: back to what it was. Else the line goes (and its food goes back).
+              if (created?.mergedFrom !== undefined) await api.patch(`/api/plan/${created.id}`, { servings: created.mergedFrom });
+              else if (created) await api.del(`/api/plan/${created.id}`);
+              if (ticked) await api.post(`/api/plan/${ticked}/uneat`, { people: [me.user.id] });
             } catch (e) {
               toast.show(errorMessage(e), { tone: 'error' });
             }
@@ -824,7 +826,7 @@ function AmountStep({ picked, date, slot, onBack, onLogged }: { picked: Picked; 
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <p className="font-semibold">{title}</p>
-              <p className="text-sm text-muted">{[food?.subtitle ?? entry?.detail, food ? `${food.servingLabel}${kcalPer !== null ? `: ${kcalPer} kcal` : ''}` : null].filter(Boolean).join(' · ')}</p>
+              <p className="text-sm text-muted">{[food?.subtitle ?? entry?.detail, food ? (eatBy ? `${eatBy.label}${eatBy.kcal !== null ? `: ${eatBy.kcal} kcal` : ''}` : `${food.servingLabel}${kcalPer !== null ? `: ${kcalPer} kcal` : ''}`) : null].filter(Boolean).join(' · ')}</p>
             </div>
             {favKind && (
               <button
@@ -868,11 +870,11 @@ function AmountStep({ picked, date, slot, onBack, onLogged }: { picked: Picked; 
                   type="button"
                   onClick={() => {
                     setByWeight((b) => !b);
-                    setGrams(show(unitGrams * servings));
+                    setGrams(show(unitGrams * servings * per));
                   }}
                   className="inline-flex min-h-10 items-center self-start text-sm font-semibold text-accent-text lg:min-h-7"
                 >
-                  {byWeight ? `By the ${food?.countUnit ?? 'serving'} instead` : `By weight (${weightUnit}) instead`}
+                  {byWeight ? `By the ${eatBy ? (eatBy.unit ?? 'pack') : (food?.countUnit ?? 'serving')} instead` : `By weight (${weightUnit}) instead`}
                 </button>
               )}
               {members.length > 1 && (

@@ -101,7 +101,13 @@ describe('the local copy', () => {
     const picked = await api.get<BarcodeFoodDto>('/api/foods/barcode/5000159407236');
     expect(picked).toMatchObject({ named: true, food: { source: 'product', title: 'Snickers', kcalPerServing: 234 } });
     expect(off.calls).toEqual([]);
-    // It's yours now, so it isn't offered again from Open Food Facts.
+    // Only looked at so far: it's still an Open Food Facts result, in the same place.
+    expect((await api.get<FoodResultDto[]>('/api/foods/search?q=snick')).map((r) => [r.source, r.title])).toEqual([
+      ['off', 'Snickers'],
+      ['off', 'Snickers Duo'],
+    ]);
+    // Logged: it's one of your foods now, so it isn't offered again from Open Food Facts.
+    await api.post('/api/plan', { date: '2026-11-12', slot: 'snack', kind: 'product', productId: picked.productId, eaten: true, fromStock: false });
     expect((await api.get<FoodResultDto[]>('/api/foods/search?q=snick')).map((r) => [r.source, r.title])).toEqual([
       ['product', 'Snickers'],
       ['off', 'Snickers Duo'],

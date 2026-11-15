@@ -122,8 +122,8 @@ describe('cooking', () => {
       lines: plan.lines.map((l) => ({ takes: l.takes.map((tk) => ({ stockItemId: tk.stockItemId, grams: tk.grams ?? undefined })) })),
       leftovers: [{ locationId: loc.fridge.id, portions: 2 }],
     });
-    // The onion bag was used in part and was closed: ask if it's opened now.
-    expect(result.askOpened.map((i) => i.id)).toEqual([onions.change.item.id]);
+    // The onion bag was closed and used in part: it's open now, without anyone being asked.
+    expect(result.opened.map((i) => i.id)).toEqual([onions.change.item.id]);
     // Mince and the tin were used up.
     const stock = await api.get<StockItemDto[]>('/api/stock');
     expect(stock.find((s) => s.id === mince.change.item.id)).toBeUndefined();

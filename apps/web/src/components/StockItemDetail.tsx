@@ -196,7 +196,8 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
           {q.data.events.map((e) => (
             <li key={e.id} className={`flex justify-between gap-3 border-b border-line py-2 last:border-b-0 ${e.undoneAt ? 'text-muted line-through' : ''}`}>
               <span>
-                {eventWords[e.type]}
+                {/* A use of a negative amount is food put back by a diary line. */}
+                {e.type === 'use' && (e.grams ?? 0) < 0 ? 'Put back' : eventWords[e.type]}
                 {e.userName ? ` by ${e.userName}` : ''}
               </span>
               <time dateTime={e.createdAt} className="text-muted">

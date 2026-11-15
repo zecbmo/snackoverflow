@@ -9,7 +9,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { addDays, type CalendarDate, type MacroTotals, MEAL_SLOTS, type MealSlot, type PlanEntryDto } from '@snackoverflow/shared';
 import { api, errorMessage } from '../lib/api';
-import { usePlan } from '../lib/queries';
+import { usePlan, useUsers } from '../lib/queries';
+import { EntrySheet, shortAmount } from './EntrySheet';
 import { Icon } from './Icon';
 import { useMe } from './Layout';
 import { SLOT_LABEL, useLogFood } from './LogFood';
@@ -160,14 +161,6 @@ function MealSection({ slot, entries, future, onAdd }: { slot: MealSlot; entries
             <Icon name="bookmark" className="size-4" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={onAdd}
-          aria-label={`${future ? 'Plan' : 'Log'} ${SLOT_LABEL[slot].toLowerCase()}`}
-          className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-semibold text-accent-text hover:bg-card-muted lg:min-h-7"
-        >
-          <Icon name="plus" className="size-4" /> {future ? 'Plan' : 'Log'}
-        </button>
       </div>
       {entries.length > 0 && (
         <ul className="flex flex-col gap-1 pb-1">
@@ -176,6 +169,15 @@ function MealSection({ slot, entries, future, onAdd }: { slot: MealSlot; entries
           ))}
         </ul>
       )}
+      {/* Under what's there already, a row of its own, so it's plain which meal it logs to. */}
+      <button
+        type="button"
+        onClick={onAdd}
+        aria-label={`${future ? 'Plan' : 'Log'} ${SLOT_LABEL[slot].toLowerCase()}`}
+        className="mb-1 flex min-h-11 w-full items-center gap-1.5 rounded-lg border border-dashed border-line px-2 text-sm font-semibold text-accent-text hover:border-accent hover:bg-accent-soft lg:min-h-8"
+      >
+        <Icon name="plus" className="size-4" /> {future ? 'Plan' : 'Log'} {SLOT_LABEL[slot].toLowerCase()}
+      </button>
       {saving && <SaveMealSheet slot={slot} entries={eatenEntries} onClose={() => setSaving(false)} />}
     </section>
   );
@@ -225,6 +227,8 @@ function DiaryRow({ entry, future }: { entry: PlanEntryDto; future: boolean }) {
   const qc = useQueryClient();
   const toast = useToast();
   const eaten = entry.eaten;
+  const members = useUsers().data ?? [];
+  const [open, setOpen] = useState(false);
   const uncookedRecipe = entry.kind === 'recipe' && entry.recipeId && entry.status === 'planned';
   const skip = async () => {
     try {
@@ -237,7 +241,8 @@ function DiaryRow({ entry, future }: { entry: PlanEntryDto; future: boolean }) {
       toast.show(errorMessage(e), { tone: 'error' });
     }
   };
-  const meta = [entry.detail, entry.kcal !== null ? `${n(entry.kcal)} kcal` : 'Calories unknown'].filter(Boolean).join(' · ');
+  const amount = entry.kind === 'recipe' && entry.servings === 1 ? '' : shortAmount(entry);
+  const meta = [amount, entry.detail, entry.kcal !== null ? `${n(entry.kcal)} kcal` : 'Calories unknown'].filter(Boolean).join(' · ');
   return (
     <li className={`flex min-h-12 items-center gap-2 rounded-lg px-2 py-1 lg:min-h-10 ${eaten ? '' : 'border border-dashed border-line'}`}>
       {!future && (
@@ -252,10 +257,12 @@ function DiaryRow({ entry, future }: { entry: PlanEntryDto; future: boolean }) {
           <Icon name="check" className="size-4" strokeWidth={2.4} />
         </button>
       )}
-      <Link to={`/calendar?date=${entry.date}&entry=${entry.id}`} className="min-w-0 flex-1">
+      {/* The line's sheet opens here: change how much you had, who had it, move or remove it. */}
+      <button type="button" onClick={() => setOpen(true)} aria-label={`${entry.title}: change or remove`} className="min-w-0 flex-1 rounded-md text-left hover:bg-card-muted">
         <span className="block truncate font-medium">{entry.title}</span>
         <span className="block truncate text-sm text-muted lg:text-xs">{eaten ? meta : `Planned · ${meta}`}</span>
-      </Link>
+      </button>
+      {open && <EntrySheet entry={entry} viewerId={me.user.id} members={members} onClose={() => setOpen(false)} />}
       {!eaten && !future && (
         <div className="flex shrink-0 gap-1">
           {uncookedRecipe ? (

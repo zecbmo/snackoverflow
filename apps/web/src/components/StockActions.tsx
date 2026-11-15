@@ -1,25 +1,52 @@
 /**
  * Every stock action in one place, shared by Today, Stock, the item screen and
- * the scanner: Use (all / some / exact), Open, Freeze, Defrost, Move and Binned,
- * with the follow-up questions ("Is it opened now?", "Is there still some left?")
- * and Undo on every change.
+ * the scanner: Use (an amount from the row, then "Just use it" or "I ate it"), Open, Freeze,
+ * Defrost, Move and Binned, with Undo on every change.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
-import { amountText, type EarmarkDto, formatQuantity, itemsText, MEAL_SLOTS, type MealSlot, oneItem, quickAmounts, type StockChangeDto, type StockItemDto, type UseAmountInput } from '@snackoverflow/shared';
+import {
+  amountText,
+  type EarmarkDto,
+  formatQuantity,
+  isStarted,
+  itemOf,
+  itemsText,
+  MEAL_SLOTS,
+  type MealSlot,
+  orderForUse,
+  quickAmounts,
+  readyToEat,
+  type StockChangeDto,
+  type StockItemDto,
+  type UseAmountInput,
+  outcomeOfUse,
+  stepForUse,
+} from '@snackoverflow/shared';
 import { api, errorMessage } from '../lib/api';
-import { useLocations, useStock, useUnits } from '../lib/queries';
-import { amountLabel, longDate } from '../lib/format';
+import { useEarmarks, useLocations, useStock, useUnits } from '../lib/queries';
+import { longDate } from '../lib/format';
 import { AmountSheet } from './AmountSheet';
 import { Icon, locationIcon } from './Icon';
 import { currentSlot, SLOT_LABEL } from './LogFood';
 import { useToast } from './Toast';
-import { Button, Field, Sheet, TextInput, Toggle } from './ui';
+import { Button, Select, Sheet, TextInput } from './ui';
+
+/** What the Use sheet asks for. */
+export interface UseRequest {
+  amount: UseAmountInput;
+  /** With "all": everything on the row, not just one pack. */
+  wholeRow?: boolean;
+  /** "That finished the pack": empty it, whatever the numbers say. */
+  finishOpen?: boolean;
+  /** Also add the food to the shopping list (a planned meal would go short). */
+  addToList?: boolean;
+}
 
 interface StockActions {
   use(item: StockItemDto): void;
-  /** Use some of a pack; with `log`, it's also logged as eaten by you (one Undo for both). */
-  useAmount(item: StockItemDto, amount: UseAmountInput, log?: { slot: MealSlot }): Promise<StockChangeDto | null>;
+  /** Use food from a stock row; with `log`, it's also logged as eaten by you (one Undo for both). */
+  useRow(item: StockItemDto, request: UseRequest, log?: { slot: MealSlot }): Promise<StockChangeDto | null>;
   open(item: StockItemDto): Promise<void>;
   freeze(item: StockItemDto): Promise<void>;
   defrost(item: StockItemDto): Promise<void>;
@@ -27,8 +54,6 @@ interface StockActions {
   /** Change how much is left, for one pack or every pack on a stock row. */
   changeAmount(packs: StockItemDto[]): void;
   discard(item: StockItemDto): Promise<void>;
-  /** Handle the follow-up questions after any use. */
-  followUp(change: StockChangeDto): void;
 }
 
 const Ctx = createContext<StockActions | null>(null);
@@ -38,8 +63,6 @@ export function useStockActions(): StockActions {
   if (!c) throw new Error('useStockActions outside StockActionsProvider');
   return c;
 }
-
-type Prompt = { kind: 'opened'; change: StockChangeDto } | { kind: 'still-some'; change: StockChangeDto };
 
 interface PlanWarning {
   message: string;
@@ -51,12 +74,38 @@ function weekday(date: string): string {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
 }
 
-/** Grams a use would take out of a pack. */
-function gramsUsed(item: StockItemDto, amount: UseAmountInput): number {
-  const left = item.remainingGrams ?? 0;
-  if (amount.kind === 'all') return left;
-  if (amount.kind === 'fraction') return left * amount.fraction;
-  return Math.min(left, amount.grams);
+/**
+ * Planned meals don't lock stock, but using food they need is worth a word first. Says which
+ * planned meal would go short if `usedGrams` of this food went; null when there's enough.
+ */
+export function planShortfall(item: StockItemDto, usedGrams: number, marks: EarmarkDto[] | undefined, stock: StockItemDto[]): string | null {
+  if (!item.ingredientId || item.isMeal || !marks) return null;
+  const mark = marks.find((m) => m.ingredientId === item.ingredientId);
+  if (!mark) return null;
+  const have = stock.filter((s) => s.ingredientId === item.ingredientId && !s.isMeal).reduce((g, s) => g + (s.remainingGrams ?? 0), 0);
+  const after = have - usedGrams;
+  if (after >= mark.grams) return null;
+  let running = after;
+  const meal = mark.meals.find((m) => (running -= m.grams) < 0) ?? mark.meals[0]!;
+  const leftFor = Math.max(0, running + meal.grams);
+  return `This leaves ${amountText(leftFor, item)} for ${meal.title} on ${weekday(meal.date)}, which needs ${amountText(meal.grams, item)}.`;
+}
+
+/** An amount in the unit the food is used in: "2 slices", "250ml", "1.3kg". */
+export function inUnits(item: StockItemDto, grams: number): string {
+  return itemsText(item, grams) ?? formatQuantity(grams, item.displayUnit === 'ml' ? 'ml' : 'g', { densityGPerMl: item.densityGPerMl });
+}
+
+/** "Used 250g of Chicken Thighs. 2.3kg left." Always about the food, never one pack. */
+function usedMessage(item: StockItemDto, c: StockChangeDto, slot?: MealSlot): string {
+  const amount = c.usedGrams != null ? inUnits(item, c.usedGrams) : null;
+  const left = c.rowLeft;
+  const gone = left ? left.packs === 0 : c.item.fractionLeft <= 0;
+  const what = amount ? `${amount} of ${item.productName}` : `some ${item.productName}`;
+  const head = slot ? `Logged ${what} to your ${SLOT_LABEL[slot].toLowerCase()}.` : gone ? `Used the last of the ${item.productName}.` : `Used ${what}.`;
+  const tail = gone ? (slot ? " That's the last of it." : '') : left?.grams != null ? ` ${inUnits(item, left.grams)} left.` : '';
+  const opened = c.opened && !gone ? ` It's open now: best before ${longDate(c.item.bestBefore)}.` : '';
+  return `${head}${tail}${opened}${c.message ? ` ${c.message}` : ''}`;
 }
 
 export function StockActionsProvider({ children }: { children: ReactNode }) {
@@ -65,52 +114,8 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
   const [useFor, setUseFor] = useState<StockItemDto | null>(null);
   const [moveFor, setMoveFor] = useState<StockItemDto | null>(null);
   const [amountFor, setAmountFor] = useState<StockItemDto[] | null>(null);
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [warning, setWarning] = useState<PlanWarning | null>(null);
   const [freezeCheck, setFreezeCheck] = useState<{ item: StockItemDto; resolve: (go: boolean) => void } | null>(null);
-
-  /** Planned meals don't lock stock, but using something they need gets a warning first. */
-  const checkPlan = useCallback(
-    async (item: StockItemDto, amount: UseAmountInput): Promise<boolean> => {
-      if (!item.ingredientId || item.isMeal) return true;
-      let marks: EarmarkDto[];
-      try {
-        marks = await qc.fetchQuery({ queryKey: ['plan', 'earmarks'], queryFn: () => api.get<EarmarkDto[]>('/api/plan/earmarks'), staleTime: 30_000 });
-      } catch {
-        return true;
-      }
-      const mark = marks.find((m) => m.ingredientId === item.ingredientId);
-      if (!mark) return true;
-      const stock = qc.getQueryData<StockItemDto[]>(['stock']) ?? [item];
-      const have = stock.filter((s) => s.ingredientId === item.ingredientId && !s.isMeal).reduce((g, s) => g + (s.remainingGrams ?? 0), 0);
-      const after = have - gramsUsed(item, amount);
-      if (after >= mark.grams) return true;
-      // The first planned meal that would go short.
-      let running = after;
-      const meal = mark.meals.find((m) => (running -= m.grams) < 0) ?? mark.meals[0]!;
-      const leftFor = Math.max(0, running + meal.grams);
-      const choice = await new Promise<'use' | 'cancel' | 'list'>((resolve) =>
-        setWarning({
-          ingredientId: item.ingredientId!,
-          message: `This leaves ${amountText(leftFor, item)} for ${meal.title} on ${weekday(meal.date)}, which needs ${amountText(meal.grams, item)}.`,
-          resolve,
-        }),
-      );
-      setWarning(null);
-      if (choice === 'cancel') return false;
-      if (choice === 'list') {
-        try {
-          await api.post('/api/shopping', { ingredientId: item.ingredientId });
-          await qc.invalidateQueries({ queryKey: ['shopping'] });
-          toast.show('Added to the shopping list.');
-        } catch (e) {
-          toast.show(errorMessage(e), { tone: 'error' });
-        }
-      }
-      return true;
-    },
-    [qc, toast],
-  );
 
   const refresh = useCallback(() => qc.invalidateQueries({ queryKey: ['stock'] }), [qc]);
 
@@ -136,7 +141,9 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
         const undoIt = change.entryId
           ? async () => {
               try {
-                await api.del(`/api/plan/${change.entryId}?restoreStock=1`);
+                // Added to a line already in the diary: back to what it was. Else the line goes. Either way the food goes back.
+                if (change.entryWas !== undefined) await api.patch(`/api/plan/${change.entryId}`, { servings: change.entryWas });
+                else await api.del(`/api/plan/${change.entryId}`);
                 toast.show('Undone.');
               } catch (e) {
                 toast.show(errorMessage(e), { tone: 'error' });
@@ -166,24 +173,50 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
     [refresh, toast, undo, qc],
   );
 
-  const followUp = useCallback((change: StockChangeDto) => {
-    const next: Prompt[] = [];
-    if (change.askOpened) next.push({ kind: 'opened', change });
-    if (change.askStillSome) next.push({ kind: 'still-some', change });
-    if (next.length) setPrompts(next);
-  }, []);
+  const addToList = useCallback(
+    async (ingredientId: string) => {
+      try {
+        await api.post('/api/shopping', { ingredientId });
+        await qc.invalidateQueries({ queryKey: ['shopping'] });
+        toast.show('Added to the shopping list.');
+      } catch (e) {
+        toast.show(errorMessage(e), { tone: 'error' });
+      }
+    },
+    [qc, toast],
+  );
+
+  /** Binning something a planned meal needs gets a warning first. */
+  const checkPlan = useCallback(
+    async (item: StockItemDto): Promise<boolean> => {
+      if (!item.ingredientId || item.isMeal) return true;
+      let marks: EarmarkDto[];
+      try {
+        marks = await qc.fetchQuery({ queryKey: ['plan', 'earmarks'], queryFn: () => api.get<EarmarkDto[]>('/api/plan/earmarks'), staleTime: 30_000 });
+      } catch {
+        return true;
+      }
+      const message = planShortfall(item, item.remainingGrams ?? 0, marks, qc.getQueryData<StockItemDto[]>(['stock']) ?? [item]);
+      if (!message) return true;
+      const choice = await new Promise<'use' | 'cancel' | 'list'>((resolve) => setWarning({ ingredientId: item.ingredientId!, message, resolve }));
+      setWarning(null);
+      if (choice === 'cancel') return false;
+      if (choice === 'list') await addToList(item.ingredientId);
+      return true;
+    },
+    [qc, addToList],
+  );
 
   const actions = useMemo<StockActions>(
     () => ({
       use: (item) => setUseFor(item),
-      async useAmount(item, amount, log) {
-        if (!(await checkPlan(item, amount))) return null;
+      async useRow(item, request, log) {
+        const { addToList: list, ...body } = request;
         const change = await run(
-          () => api.post<StockChangeDto>(`/api/stock/${item.id}/use`, { amount, ...(log ? { log } : {}) }),
-          (c) =>
-            `${c.item.fractionLeft <= 0 ? `Used up the ${item.productName}` : `Used some ${item.productName}`}${c.entryId && log ? ` and logged it to your ${SLOT_LABEL[log.slot].toLowerCase()}` : ''}.`,
+          () => api.post<StockChangeDto>(`/api/stock/${item.id}/use`, { ...body, ...(log ? { log } : {}) }),
+          (c) => usedMessage(item, c, c.entryId && log ? log.slot : undefined),
         );
-        if (change) followUp(change);
+        if (change && list && item.ingredientId) await addToList(item.ingredientId);
         return change;
       },
       async open(item) {
@@ -204,21 +237,17 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
       move: (item) => setMoveFor(item),
       changeAmount: (packs) => setAmountFor(packs.length ? packs : null),
       async discard(item) {
-        if (!(await checkPlan(item, { kind: 'all' }))) return;
+        if (!(await checkPlan(item))) return;
         await run(() => api.post<StockChangeDto>(`/api/stock/${item.id}/discard`, {}), () => `Binned the ${item.productName}.`);
       },
-      followUp,
     }),
-    [run, followUp, checkPlan],
+    [run, checkPlan, addToList],
   );
-
-  const prompt = prompts[0];
-  const nextPrompt = () => setPrompts((p) => p.slice(1));
 
   return (
     <Ctx.Provider value={actions}>
       {children}
-      <UseSheet item={useFor} onClose={() => setUseFor(null)} onUse={(item, amount, log) => void actions.useAmount(item, amount, log)} />
+      <UseSheet item={useFor} onClose={() => setUseFor(null)} onUse={(item, request, log) => void actions.useRow(item, request, log)} />
       <AmountSheet packs={amountFor} onClose={() => setAmountFor(null)} onReplace={setAmountFor} />
       <MoveSheet
         item={moveFor}
@@ -245,10 +274,10 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
           <div className="flex flex-col gap-3">
             <p>{warning.message}</p>
             <Button variant="dark" size="lg" onClick={() => warning.resolve('use')}>
-              Use anyway
+              Bin it anyway
             </Button>
             <Button size="lg" onClick={() => warning.resolve('list')}>
-              Use it and add to shopping list
+              Bin it and add to shopping list
             </Button>
             <Button variant="ghost" size="lg" onClick={() => warning.resolve('cancel')}>
               Cancel
@@ -256,230 +285,228 @@ export function StockActionsProvider({ children }: { children: ReactNode }) {
           </div>
         )}
       </Sheet>
-      <Sheet open={prompt?.kind === 'opened'} onClose={nextPrompt} title="Is it opened now?">
-        {prompt?.kind === 'opened' && (
-          <div className="flex flex-col gap-3">
-            <p className="text-muted">Opened food goes off sooner, so we'll update its date.</p>
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" size="lg" onClick={nextPrompt}>
-                No
-              </Button>
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={() => {
-                  void actions.open(prompt.change.item);
-                  nextPrompt();
-                }}
-              >
-                Yes, it's open
-              </Button>
-            </div>
-          </div>
-        )}
-      </Sheet>
-      <Sheet open={prompt?.kind === 'still-some'} onClose={nextPrompt} title="Is there still some left?">
-        {prompt?.kind === 'still-some' && (
-          <div className="flex flex-col gap-3">
-            <p className="text-muted">By our numbers the {prompt.change.item.productName} is about gone.</p>
-            {(
-              [
-                ['yes', 'Yes, still some'],
-                ['nearly-gone', 'Nearly gone'],
-                ['none', 'None left'],
-              ] as const
-            ).map(([answer, label]) => (
-              <Button
-                key={answer}
-                variant={answer === 'none' ? 'dark' : 'outline'}
-                size="lg"
-                onClick={() => {
-                  void run(
-                    () => api.post<StockChangeDto>(`/api/stock/${prompt.change.item.id}/still-some`, { answer }),
-                    () => (answer === 'none' ? 'All gone.' : 'Thanks, updated.'),
-                  );
-                  nextPrompt();
-                }}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        )}
-      </Sheet>
     </Ctx.Provider>
   );
 }
 
-const LOG_KEY = 'so.use.log';
-
-function rememberedLog(): boolean {
-  try {
-    return localStorage.getItem(LOG_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Use: one at a time for counted food (an apple, an egg, a bar, a portion), else the whole pack,
- * part of it, or an exact amount. "Log it as eaten" also adds it to your diary (remembered on this
- * device), so eating something from the fridge is one step.
+ * Use: how much, then what for. The amount is the main thing, in the food's own unit (g, ml,
+ * slices, eggs, portions); the quick amounts only fill it in. One line says what that will do
+ * to the row before anything happens, and two buttons commit it: "Just use it" (out of stock
+ * only) or "I ate it" (out of stock and into your diary). Packs stay out of it: food comes from
+ * the pack that's open, then the next.
  */
-function UseSheet({ item, onClose, onUse }: { item: StockItemDto | null; onClose: () => void; onUse: (item: StockItemDto, amount: UseAmountInput, log?: { slot: MealSlot }) => void }) {
-  const [exact, setExact] = useState('');
-  const [count, setCount] = useState(1);
-  const [logIt, setLogIt] = useState(rememberedLog);
-  const [slot, setSlot] = useState<MealSlot>(currentSlot);
-  // The whole stock row: this pack (used first) and the others of the same food in the same place.
-  const stock = useStock().data;
-  const cupMl = useUnits().data?.cupMl ?? null;
-  const row = item ? (stock ?? [item]).filter((s) => s.productId === item.productId && s.locationId === item.locationId && (s.state === 'frozen') === (item.state === 'frozen')) : [];
-  const packs = row.length || 1;
-  const total = row.some((s) => s.remainingGrams === null) ? null : row.reduce((n, s) => n + s.remainingGrams!, 0);
-  const one = item ? oneItem(item, total) : null;
-  const unit = item?.displayUnit === 'ml' ? 'ml' : one ? 'count' : 'g';
-  const quick = item ? quickAmounts(item, total, cupMl) : [];
-  const n = one ? Math.min(count, one.left) : 1;
-  const thisPack = item?.remainingGrams ?? null;
-  const choose = (amount: UseAmountInput) => {
-    if (!item) return;
-    onUse(item, amount, logIt ? { slot } : undefined);
-    setExact('');
-    setCount(1);
-    onClose();
-  };
-  const setLog = (on: boolean) => {
-    setLogIt(on);
-    try {
-      localStorage.setItem(LOG_KEY, on ? '1' : '0');
-    } catch {
-      // Remembering is a nicety.
-    }
-  };
-  const exactGrams = () => {
-    const v = Number(exact);
-    if (!item || !Number.isFinite(v) || v <= 0) return null;
-    if (unit === 'ml') return v * (item.densityGPerMl ?? 1);
-    if (unit === 'count') return one ? v * one.grams : null;
-    return v;
-  };
-  // Whole items from the row: all of this pack when that's exactly it, else by weight (spilling into the next pack).
-  const itemsAmount = (k: number) => (thisPack !== null && Math.abs(k * one!.grams - thisPack) < 1 ? { kind: 'all' as const } : { kind: 'grams' as const, grams: k * one!.grams });
-  const words = (k: number) => `${k} ${one!.name}${k === 1 ? '' : 's'}`;
+function UseSheet({ item, onClose, onUse }: { item: StockItemDto | null; onClose: () => void; onUse: (item: StockItemDto, request: UseRequest, log?: { slot: MealSlot }) => void }) {
   return (
     <Sheet open={item !== null} onClose={onClose} title={item ? `Use ${item.productName}` : 'Use'}>
-      {item && (
-        <div className="flex flex-col gap-4">
-          <p className="text-muted">
-            {[
-              item.locationName,
-              packs > 1 ? `${packs} packs` : null,
-              total !== null ? itemsText(item, total) : null,
-              total !== null ? formatQuantity(total, item.displayUnit === 'ml' ? 'ml' : 'g', { densityGPerMl: item.densityGPerMl }) : amountLabel(item),
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-          <div className="flex flex-col gap-2 rounded-lg bg-card-muted p-3">
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">Log it as eaten</p>
-                <p className="text-sm text-muted">{logIt ? `Adds it to your ${SLOT_LABEL[slot].toLowerCase()} today, with its calories.` : "Just using it, say in cooking: it isn't logged."}</p>
-              </div>
-              <Toggle checked={logIt} onChange={setLog} label="Log it as eaten" />
-            </div>
-            {logIt && (
-              <div role="radiogroup" aria-label="Meal" className="flex self-start rounded-lg bg-card p-0.5">
-                {MEAL_SLOTS.map((x) => (
-                  <button
-                    key={x}
-                    type="button"
-                    role="radio"
-                    aria-checked={x === slot}
-                    onClick={() => setSlot(x)}
-                    className={`min-h-10 rounded-md px-2.5 text-sm font-medium lg:min-h-7 lg:px-2 ${x === slot ? 'bg-accent-soft font-semibold text-accent-text' : 'text-muted'}`}
-                  >
-                    {SLOT_LABEL[x]}
-                  </button>
-                ))}
-              </div>
-            )}
+      {item && <UseForm key={item.id} item={item} onClose={onClose} onUse={onUse} />}
+    </Sheet>
+  );
+}
+
+const FRACTIONS = [
+  [0.25, '¼'],
+  [0.5, '½'],
+  [0.75, '¾'],
+] as const;
+
+function trim(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
+const PRESSED = 'aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent-text';
+
+function UseForm({ item, onClose, onUse }: { item: StockItemDto; onClose: () => void; onUse: (item: StockItemDto, request: UseRequest, log?: { slot: MealSlot }) => void }) {
+  const actions = useStockActions();
+  const stock = useStock().data;
+  const marks = useEarmarks().data;
+  const cupMl = useUnits().data?.cupMl ?? null;
+  const [text, setText] = useState('');
+  const [part, setPart] = useState<number | 'all' | null>(null);
+  const [finish, setFinish] = useState(false);
+  const [list, setList] = useState(false);
+  const [slot, setSlot] = useState<MealSlot>(currentSlot);
+
+  // The whole stock row, in the order it's used: the open pack, then the others of this food in this place.
+  const row = useMemo(
+    () => orderForUse((stock ?? [item]).filter((s) => s.productId === item.productId && s.locationId === item.locationId && (s.state === 'frozen') === (item.state === 'frozen'))),
+    [stock, item],
+  );
+  const packs = row.length ? row : [item];
+  const total = packs.some((s) => s.remainingGrams === null) ? null : packs.reduce((n, s) => n + s.remainingGrams!, 0);
+  const one = itemOf(item);
+  const unit = one ? 'count' : item.displayUnit === 'ml' ? 'ml' : 'g';
+  const perUnit = one ? one.grams : unit === 'ml' ? (item.densityGPerMl ?? 1) : 1;
+  const suffix = one ? `${one.name}s` : unit;
+  const step = stepForUse(item);
+  const said = (grams: number) => inUnits(item, grams);
+
+  // Sizes known: an amount. Not known: all of the pack, or a rough share of it.
+  const value = Number(text);
+  const grams = total === null ? null : Number.isFinite(value) && value > 0 ? Math.min(total, value * perUnit) : 0;
+  const outcome = grams ? outcomeOfUse(packs, grams) : null;
+  const ready = total === null ? part !== null : Boolean(grams);
+  const everything = total !== null && grams !== null && grams >= total - 0.5;
+  const type = (t: string) => {
+    setText(t);
+    setFinish(false);
+  };
+  const nudge = (by: number) => {
+    const next = Math.max(0, Math.round(((Number.isFinite(value) ? value : 0) + by) / step) * step);
+    type(next ? trim(total === null ? next : Math.min(next, total / perUnit)) : '');
+  };
+
+  const chips: { label: string; grams: number }[] = [];
+  if (total !== null) {
+    if (one) for (const n of [1, 2, 4]) if (n * one.grams < total - 0.5) chips.push({ label: `${n} ${one.name}${n === 1 ? '' : 's'}`, grams: n * one.grams });
+    chips.push(...quickAmounts(item, total, cupMl));
+    const open = packs[0]!;
+    if (packs.length > 1 && isStarted(open) && open.remainingGrams! < total - 0.5) chips.push({ label: `The open pack (${said(open.remainingGrams!)})`, grams: open.remainingGrams! });
+    chips.push({ label: `All ${said(total)}`, grams: total });
+  }
+
+  const several = packs.length > 1;
+  const pack = (o: { started: boolean }) => (o.started ? 'the open pack' : 'a pack');
+  const happens = !outcome
+    ? null
+    : outcome.kind === 'last'
+      ? "That's the last of it."
+      : outcome.kind === 'within'
+        ? finish
+          ? several
+            ? `Finishes ${pack(outcome)}. ${said(outcome.left - outcome.packLeft)} left.`
+            : "That's the last of it."
+          : several
+            ? `${outcome.started ? `Leaves about ${said(outcome.packLeft)} in the open pack` : `Opens a pack and leaves about ${said(outcome.packLeft)} in it`}. ${said(outcome.left)} left in all.`
+            : `Leaves about ${said(outcome.left)}.`
+        : outcome.kind === 'finishes'
+          ? `Finishes ${pack(outcome)}. ${said(outcome.left)} left.`
+          : `Finishes ${pack(outcome)} and takes ${said(outcome.fromNext)} from the next. ${said(outcome.left)} left.`;
+  const finishing = finish && outcome?.kind === 'within';
+  const usedForPlan = grams ? (finishing ? grams + outcome.packLeft : grams) : total === null && part !== null ? (item.remainingGrams ?? 0) : 0;
+  const short = usedForPlan && stock ? planShortfall(item, usedForPlan, marks, stock) : null;
+
+  const kcal = grams && item.kcalPer100g !== null ? Math.round((item.kcalPer100g * grams) / 100) : null;
+  const amountWords = total === null ? (part === 'all' ? 'it all' : part ? `${FRACTIONS.find(([f]) => f === part)![1]} of it` : 'it') : grams ? said(grams) : 'it';
+  const commit = (ate: boolean) => {
+    if (!ready) return;
+    const request: UseRequest =
+      total === null
+        ? { amount: part === 'all' ? { kind: 'all' } : { kind: 'fraction', fraction: part as number } }
+        : everything
+          ? { amount: { kind: 'all' }, wholeRow: true }
+          : { amount: { kind: 'grams', grams: Math.round(grams! * 1000) / 1000 }, ...(finishing ? { finishOpen: true } : {}) };
+    onUse(item, short && list ? { ...request, addToList: true } : request, ate ? { slot } : undefined);
+    onClose();
+  };
+
+  const choice = 'flex min-h-14 w-full flex-col items-start justify-center rounded-lg px-4 py-2 text-left transition disabled:opacity-50 lg:min-h-12 lg:rounded-md lg:px-3';
+  const first = 'bg-strong text-strong-ink hover:opacity-90';
+  const second = 'border border-line bg-card text-ink hover:bg-card-muted';
+  const ateFirst = readyToEat(item);
+  const useButton = (
+    <button key="use" type="button" disabled={!ready} onClick={() => commit(false)} className={`${choice} ${ateFirst ? second : first}`}>
+      <span className="font-semibold">Just use {amountWords}</span>
+      <span className="text-sm opacity-80 lg:text-xs">Out of stock only, for cooking say. Not in your diary.</span>
+    </button>
+  );
+  const ateButton = (
+    <div key="ate" className="flex items-stretch gap-2">
+      <button type="button" disabled={!ready} onClick={() => commit(true)} className={`${choice} min-w-0 flex-1 ${ateFirst ? first : second}`}>
+        <span className="font-semibold">I ate {amountWords}</span>
+        <span className="text-sm opacity-80 lg:text-xs">Out of stock and into your diary{kcal !== null ? `: ${kcal} kcal` : ''}.</span>
+      </button>
+      <Select aria-label="Meal to log it to" value={slot} onChange={(e) => setSlot(e.target.value as MealSlot)} className="!h-auto !w-28 shrink-0">
+        {MEAL_SLOTS.map((x) => (
+          <option key={x} value={x}>
+            {SLOT_LABEL[x]}
+          </option>
+        ))}
+      </Select>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="-mt-2 flex flex-wrap items-center gap-x-1.5 text-muted">
+        <span>
+          {item.locationName}
+          {total !== null ? ` · ${said(total)} left` : ''}
+        </span>
+        {several && (
+          <button
+            type="button"
+            className="inline-flex min-h-10 items-center gap-0.5 font-semibold text-accent-text hover:underline lg:min-h-7"
+            onClick={() => {
+              onClose();
+              actions.changeAmount(packs);
+            }}
+          >
+            {packs.length} packs <Icon name="chevronRight" className="size-4" />
+          </button>
+        )}
+      </p>
+
+      {total !== null ? (
+        <>
+          <div className="flex items-center justify-center gap-2">
+            <Button aria-label="Less" className="min-w-11 lg:min-w-9" disabled={!grams} onClick={() => nudge(-step)}>
+              <Icon name="minus" className="size-4" />
+            </Button>
+            <label className="flex items-center gap-2">
+              <span className="sr-only">How much ({suffix})</span>
+              <TextInput inputMode="decimal" autoFocus value={text} onChange={(e) => type(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0" className="!w-28 text-right !text-xl font-semibold lg:!text-lg" />
+              <span className="min-w-10 text-muted">{suffix}</span>
+            </label>
+            <Button aria-label="More" className="min-w-11 lg:min-w-9" disabled={everything} onClick={() => nudge(step)}>
+              <Icon name="plus" className="size-4" />
+            </Button>
           </div>
-          {one ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <Button aria-label={`One fewer ${one.name}`} className="min-w-11 lg:min-w-8" disabled={n <= 1} onClick={() => setCount(Math.max(1, n - 1))}>
-                  <Icon name="minus" className="size-4" />
-                </Button>
-                <Button variant="dark" size="lg" className="flex-1" onClick={() => choose(itemsAmount(n))}>
-                  Use {words(n)}
-                </Button>
-                <Button aria-label={`One more ${one.name}`} className="min-w-11 lg:min-w-8" disabled={n >= one.left} onClick={() => setCount(Math.min(one.left, n + 1))}>
-                  <Icon name="plus" className="size-4" />
-                </Button>
-              </div>
-              <Button size="lg" onClick={() => choose({ kind: 'all' })}>
-                {packs > 1 ? 'Used up this pack' : 'Used it all'}
+          <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Quick amounts">
+            {chips.map((c) => (
+              <Button key={c.label} size="sm" aria-pressed={grams !== null && Math.abs(grams - c.grams) < 0.5} className={PRESSED} onClick={() => type(trim(c.grams / perUnit))}>
+                {c.label}
               </Button>
-            </div>
-          ) : (
-            <>
-              {quick.length > 0 && (
-                <div>
-                  <p className="mb-2 text-sm font-medium">Used</p>
-                  <div className="grid grid-cols-3 gap-2" role="group" aria-label="Quick amounts">
-                    {quick.map((x) => (
-                      <Button key={x.label} variant="outline" size="lg" className="px-2" aria-label={`Used ${x.label}`} onClick={() => choose({ kind: 'grams', grams: x.grams })}>
-                        {x.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <Button variant="dark" size="lg" onClick={() => choose({ kind: 'all' })}>
-                {packs > 1 ? 'Used up this pack' : 'Used it all'}
-              </Button>
-            </>
-          )}
-          <div>
-            <p className="mb-2 text-sm font-medium">{packs > 1 ? 'Used some of this pack' : "Used some of what's left"}</p>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  [0.25, '¼'],
-                  [0.5, '½'],
-                  [0.75, '¾'],
-                ] as const
-              ).map(([f, label]) => (
-                <Button key={f} variant="outline" size="lg" aria-label={`Used ${label}`} onClick={() => choose({ kind: 'fraction', fraction: f })}>
-                  {label}
-                </Button>
-              ))}
-            </div>
+            ))}
           </div>
-          {item.initialGrams !== null && (
-            <form
-              className="flex items-end gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const g = exactGrams();
-                if (g) choose({ kind: 'grams', grams: g });
-              }}
-            >
-              <div className="flex-1">
-                <Field label={`Exact amount (${unit === 'count' ? `${one!.name}s` : unit})${packs > 1 ? ', from any pack' : ''}`}>
-                  {(id) => <TextInput id={id} inputMode="decimal" value={exact} onChange={(e) => setExact(e.target.value)} placeholder="Optional" />}
-                </Field>
-              </div>
-              <Button type="submit" variant="outline" disabled={!exactGrams()}>
-                Use
+        </>
+      ) : (
+        <div>
+          <p className="mb-2 text-sm text-muted">We don't know this pack's size, so say roughly how much.</p>
+          <div className="grid grid-cols-4 gap-2" role="group" aria-label="How much">
+            {FRACTIONS.map(([f, label]) => (
+              <Button key={f} size="lg" aria-pressed={part === f} aria-label={`${label} of it`} className={PRESSED} onClick={() => setPart(f)}>
+                {label}
               </Button>
-            </form>
-          )}
+            ))}
+            <Button size="lg" aria-pressed={part === 'all'} className={PRESSED} onClick={() => setPart('all')}>
+              All
+            </Button>
+          </div>
         </div>
       )}
-    </Sheet>
+
+      <div className="flex min-h-11 flex-col justify-center gap-1.5 rounded-lg bg-card-muted px-3 py-2 text-sm" aria-live="polite">
+        <p>{happens ?? (total === null ? 'Pick how much, then say what it was for.' : 'How much? Type it, or pick an amount.')}</p>
+        {outcome?.kind === 'within' && (
+          <label className="flex min-h-10 items-center gap-2 font-medium lg:min-h-7">
+            <input type="checkbox" className="size-4" checked={finish} onChange={(e) => setFinish(e.target.checked)} />
+            {several ? 'That finished the open pack' : "That's the last of it"}
+          </label>
+        )}
+        {short && (
+          <>
+            <p className="text-danger">{short}</p>
+            <label className="flex min-h-10 items-center gap-2 font-medium lg:min-h-7">
+              <input type="checkbox" className="size-4" checked={list} onChange={(e) => setList(e.target.checked)} />
+              Add it to the shopping list
+            </label>
+          </>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">{ateFirst ? [ateButton, useButton] : [useButton, ateButton]}</div>
+    </div>
   );
 }
 

@@ -182,6 +182,8 @@ export interface StockItemDto {
   isMeal: boolean;
   /** Category, e.g. "Dairy": the product's own, else its ingredient's. */
   foodGroup: string | null;
+  /** Calories per 100g (the product's, else its ingredient's), for "I ate it" on the Use sheet. */
+  kcalPer100g: number | null;
   /** Which actions make sense right now, with a reason when they don't. */
   actions: {
     open: string | null;
@@ -213,11 +215,19 @@ export interface StockChangeDto {
   eventId: string;
   /** Used and logged as eaten: the meal logged (Undo removes it and puts the food back). */
   entryId?: string;
+  /** It was added to a line already in the diary: that line's servings before (Undo sets them back). */
+  entryWas?: number;
   /** Every change made, oldest first, when it took from more than one pack (Undo all of them). */
   eventIds?: string[];
   askStillSome?: boolean;
   askOpened?: boolean;
   message?: string;
+  /** Using part of a closed pack opened it (its best-before may have moved earlier). */
+  opened?: boolean;
+  /** What's left on the stock row afterwards: grams (null when a pack's size isn't known) and packs. */
+  rowLeft?: { grams: number | null; packs: number };
+  /** Grams this use took, across every pack (null when a pack's size isn't known). */
+  usedGrams?: number | null;
 }
 
 /** Packs merged into one: the pack that's left, and every event written (undo them newest first). */
@@ -508,8 +518,8 @@ export interface CookPlanDto {
 
 export interface CookResultDto {
   cookId: string;
-  /** Closed packs used in part: ask "Is it opened now?". */
-  askOpened: StockItemDto[];
+  /** Closed packs used in part, which are open now (their best-before may have moved earlier). Nobody is asked. */
+  opened: StockItemDto[];
   /** Packs whose numbers ran out: ask "Is there still some left?". */
   askStillSome: StockItemDto[];
   leftovers: StockItemDto[];
@@ -537,6 +547,9 @@ export interface PlanEntryDto {
   displayUnit: 'g' | 'ml' | 'count';
   /** What one item is called ("banana"), for counted ingredients. */
   countUnit: string | null;
+  /** A pack of food eaten by the item or the slice (bananas, a loaf): the weight of one, and what it's called. */
+  pieceGrams: number | null;
+  pieceUnit: string | null;
   /** The meal itself: planned, cooked or done, or skipped. Whether each person has eaten is on `people`. */
   status: 'planned' | 'cooked' | 'skipped';
   source: 'plan' | 'scan';
@@ -553,6 +566,17 @@ export interface PlanEntryDto {
   eaten: boolean;
   /** For recipes: food used instead of what the recipe says ("Tenderstem broccoli for Broccoli"). */
   swaps: { recipeIngredientId: string; ingredientId: string; from: string; to: string }[];
+  /**
+   * Food and leftovers: whether eating it comes out of stock. Null until it's first eaten. The
+   * line keeps stock in step: a new amount, a tick, an untick or removing it moves the food.
+   */
+  fromStock: boolean | null;
+  /** Grams this line has out of stock right now. */
+  stockGrams: number;
+  /** A cooked recipe: servings kept as leftovers, shown as kept rather than free. */
+  keptServings: number;
+  /** Logging added to a line that was already there: its servings before (Undo sets them back). */
+  mergedFrom?: number;
 }
 
 export interface PlanDayDto {
@@ -606,6 +630,14 @@ export interface FoodResultDto {
   unitGrams: number | null;
   displayUnit: 'g' | 'ml' | 'count';
   countUnit: string | null;
+  /**
+   * Food in the kitchen that isn't eaten a pack at a time: what it is eaten by. A banana from a
+   * bag or a slice from a loaf (`unit`), else by weight, starting at 100g (`unit` null). Log food
+   * starts there rather than at a whole pack. `kcal` is for that much.
+   */
+  eatBy: { grams: number; unit: string | null; label: string; kcal: number | null } | null;
+  /** The generic food behind a product, so the same food isn't listed twice. */
+  ingredientId: string | null;
   /** In the house: logging it can take it from stock (the app asks). */
   inStock: { packs: number; locationName: string } | null;
   /** Protein, carbs, fat… in one serving, when known. */

@@ -147,6 +147,10 @@ export const useStockInput = z.object({
   amount: useAmountInput,
   /** Also log it as eaten by you (default: today, the meal for the time of day). */
   log: z.object({ date: calendarDate.optional(), slot: z.enum(MEAL_SLOTS).optional() }).optional(),
+  /** With `all`: everything on the stock row (every pack of this food in this place), not just this pack. */
+  wholeRow: z.boolean().optional(),
+  /** The pack being used is finished now, whatever the numbers say ("that's the bread done"). */
+  finishOpen: z.boolean().optional(),
 });
 export const discardStockInput = z.object({ amount: useAmountInput.default({ kind: 'all' }) });
 export const moveStockInput = z.object({ locationId: id });
@@ -299,6 +303,8 @@ export const cookInput = z.object({
   servings: z.number().positive().max(500),
   /** The planned meal being cooked, which is then marked as cooked. */
   mealPlanEntryId: id.optional(),
+  /** Who on the planned meal is eating it now, so it's logged to their day. Left out: everyone with a portion. */
+  eaters: z.array(id).max(20).optional(),
   lines: z.array(cookLineInput).max(200).default([]),
   /** Servings to keep, per location (halves allowed): leftovers, or the whole batch for a batch cook. */
   leftovers: z
@@ -374,6 +380,8 @@ export const planEntryInput = z
     eaten: z.boolean().default(false),
     /** When logged as eaten: take it from stock if it's there (the app asks first). */
     fromStock: z.boolean().default(true),
+    /** When logged as eaten: add to the line for the same food at this meal, if you have one, rather than a new line. */
+    merge: z.boolean().default(false),
     /** For recipes: food used instead of what the recipe says. */
     swaps: swapsInput.nullish(),
   })
@@ -396,6 +404,8 @@ export const updatePlanEntryInput = z.object({
   status: z.enum(['planned', 'cooked', 'skipped']).optional(),
   people: people.optional(),
   batch: z.boolean().optional(),
+  /** Food and leftovers: whether it comes out of stock. Switching it moves the food straight away. */
+  fromStock: z.boolean().optional(),
   /** Replaces the meal's swaps; null clears them. */
   swaps: swapsInput.nullable().optional(),
 });
@@ -405,7 +415,8 @@ export const updatePlanEntryInput = z.object({
  * planned food or leftovers takes their share out of stock unless `fromStock` is false.
  */
 export const eatPlanEntryInput = z.object({
-  fromStock: z.boolean().default(true),
+  /** Left out, the line keeps what it was told before (first time: from stock when there is some). */
+  fromStock: z.boolean().optional(),
   /** Who ate it; default: you. */
   people: z.array(id).max(20).optional(),
 });

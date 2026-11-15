@@ -19,7 +19,7 @@ import { cooks, locations, mealPlanEntries, mealPlanPeople, products, recipes, s
 import { badRequest, conflict, notFound } from '../http';
 import { loadCatalog } from './catalog';
 import { getRecipe } from './recipes';
-import { addPack, restored, type StockDeps, usePack } from './stock';
+import { addPack, restored, type StockDeps, usePackOpening } from './stock';
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -168,23 +168,30 @@ export async function confirmCook(deps: StockDeps, recipeId: string, input: Cook
       .set({ status: 'cooked' })
       .where(and(eq(mealPlanEntries.id, input.mealPlanEntryId), eq(mealPlanEntries.householdId, auth.household.id)))
       .returning({ id: mealPlanEntries.id, batch: mealPlanEntries.batch });
-    // Everyone with a portion has eaten it; they can untick themselves if they didn't.
+    // Everyone with a portion has eaten it, or just the people the cook said are eating now;
+    // anyone who didn't can untick themselves.
     if (entry && !entry.batch) {
-      await db
-        .update(mealPlanPeople)
-        .set({ eatenAt: now, eatenBy: auth.user.id })
-        .where(and(eq(mealPlanPeople.entryId, entry.id), isNull(mealPlanPeople.eatenAt)));
+      const who = input.eaters;
+      if (!who || who.length) {
+        await db
+          .update(mealPlanPeople)
+          .set({ eatenAt: now, eatenBy: auth.user.id })
+          .where(and(eq(mealPlanPeople.entryId, entry.id), isNull(mealPlanPeople.eatenAt), ...(who ? [inArray(mealPlanPeople.userId, who)] : [])));
+      }
+      // Servings kept as leftovers show on the meal as kept, not as free portions.
+      await db.update(mealPlanEntries).set({ keptServings: kept }).where(eq(mealPlanEntries.id, entry.id));
     }
   }
 
-  const askOpened = new Map<string, StockItemDto>();
+  // Using part of a closed pack opens it: nobody is asked.
+  const opened = new Map<string, StockItemDto>();
   const askStillSome = new Map<string, StockItemDto>();
   for (const line of input.lines) {
     for (const take of line.takes) {
       const amount = take.grams !== undefined ? { kind: 'grams' as const, grams: take.grams } : { kind: 'fraction' as const, fraction: take.fraction ?? 1 };
-      const change = await usePack(d, take.stockItemId, amount);
-      if (change.askOpened) askOpened.set(change.item.id, change.item);
-      else askOpened.delete(change.item.id);
+      const change = await usePackOpening(d, take.stockItemId, amount);
+      if (change.opened) opened.set(change.item.id, change.item);
+      else if (change.item.fractionLeft <= 0) opened.delete(change.item.id);
       if (change.askStillSome) askStillSome.set(change.item.id, change.item);
     }
   }
@@ -200,7 +207,7 @@ export async function confirmCook(deps: StockDeps, recipeId: string, input: Cook
       leftovers.push(added.item);
     }
   }
-  return { cookId: cook!.id, askOpened: [...askOpened.values()], askStillSome: [...askStillSome.values()], leftovers };
+  return { cookId: cook!.id, opened: [...opened.values()], askStillSome: [...askStillSome.values()], leftovers };
 }
 
 /** Undo a whole cook: every use goes back and the leftovers disappear. */
@@ -245,7 +252,7 @@ export async function undoCook(deps: StockDeps, cookId: string): Promise<void> {
   // The planned meal goes back to planned.
   const planned = [...new Set(events.map((e) => e.mealPlanEntryId).filter((x): x is string => Boolean(x)))];
   if (planned.length) {
-    await db.update(mealPlanEntries).set({ status: 'planned' }).where(inArray(mealPlanEntries.id, planned));
+    await db.update(mealPlanEntries).set({ status: 'planned', keptServings: 0 }).where(inArray(mealPlanEntries.id, planned));
     await db.update(mealPlanPeople).set({ eatenAt: null, eatenBy: null }).where(inArray(mealPlanPeople.entryId, planned));
   }
 }

@@ -104,27 +104,68 @@ describe('scan in', () => {
 });
 
 describe('using stock', () => {
-  it('uses part of a pack, asks if it is opened, and opening never extends the date', async () => {
+  it('uses part of a pack, which opens it, and opening never extends the date', async () => {
     const { change } = await scanAdd(MILK, loc.fridge.id);
     const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'fraction', fraction: 0.25 } });
-    expect(used.askOpened).toBe(true);
-    expect(used.askStillSome).toBe(false);
-    expect(used.item.fractionLeft).toBe(0.75);
-    const opened = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/open`);
+    // Nobody is asked "Is it opened now?": using part of a closed pack opens it.
+    expect(used.opened).toBe(true);
+    expect(used.askOpened).toBe(false);
     // Milk: 8 days closed, 3 once opened.
-    expect(opened.item).toMatchObject({ state: 'opened', bestBefore: '2026-11-15', openedOn: '2026-11-12' });
-    expect(opened.item.actions.open).not.toBeNull();
+    expect(used.item).toMatchObject({ fractionLeft: 0.75, state: 'opened', bestBefore: '2026-11-15', openedOn: '2026-11-12' });
+    expect(used.item.actions.open).not.toBeNull();
   });
 
-  it('asks "still some left?" when the numbers run out', async () => {
+  it("doesn't open counted food: an apple from a bag leaves the rest as they were", async () => {
+    const ings = await api.get<IngredientDto[]>('/api/ingredients');
+    const p = await api.post<ProductDto>('/api/products', { name: 'Pink Lady apples', ingredientId: ings.find((i) => i.key === 'apples')!.id, packAmount: 900, packUnit: 'g' });
+    await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id });
+    const [bag] = await api.get<StockItemDto[]>('/api/stock');
+    const used = await api.post<StockChangeDto>(`/api/stock/${bag!.id}/use`, { amount: { kind: 'grams', grams: 150 } });
+    expect(used.opened).toBeUndefined();
+    expect(used.item).toMatchObject({ state: 'closed', remainingGrams: 750 });
+  });
+
+  it('uses what there is when asked for more than the pack has, and says so', async () => {
     const { change } = await scanAdd(BEANS, loc.cupboard.id);
     const r = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'grams', grams: 500 } });
-    expect(r.askStillSome).toBe(true);
+    expect(r.message).toContain('That was all there was');
+    expect(r.askStillSome).toBe(false);
+    expect(r.rowLeft).toEqual({ grams: 0, packs: 0 });
     expect(await api.get('/api/stock')).toHaveLength(0);
-    const yes = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/still-some`, { answer: 'yes' });
-    expect(yes.item.fractionLeft).toBe(0.25);
-    expect(await api.get('/api/stock')).toHaveLength(1);
-    await api.post(`/api/stock/${change.item.id}/still-some`, { answer: 'none' });
+  });
+
+  it('"that finished the pack" empties it whatever the numbers say, and one Undo puts it all back', async () => {
+    const { change } = await scanAdd(BEANS, loc.cupboard.id);
+    const r = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'grams', grams: 100 }, finishOpen: true });
+    expect(r.usedGrams).toBe(100);
+    expect(await api.get('/api/stock')).toHaveLength(0);
+    await api.post(`/api/events/${r.eventId}/undo`);
+    const [item] = await api.get<StockItemDto[]>('/api/stock');
+    expect(item).toMatchObject({ fractionLeft: 1, remainingGrams: 415, state: 'closed' });
+  });
+
+  it('takes from the pack that is already open before a full one with an earlier date', async () => {
+    const early = await scanAdd(CHICKEN, loc.fridge.id);
+    t.setNow('2026-11-14T12:00:00Z');
+    const late = await scanAdd(CHICKEN, loc.fridge.id);
+    // The later pack has been started.
+    await api.patch(`/api/stock/${late.change.item.id}`, { remainingGrams: 500 });
+    const r = await api.post<StockChangeDto>(`/api/stock/${early.change.item.id}/use`, { amount: { kind: 'grams', grams: 100 } });
+    expect(r.item).toMatchObject({ id: late.change.item.id, remainingGrams: 400 });
+    expect(r.rowLeft).toEqual({ grams: 1400, packs: 2 });
+    // Asking for more than it has left finishes it and goes on to the next pack.
+    const more = await api.post<StockChangeDto>(`/api/stock/${early.change.item.id}/use`, { amount: { kind: 'grams', grams: 600 } });
+    expect(more.eventIds).toHaveLength(2);
+    expect(more.usedGrams).toBe(600);
+    expect((await api.get<StockItemDto[]>('/api/stock')).map((s) => s.remainingGrams)).toEqual([800]);
+  });
+
+  it('uses everything on the row in one go', async () => {
+    const a = await scanAdd(BEANS, loc.cupboard.id);
+    await scanAdd(BEANS, loc.cupboard.id);
+    const r = await api.post<StockChangeDto>(`/api/stock/${a.change.item.id}/use`, { amount: { kind: 'all' }, wholeRow: true });
+    expect(r.eventIds).toHaveLength(2);
+    expect(r.usedGrams).toBe(830);
     expect(await api.get('/api/stock')).toHaveLength(0);
   });
 
@@ -202,14 +243,14 @@ describe('removing and merging packs', () => {
     expect(item).toMatchObject({ displayUnit: 'count', countUnit: 'apple', gramsPerCount: 150, remainingGrams: 900 });
   });
 
-  it('merges packs into the one used first, with the earliest date, and undoes it', async () => {
+  it('merges packs into the one used first (the started one), with the earliest date, and undoes it', async () => {
     const p = await apples();
     await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id, bestBefore: '2026-11-20' });
     await api.post('/api/stock', { productId: p.id, locationId: loc.fridge.id, bestBefore: '2026-11-30' });
     const [a, b] = await api.get<StockItemDto[]>('/api/stock');
     await api.patch(`/api/stock/${b!.id}`, { remainingGrams: 300 });
     const r = await api.post<StockMergeDto>('/api/stock/merge', { ids: [b!.id, a!.id] });
-    expect(r.item).toMatchObject({ id: a!.id, initialGrams: 1800, remainingGrams: 1200, bestBefore: '2026-11-20' });
+    expect(r.item).toMatchObject({ id: b!.id, initialGrams: 1800, remainingGrams: 1200, bestBefore: '2026-11-20' });
     expect(r.eventIds).toHaveLength(2);
     expect(await api.get('/api/stock')).toHaveLength(1);
     for (const e of [...r.eventIds].reverse()) await api.post(`/api/events/${e}/undo`);
@@ -300,17 +341,16 @@ describe('undo', () => {
     expect(r.statusCode).toBe(409);
   });
 
-  it('undoing a use also undoes the answers to its follow-up questions', async () => {
+  it('undoing a use closes the pack it opened, with its old date', async () => {
     const { change } = await scanAdd(MILK, loc.fridge.id);
     const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'fraction', fraction: 0.25 } });
-    // "Is it opened now?" Yes.
-    await api.post(`/api/stock/${change.item.id}/open`);
+    expect(used.item.state).toBe('opened');
     await api.post(`/api/events/${used.eventId}/undo`);
     const [item] = await api.get<StockItemDto[]>('/api/stock');
     expect(item).toMatchObject({ fractionLeft: 1, state: 'closed', bestBefore: change.item.bestBefore, openedOn: null });
   });
 
-  it('and "Is there still some left?"', async () => {
+  it('and a correction to what was left, made just after', async () => {
     const { change } = await scanAdd(BEANS, loc.cupboard.id);
     const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'grams', grams: 500 } });
     await api.post(`/api/stock/${change.item.id}/still-some`, { answer: 'yes' });
@@ -323,7 +363,7 @@ describe('undo', () => {
     const { change } = await scanAdd(MILK, loc.fridge.id);
     const used = await api.post<StockChangeDto>(`/api/stock/${change.item.id}/use`, { amount: { kind: 'fraction', fraction: 0.25 } });
     t.setNow('2026-11-12T13:00:00Z');
-    await api.post(`/api/stock/${change.item.id}/open`);
+    await api.patch(`/api/stock/${change.item.id}`, { remainingGrams: 500 });
     expect((await api.raw('POST', `/api/events/${used.eventId}/undo`, {})).statusCode).toBe(409);
   });
 

@@ -123,10 +123,10 @@ export async function stockRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { id: string } }>('/api/stock/:id/use', async (req) => {
-    const { amount, log } = parse(useStockInput, req.body);
-    if (!log) return change(req, (d) => useFromRow(d, req.params.id, amount));
+    const { amount, log, wholeRow, finishOpen } = parse(useStockInput, req.body);
+    if (!log) return change(req, (d) => useFromRow(d, req.params.id, amount, { wholeRow, finishOpen }));
     // Used and eaten: logged to your diary too.
-    const r = await change(req, (d) => useAndLog(d, req.params.id, amount, log));
+    const r = await change(req, (d) => useAndLog(d, req.params.id, amount, log, { wholeRow, finishOpen }));
     ctx.live.publish(requireAuth(req).household.id, 'plan');
     return r;
   });

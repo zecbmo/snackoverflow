@@ -6,7 +6,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { addDays, amountText, FOOD_GROUPS, formatQuantity, itemsText, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
+import { addDays, amountText, type EarmarkDto, FOOD_GROUPS, formatQuantity, itemsText, type StockChangeDto, type StockItemDto } from '@snackoverflow/shared';
 import { AddItemsSheet } from '../components/AddItemsSheet';
 import { type Column, ColumnsMenu, DataTable, StatusDot, useHiddenColumns } from '../components/DataTable';
 import { Icon } from '../components/Icon';
@@ -18,7 +18,7 @@ import { useStockActions } from '../components/StockActions';
 import { StockRowActions } from '../components/StockRowActions';
 import { useToast } from '../components/Toast';
 import { PageTop, SearchBox, Segmented, Toolbar } from '../components/Toolbar';
-import { Button, EmptyState, ErrorNote, Pill, Spinner } from '../components/ui';
+import { Button, EmptyState, ErrorNote, Pill, Sheet, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { dateLabel, type Tone, toneClasses, toneFor, toneMeaning } from '../lib/format';
 import { useEarmarks, useLocations, useShopping, useStock, useStockItem } from '../lib/queries';
@@ -117,6 +117,7 @@ export function StockPage() {
   const [category, setCategory] = useState('');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [plannedOpen, setPlannedOpen] = useState<StockGroup | null>(null);
   const [hiddenColumns, toggleColumn] = useHiddenColumns('stock');
   const [openId, openPanel, closePanel] = usePanelParam();
   const navigate = useNavigate();
@@ -177,6 +178,18 @@ export function StockPage() {
       </span>
     );
   };
+  /** Packs, Items and Amount all open the amounts window: the same thing, whichever you click. */
+  const amountButton = (g: StockGroup, text: string, said: string) => (
+    <button
+      type="button"
+      aria-label={`Change amount of ${g.name}, ${said}`}
+      title="Change amount"
+      onClick={() => actions.changeAmount(g.packs)}
+      className="-mx-1.5 rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-accent-text hover:underline focus-visible:bg-accent-soft"
+    >
+      {text}
+    </button>
+  );
   const datePill = (g: StockGroup) => (
     <Pill className={toneClasses[toneFor(g.first, me.today)].pill}>
       {g.first.state === 'frozen' && <Icon name="snowflake" className="size-3" strokeWidth={2.2} />}
@@ -196,14 +209,14 @@ export function StockPage() {
     { key: 'category', header: 'Category', className: 'whitespace-nowrap', cell: (g) => g.first.foodGroup ?? '' },
     { key: 'where', header: 'Where', className: 'whitespace-nowrap', cell: (g) => g.locationName },
     { key: 'state', label: 'State', header: <span title="Opened, frozen or defrosted">State</span>, className: 'w-14', cell: (g) => <StateIcon g={g} /> },
-    { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : g.packs.length) },
+    { key: 'packs', header: 'Packs', align: 'right', className: 'w-16 tabular-nums', cell: (g) => (g.first.isMeal ? '' : amountButton(g, String(g.packs.length), `${g.packs.length} ${g.packs.length === 1 ? 'pack' : 'packs'}`)) },
     {
       key: 'items',
       label: 'Items',
       header: <span title="For food that's counted: apples, eggs, bars of a multipack, portions of leftovers">Items</span>,
       align: 'right',
       className: 'whitespace-nowrap tabular-nums',
-      cell: (g) => itemsLeft(g),
+      cell: (g) => (itemsLeft(g) ? amountButton(g, itemsLeft(g), itemsLeft(g)) : ''),
     },
     {
       key: 'left',
@@ -211,19 +224,27 @@ export function StockPage() {
       header: <span title="What's left by weight or volume. ~ means an estimate, for opened packs. Click to change it.">Amount</span>,
       align: 'right',
       className: 'whitespace-nowrap tabular-nums',
-      cell: (g) => (
-        <button
-          type="button"
-          aria-label={`Change amount of ${g.name}, ${amountLeft(g) || 'not known'}`}
-          title="Change amount"
-          onClick={() => actions.changeAmount(g.packs)}
-          className="-mx-1.5 rounded px-1.5 py-0.5 hover:bg-accent-soft hover:text-accent-text hover:underline focus-visible:bg-accent-soft"
-        >
-          {amountLeft(g) || '–'}
-        </button>
-      ),
+      cell: (g) => amountButton(g, amountLeft(g) || '–', amountLeft(g) || 'not known'),
     },
-    { key: 'planned', header: 'Planned', align: 'right', className: 'whitespace-nowrap tabular-nums', cell: plannedCell },
+    {
+      key: 'planned',
+      label: 'Planned',
+      header: <span title="Set aside for planned meals. Click an amount to see which.">Planned</span>,
+      align: 'right',
+      className: 'whitespace-nowrap tabular-nums',
+      cell: (g) =>
+        plannedFor(g) ? (
+          <button
+            type="button"
+            aria-label={`Where ${g.name} is planned`}
+            title="See which meals it's for"
+            onClick={() => setPlannedOpen(g)}
+            className="-mx-1.5 rounded px-1.5 py-0.5 hover:bg-accent-soft hover:underline focus-visible:bg-accent-soft"
+          >
+            {plannedCell(g)}
+          </button>
+        ) : null,
+    },
     { key: 'date', header: 'Best before', className: 'whitespace-nowrap', cell: datePill },
   ];
 
@@ -264,6 +285,12 @@ export function StockPage() {
         }
       />
       <AddItemsSheet open={adding} onClose={() => setAdding(false)} />
+      <PlannedSheet
+        group={plannedOpen}
+        mark={plannedOpen?.first.ingredientId ? earmarks?.find((m) => m.ingredientId === plannedOpen.first.ingredientId) : undefined}
+        status={plannedOpen ? plannedFor(plannedOpen) : undefined}
+        onClose={() => setPlannedOpen(null)}
+      />
       <Toolbar
         search={
           <div className="flex items-center gap-1.5">
@@ -398,6 +425,37 @@ function StockPanel({ id, onClose, onOpenPack }: { id: string | null; onClose: (
     <SidePanel open={Boolean(id)} onClose={onClose} title={item?.productName ?? 'Loading…'} subtitle={item?.brand ?? undefined}>
       {id && <StockItemDetail id={id} onOpenPack={onOpenPack} />}
     </SidePanel>
+  );
+}
+
+/** Where a food is planned: each meal it's set aside for, with how much, linking to the meal. */
+function PlannedSheet({ group, mark, status, onClose }: { group: StockGroup | null; mark: EarmarkDto | undefined; status: PlanStatus | undefined; onClose: () => void }) {
+  const when = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return (
+    <Sheet open={group !== null} onClose={onClose} title={group ? `Planned: ${group.name}` : 'Planned'}>
+      {group && mark && (
+        <div className="flex flex-col gap-3">
+          <p className="text-muted">
+            {amountText(mark.grams, group.first)} set aside for {mark.meals.length === 1 ? 'one meal' : `${mark.meals.length} meals`}.
+            {status && status.short > 0 ? ` That's ${amountText(status.short, group.first)} more than there is${status.onList ? ", and it's on the shopping list" : ''}.` : ''}
+          </p>
+          <ul className="overflow-hidden rounded-lg border border-line">
+            {mark.meals.map((m) => (
+              <li key={m.entryId} className="border-b border-line last:border-b-0">
+                <Link to={`/calendar?date=${m.date}&entry=${m.entryId}`} onClick={onClose} className="flex min-h-12 items-center gap-3 px-3 py-1.5 hover:bg-card-muted lg:min-h-10">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{m.title}</span>
+                    <span className="block text-sm text-muted lg:text-xs">{when(m.date)}</span>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">{amountText(m.grams, group.first)}</span>
+                  <Icon name="chevronRight" className="size-4 shrink-0 text-muted" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Sheet>
   );
 }
 

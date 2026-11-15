@@ -61,7 +61,7 @@ export async function plannerRoutes(app: FastifyInstance) {
     return listPlan(ctx.db, auth, from, to, personId);
   });
 
-  /** Plan a meal, or log one as eaten (`eaten: true`). Logging takes it from stock unless `fromStock` is false. */
+  /** Plan a meal, or log one as eaten (`eaten: true`). Logging takes it from stock unless `fromStock` is false; `merge` adds to the same food already logged at that meal. */
   app.post('/api/plan', async (req) => {
     const input = parse(planEntryInput, req.body);
     return (await inTx(req, (d) => createEntryWithStock(d, input), 'plan', 'stock')).entry;
@@ -69,10 +69,10 @@ export async function plannerRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>('/api/plan/:id', async (req) => {
     const input = parse(updatePlanEntryInput, req.body);
-    return inTx(req, (d) => updateEntry(d, req.params.id, input), 'plan');
+    return inTx(req, (d) => updateEntry(d, req.params.id, input), 'plan', 'stock');
   });
 
-  /** Remove a meal. `?restoreStock=1` puts back the food it took from stock (Undo after logging). */
+  /** Remove a meal. Food or leftovers it took from stock go back; `?restoreStock=1` also undoes a recipe's cook. */
   app.delete<{ Params: { id: string }; Querystring: { restoreStock?: string } }>('/api/plan/:id', async (req) => {
     const restore = req.query.restoreStock === '1' || req.query.restoreStock === 'true';
     const r = await inTx(req, (d) => deleteEntry(d, req.params.id, restore), 'plan', 'stock');
@@ -85,10 +85,10 @@ export async function plannerRoutes(app: FastifyInstance) {
     return inTx(req, (d) => eatEntry(d, req.params.id, fromStock, people), 'plan', 'stock');
   });
 
-  /** Untick: they haven't eaten it after all. */
+  /** Untick: they haven't eaten it after all. Food it took from stock goes back. */
   app.post<{ Params: { id: string } }>('/api/plan/:id/uneat', async (req) => {
     const { people } = parse(uneatPlanEntryInput, req.body);
-    return inTx(req, (d) => uneatEntry(d, req.params.id, people), 'plan');
+    return inTx(req, (d) => uneatEntry(d, req.params.id, people), 'plan', 'stock');
   });
 
   app.get<{ Params: { id: string } }>('/api/plan/:id', async (req) => getEntry(ctx.db, requireAuth(req), req.params.id));

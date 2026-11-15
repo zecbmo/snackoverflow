@@ -109,6 +109,7 @@ export function toStockDto(
     addedAt: item.addedAt.toISOString(),
     isMeal: product.recipeId !== null,
     foodGroup: product.foodGroup ?? (product.ingredientId ? (catalog.ingredients.get(product.ingredientId)?.foodGroup ?? null) : null),
+    kcalPer100g: product.nutritionPer100g?.kcal ?? ingredient?.nutritionPer100g?.kcal ?? null,
     actions: {
       open: open.ok ? null : open.reason,
       freeze: freeze.ok ? null : freeze.reason,
@@ -308,51 +309,95 @@ export async function usePack(deps: StockDeps, id: string, amount: UseAmount): P
     fraction: result.usedFraction,
     before: snapshot(item),
   });
-  const change = await finishChange(db, auth, now, item.id, eventId, { askStillSome: result.askStillSome });
+  const change = await finishChange(db, auth, now, item.id, eventId, { askStillSome: result.askStillSome, usedGrams: result.usedGrams });
   // Only ask "Is it opened now?" when opening would change its date (`actions.open` is null when allowed).
   return { ...change, askOpened: shouldAskOpened(item.state, amount, result.after, change.item.actions.open === null) };
 }
 
+/** Counted food (apples, a bar from a multipack, portions of a meal): using one doesn't open the rest. */
+function countedFood(item: StockItemDto): boolean {
+  return item.isMeal || item.displayUnit === 'count' || item.itemGrams !== null;
+}
+
 /**
- * Use an amount from a stock row: this pack first, then the row's other packs (the same food in
- * the same place, frozen or not), earliest first. So using 500g of chicken when the open pack has
- * 300g left takes the other 200g from the next pack. Fractions and "all" are of this pack only.
+ * Use some of a pack, and mark it opened when that's the first time part of a closed pack is
+ * used: it must be open now, so nobody is asked. Opening never extends a date. Counted food is
+ * left alone, as is food whose date doesn't change once opened.
  */
-export async function useFromRow(deps: StockDeps, id: string, amount: UseAmount): Promise<StockChangeDto> {
+export async function usePackOpening(deps: StockDeps, id: string, amount: UseAmount): Promise<StockChangeDto> {
+  const change = await usePack(deps, id, amount);
+  if (!change.askOpened || countedFood(change.item)) return change;
+  const opened = await openPack(deps, id);
+  return { ...change, item: opened.item, askOpened: false, opened: true };
+}
+
+/** The packs on a stock row (one food in one place, frozen or not), in the order they're used. */
+async function rowPacks(deps: StockDeps, item: StockRow): Promise<StockRow[]> {
+  const { db, auth } = deps;
+  const rows = await db
+    .select()
+    .from(stockItems)
+    .where(and(eq(stockItems.householdId, auth.household.id), eq(stockItems.productId, item.productId), eq(stockItems.locationId, item.locationId), isNull(stockItems.finishedAt)));
+  return orderForUse(rows.filter((p) => (p.state === 'frozen') === (item.state === 'frozen')).map((p) => ({ ...p })));
+}
+
+/** What's left on a stock row: grams (null when a pack's size isn't known) and packs. */
+async function rowLeft(deps: StockDeps, item: StockRow): Promise<{ grams: number | null; packs: number }> {
+  const packs = await rowPacks(deps, item);
+  return { grams: packs.some((p) => p.remainingGrams === null) ? null : Math.round(packs.reduce((n, p) => n + p.remainingGrams!, 0) * 1000) / 1000, packs: packs.length };
+}
+
+/**
+ * Use food from a stock row (every pack of one food in one place). An amount in grams comes from
+ * the pack that's already open, then the others, earliest best-before first: 500g of chicken when
+ * the open pack has 300g takes the other 200g from the next pack. `wholeRow` uses everything.
+ * `finishOpen` empties the pack it ended on, whatever the numbers say ("that's the bread done").
+ * A fraction, or "all" without `wholeRow`, is of this pack only (for packs whose size isn't known).
+ */
+export async function useFromRow(deps: StockDeps, id: string, amount: UseAmount, opts: { wholeRow?: boolean; finishOpen?: boolean } = {}): Promise<StockChangeDto> {
   const { db, auth } = deps;
   const { item } = await loadItem(db, auth, id);
-  if (amount.kind !== 'grams' || item.remainingGrams === null || amount.grams <= item.remainingGrams + 0.5) return usePack(deps, id, amount);
-  const others = orderForUse(
-    (
-      await db
-        .select()
-        .from(stockItems)
-        .where(and(eq(stockItems.householdId, auth.household.id), eq(stockItems.productId, item.productId), eq(stockItems.locationId, item.locationId), isNull(stockItems.finishedAt)))
-    )
-      .filter((p) => p.id !== item.id && (p.state === 'frozen') === (item.state === 'frozen'))
-      .map((p) => ({ ...p })),
-  );
-  // Only pack in the row: as before (our numbers may be off, so it asks "Is there still some left?").
-  if (!others.length) return usePack(deps, id, amount);
-  const first = await usePack(deps, id, { kind: 'all' });
-  const eventIds = [first.eventId];
-  let last = first;
-  let left = amount.grams - item.remainingGrams;
-  for (const p of others) {
-    if (left <= 0.5) break;
-    if (p.remainingGrams === null) {
-      // A pack of unknown size: count it as used up.
-      last = await usePack(deps, p.id, { kind: 'all' });
-      eventIds.push(last.eventId);
-      break;
+  if (item.finishedAt) throw conflict("That's already been used up.");
+  const changes: StockChangeDto[] = [];
+  let message: string | undefined;
+  if (amount.kind === 'grams') {
+    let left = amount.grams;
+    for (const p of await rowPacks(deps, item)) {
+      if (left <= 0.5) break;
+      if (p.remainingGrams === null) {
+        // A pack of unknown size: count it as used up.
+        changes.push(await usePack(deps, p.id, { kind: 'all' }));
+        left = 0;
+        break;
+      }
+      const take = Math.min(p.remainingGrams, left);
+      changes.push(await usePackOpening(deps, p.id, take >= p.remainingGrams - 0.5 ? { kind: 'all' } : { kind: 'grams', grams: take }));
+      left -= take;
     }
-    const take = Math.min(p.remainingGrams, left);
-    last = await usePack(deps, p.id, take >= p.remainingGrams - 0.5 ? { kind: 'all' } : { kind: 'grams', grams: take });
-    eventIds.push(last.eventId);
-    left -= take;
+    if (!changes.length) throw conflict("That's already been used up.");
+    if (left > 0.5) message = 'That was all there was.';
+  } else if (amount.kind === 'all' && opts.wholeRow) {
+    for (const p of await rowPacks(deps, item)) changes.push(await usePack(deps, p.id, { kind: 'all' }));
+  } else {
+    changes.push(await usePackOpening(deps, id, amount));
   }
-  // Follow-up questions ("Is it opened now?") are about the pack it ended on.
-  return { ...last, eventIds, ...(left > 0.5 ? { message: `That was all there was: used up all ${others.length + 1} packs.` } : {}) };
+  let last = changes[changes.length - 1]!;
+  // "That finished the pack": empty it, as a correction that's undone with the use.
+  if (opts.finishOpen && last.item.fractionLeft > 0) {
+    const emptied = await answerStillSome(deps, last.item.id, 'none');
+    last = { ...last, item: emptied.item };
+  }
+  const usedGrams = changes.some((c) => c.usedGrams == null) ? null : Math.round(changes.reduce((n, c) => n + c.usedGrams!, 0) * 1000) / 1000;
+  return {
+    ...last,
+    usedGrams,
+    eventIds: changes.map((c) => c.eventId),
+    opened: changes.some((c) => c.opened) || undefined,
+    askOpened: false,
+    askStillSome: false,
+    rowLeft: await rowLeft(deps, item),
+    ...(message ? { message } : {}),
+  };
 }
 
 /** Bin a pack (or part of it). Kept separate from use so waste can be counted. */
@@ -558,6 +603,30 @@ export async function mergeStockPacks(deps: StockDeps, ids: string[]): Promise<S
     }),
   );
   return { item: await getStockItem(db, auth, now, target.id), eventIds };
+}
+
+/**
+ * Put food back into a pack: the opposite of a use, for a meal whose amount went down or that
+ * was unticked or removed after the pack had changed (so the use itself can't be undone). It's
+ * written as a use of a negative amount, so what the meal has taken still adds up. Returns the
+ * grams put back (nothing when the pack is gone or its size isn't known).
+ */
+export async function giveBack(deps: StockDeps, stockItemId: string, grams: number): Promise<number> {
+  const { db, auth } = deps;
+  const [item] = await db
+    .select()
+    .from(stockItems)
+    .where(and(eq(stockItems.id, stockItemId), eq(stockItems.householdId, auth.household.id)))
+    .for('update');
+  if (!item || item.initialGrams === null || grams <= 0) return 0;
+  const remaining = Math.round(((item.remainingGrams ?? 0) + grams) * 1000) / 1000;
+  const initial = Math.max(item.initialGrams, remaining);
+  await db
+    .update(stockItems)
+    .set({ remainingGrams: remaining, initialGrams: initial, fractionLeft: Math.min(1, Math.round((remaining / initial) * 1000) / 1000), finishedAt: null })
+    .where(eq(stockItems.id, item.id));
+  await writeEvent(deps, item, 'use', { grams: -grams, fraction: -Math.round((grams / initial) * 1000) / 1000, before: snapshot(item) });
+  return grams;
 }
 
 /**

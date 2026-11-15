@@ -4,24 +4,24 @@
  * serving (yours, someone else's, or free); only your own portions count for your calories.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
-import { addDays, type CalendarDate, MEAL_SLOTS, type MealSlot, type PlanDayDto, type PlanEntryDto, type UserDto } from '@snackoverflow/shared';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
+import { addDays, amountText, type CalendarDate, MEAL_SLOTS, type MealSlot, type PlanDayDto, type PlanEntryDto, type UserDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useLogFood } from '../components/LogFood';
 import { useToast } from '../components/Toast';
 import { PickerMenu } from '../components/Menu';
-import { PageTop, Segmented, Toolbar } from '../components/Toolbar';
-import { Button, Card, ErrorNote, Field, IconButton, Select, Sheet, Spinner, TextInput } from '../components/ui';
+import { PageTop, Toolbar } from '../components/Toolbar';
+import { Button, Card, ErrorNote, Field, IconButton, Sheet, Spinner, TextInput } from '../components/ui';
 import { useIsDesktop } from '../lib/useMedia';
 import { api, errorMessage } from '../lib/api';
 import { amountLabel } from '../lib/format';
 import { useIngredients, usePlan, useProducts, useRecipes, useStock, useSurplus, useUsers } from '../lib/queries';
 import { PlanWeekSheet, SuggestSheet } from '../components/OptimiserSheets';
 import { CalendarPane, type CalendarDrag, DRAG_TYPE, FoodBrowser, type FoodTab, readDrag, startDrag } from '../components/CalendarPane';
-import { PortionDots, PortionPicker, showPortions } from '../components/PortionIcons';
-import { amountText } from '@snackoverflow/shared';
+import { PortionDots, showPortions } from '../components/PortionIcons';
+import { dayLabel, EntrySheet, shortAmount } from '../components/EntrySheet';
 
 const SLOT_LABEL: Record<MealSlot, string> = {
   breakfast: 'Breakfast',
@@ -34,18 +34,6 @@ const SLOT_LABEL: Record<MealSlot, string> = {
 function weekStart(d: CalendarDate): CalendarDate {
   const dow = new Date(`${d}T12:00:00Z`).getUTCDay();
   return addDays(d, -((dow + 6) % 7));
-}
-
-function dayLabel(d: CalendarDate, today: CalendarDate, long = false): string {
-  const date = new Date(`${d}T12:00:00Z`);
-  const name = date.toLocaleDateString('en-GB', {
-    weekday: long ? 'long' : 'short',
-    timeZone: 'UTC',
-  });
-  const num = date.getUTCDate();
-  if (d === today) return `Today · ${name.slice(0, 3)} ${num}`;
-  if (d === addDays(today, 1)) return `Tomorrow · ${name.slice(0, 3)} ${num}`;
-  return `${name} ${num}`;
 }
 
 function rangeLabel(from: CalendarDate, to: CalendarDate): string {
@@ -690,312 +678,6 @@ function AddSheet({
             Add
           </Button>
         </form>
-      )}
-    </Sheet>
-  );
-}
-
-/** True when a planned food was set by weight (a fraction of an item) rather than a count. */
-const byWeight = (e: Pick<PlanEntryDto, 'servings' | 'unitGrams'>) => e.unitGrams !== null && Math.abs(e.servings - Math.round(e.servings)) > 0.001;
-
-/** A short amount for the calendar card: "×2", "150g", or nothing for one of something. */
-function shortAmount(e: PlanEntryDto): string {
-  if (e.kind === 'text') return '';
-  if (byWeight(e)) return amountText(e.servings * e.unitGrams!, { displayUnit: e.displayUnit });
-  return e.servings === 1 ? '' : `×${e.servings}`;
-}
-
-/** "2 servings", "1 item", "150g". */
-function amountWords(e: PlanEntryDto): string {
-  if (e.kind === 'text') return '';
-  if (e.kind === 'recipe') return `${e.servings} ${e.servings === 1 ? 'serving' : 'servings'}`;
-  if (byWeight(e)) return amountText(e.servings * e.unitGrams!, { displayUnit: e.displayUnit });
-  const noun = e.kind === 'stock' ? 'portion' : 'item';
-  return `${e.servings} ${noun}${e.servings === 1 ? '' : 's'}`;
-}
-
-/** How much of it: servings for a recipe; items or a weight for food and leftovers. */
-/** A − / + stepper: 1 at a time, or halves below one. */
-const stepUp = (n: number) => n + (n >= 1 ? 1 : 0.5);
-const stepDown = (n: number) => Math.max(0.5, n - (n > 1 ? 1 : 0.5));
-
-/**
- * How much of it: servings for a recipe, items or portions for food and leftovers, saved as you
- * tap − or +. Food can also be set by weight (150g of chicken), typed in and saved with Update.
- */
-function AmountEditor({ entry, onSaved }: { entry: PlanEntryDto; onSaved?: (e: PlanEntryDto) => void }) {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const canWeigh = entry.kind !== 'recipe' && entry.unitGrams !== null;
-  const unit = entry.displayUnit === 'ml' ? 'ml' : 'g';
-  const [mode, setMode] = useState<'items' | 'weight'>(byWeight(entry) ? 'weight' : 'items');
-  const [count, setCount] = useState(entry.servings);
-  const [weight, setWeight] = useState(byWeight(entry) ? String(Math.round(entry.servings * entry.unitGrams!)) : String(Math.round(entry.servings * (entry.unitGrams ?? 0))));
-  const save = async (servings: number, quiet = false) => {
-    try {
-      const updated = await api.patch<PlanEntryDto>(`/api/plan/${entry.id}`, { servings: Math.round(servings * 1000) / 1000 });
-      onSaved?.(updated);
-      await qc.invalidateQueries({ queryKey: ['plan'] });
-      if (!quiet) toast.show('Amount changed.');
-    } catch (e) {
-      setCount(entry.servings);
-      toast.show(errorMessage(e), { tone: 'error' });
-    }
-  };
-  const change = (n: number) => {
-    setCount(n);
-    void save(n, true);
-  };
-  const grams = Number(weight);
-  const weightValid = Number.isFinite(grams) && grams > 0 && entry.unitGrams !== null && grams / entry.unitGrams <= 100;
-  const noun = entry.kind === 'recipe' ? (count === 1 ? 'serving' : 'servings') : entry.kind === 'stock' ? (count === 1 ? 'portion' : 'portions') : count === 1 ? 'item' : 'items';
-  const step = 'inline-flex size-11 items-center justify-center rounded-full border border-line bg-card text-xl disabled:opacity-40 lg:size-8 lg:text-base';
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-card-muted p-3">
-      {mode === 'items' ? (
-        <div className="flex items-center gap-2" role="group" aria-label={entry.kind === 'recipe' ? 'Servings' : 'Amount'}>
-          <button type="button" aria-label="Fewer" disabled={count <= 0.5} onClick={() => change(stepDown(count))} className={step}>
-            −
-          </button>
-          <span className="min-w-24 text-center font-semibold" aria-live="polite">
-            {count} {noun}
-          </span>
-          <button type="button" aria-label="More" disabled={count >= 100} onClick={() => change(stepUp(count))} className={step}>
-            +
-          </button>
-        </div>
-      ) : (
-        <form
-          className="flex items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (weightValid) void save(grams / entry.unitGrams!);
-          }}
-        >
-          <Field label={`Amount (${unit})`}>{(id) => <TextInput id={id} inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} className="w-28" />}</Field>
-          <Button type="submit" disabled={!weightValid}>
-            Update
-          </Button>
-        </form>
-      )}
-      {canWeigh && (
-        <span className="ml-auto">
-          <Segmented
-            label="Measure by"
-            value={mode}
-            onChange={setMode}
-            options={[
-              { value: 'items', label: entry.kind === 'stock' ? 'Portions' : 'Items' },
-              { value: 'weight', label: unit === 'ml' ? 'Volume' : 'Weight' },
-            ]}
-          />
-        </span>
-      )}
-      {canWeigh && mode === 'items' && (
-        <p className="w-full text-xs text-muted">One item is {amountText(entry.unitGrams!, { displayUnit: entry.displayUnit })}. For multipacks, set the size of one item on the product.</p>
-      )}
-    </div>
-  );
-}
-
-function EntrySheet({ entry: initial, viewerId, members, onClose }: { entry: PlanEntryDto; viewerId: string; members: UserDto[]; onClose: () => void }) {
-  const me = useMe();
-  const logFood = useLogFood();
-  const [entry, setEntry] = useState(initial);
-  const isAdmin = me.user.role === 'admin';
-  const qc = useQueryClient();
-  const toast = useToast();
-  const navigate = useNavigate();
-  const [moving, setMoving] = useState(false);
-  const [date, setDate] = useState(entry.date);
-  const [slot, setSlot] = useState<MealSlot>(entry.slot);
-  const dates = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(me.today, i - 1)), [me.today]);
-
-  const run = async (fn: () => Promise<unknown>, message: string) => {
-    try {
-      await fn();
-      await qc.invalidateQueries({ queryKey: ['plan'] });
-      await qc.invalidateQueries({ queryKey: ['stock'] });
-      toast.show(message);
-      onClose();
-    } catch (e) {
-      toast.show(errorMessage(e), { tone: 'error' });
-    }
-  };
-
-  /** Change who has portions, or make it a batch cook; stays open so several icons can be set. */
-  const patch = async (body: { people?: { userId: string; portions: number }[]; batch?: boolean }) => {
-    const before = entry;
-    // Show the change straight away; the server's answer (names, calories) follows.
-    if (body.batch !== undefined) setEntry({ ...entry, batch: body.batch, people: body.batch ? [] : entry.people });
-    try {
-      const updated = await api.patch<PlanEntryDto>(`/api/plan/${entry.id}`, body);
-      setEntry(updated);
-      await qc.invalidateQueries({ queryKey: ['plan'] });
-    } catch (e) {
-      setEntry(before);
-      toast.show(errorMessage(e), { tone: 'error' });
-    }
-  };
-
-  return (
-    <Sheet open onClose={onClose} title={entry.title}>
-      <p className="mb-4 text-muted">
-        {SLOT_LABEL[entry.slot]}
-        {amountWords(entry) ? ` · ${amountWords(entry)}` : ''}
-        {entry.kcalPerServing !== null && !entry.batch ? ` · ${entry.kcalPerServing} kcal a serving` : ''}
-      </p>
-      {!moving && entry.kind !== 'text' && <AmountEditor key={entry.id} entry={entry} onSaved={setEntry} />}
-      {!moving && entry.kind !== 'text' && (
-        <div className="mb-4 flex flex-col gap-2 rounded-lg bg-card-muted p-3">
-          <p className="text-sm font-medium">Who's eating?</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Giving someone a portion of a batch cook makes it an ordinary meal again. */}
-            <PortionPicker
-              entry={entry}
-              viewerId={viewerId}
-              meId={me.user.id}
-              isAdmin={isAdmin}
-              members={members}
-              onChange={(people) => void patch(entry.batch ? { batch: false, people } : { people })}
-            />
-            {entry.kind === 'recipe' && entry.status === 'planned' && (
-              <Button
-                size="sm"
-                variant={entry.batch ? 'dark' : 'outline'}
-                aria-pressed={entry.batch}
-                title="Frees every portion: made for the freezer, so it counts towards nobody's calories"
-                className="ml-auto"
-                onClick={() => void patch({ batch: !entry.batch })}
-              >
-                Batch cook
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-      {moving ? (
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Day">
-              {(id) => (
-                <Select id={id} value={date} onChange={(e) => setDate(e.target.value)}>
-                  {dates.map((d) => (
-                    <option key={d} value={d}>
-                      {dayLabel(d, me.today, true)}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Field label="Meal">
-              {(id) => (
-                <Select id={id} value={slot} onChange={(e) => setSlot(e.target.value as MealSlot)}>
-                  {MEAL_SLOTS.map((s) => (
-                    <option key={s} value={s}>
-                      {SLOT_LABEL[s]}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          </div>
-          <Button
-            variant="primary"
-            onClick={() =>
-              void run(
-                () =>
-                  api.patch(`/api/plan/${entry.id}`, {
-                    date,
-                    slot,
-                    status: 'planned',
-                  }),
-                'Moved.',
-              )
-            }
-          >
-            Move it
-          </Button>
-        </div>
-      ) : (
-        <>
-        {entry.swaps.length > 0 && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-            <Icon name="move" className="size-4 text-muted" />
-            <span className="flex-1">
-              Swapped: {entry.swaps.map((x) => `${x.to} for ${x.from.toLowerCase()}`).join(', ')}.
-            </span>
-            {entry.status !== 'cooked' && (
-              <Button size="sm" variant="ghost" onClick={() => void run(() => api.patch(`/api/plan/${entry.id}`, { swaps: null }), 'Back to the recipe as written.')}>
-                Undo swaps
-              </Button>
-            )}
-          </div>
-        )}
-        {!entry.batch && entry.people.length > 0 && (
-          <div className="mb-3">
-            <p className="mb-1.5 text-sm font-medium">Who's eaten?</p>
-            <div className="flex flex-wrap gap-1.5">
-              {entry.people.map((p) => (
-                <button
-                  key={p.userId}
-                  type="button"
-                  aria-pressed={p.eaten}
-                  onClick={() => {
-                    onClose();
-                    void (p.eaten ? logFood.untickEaten(entry, p.userId) : logFood.tickEaten(entry, p.userId));
-                  }}
-                  className={`inline-flex min-h-10 items-center gap-1 rounded-full border px-3 text-sm font-medium lg:min-h-7 ${p.eaten ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-ink hover:bg-card-muted'}`}
-                >
-                  <Icon name={p.eaten ? 'check' : 'plus'} className="size-3.5" />
-                  {p.userId === me.user.id ? 'You' : p.name}
-                  <span className="sr-only">{p.eaten ? ': eaten (tap to untick)' : ': not yet (tap to tick)'}</span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-1 text-xs text-muted">Tick anyone who's had theirs. Calories count once they're ticked.</p>
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          {entry.kind === 'recipe' && entry.recipeId && entry.status !== 'cooked' && (
-            <Button variant="primary" size="lg" onClick={() => navigate(`/recipes/${entry.recipeId}/cook?servings=${entry.servings}&entry=${entry.id}${entry.batch ? '&batch=1' : ''}`)}>
-              Cooked it
-            </Button>
-          )}
-          {entry.kind !== 'recipe' && !entry.batch && !entry.people.find((p) => p.userId === me.user.id)?.eaten && (
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => {
-                onClose();
-                void logFood.tickEaten(entry, me.user.id);
-              }}
-            >
-              I've eaten mine
-            </Button>
-          )}
-          {entry.status === 'planned' ? (
-            <Button size="lg" onClick={() => void run(() => api.patch(`/api/plan/${entry.id}`, { status: 'skipped' }), 'Skipped.')}>
-              Skip
-            </Button>
-          ) : (
-            <Button size="lg" onClick={() => void run(() => api.patch(`/api/plan/${entry.id}`, { status: 'planned' }), 'Back on the plan.')}>
-              Not done yet
-            </Button>
-          )}
-          <Button size="lg" onClick={() => setMoving(true)}>
-            Move
-          </Button>
-          <Button size="lg" variant="danger" onClick={() => void run(() => api.del(`/api/plan/${entry.id}`), 'Removed.')}>
-            Remove
-          </Button>
-          {entry.recipeId && (
-            <Link to={`/recipes/${entry.recipeId}`} className="col-span-2 inline-flex min-h-11 items-center justify-center font-semibold text-accent-text">
-              Open the recipe
-            </Link>
-          )}
-        </div>
-        </>
       )}
     </Sheet>
   );

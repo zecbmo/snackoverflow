@@ -127,6 +127,13 @@
       "when": 1794753858596,
       "tag": "0017_off_products",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794763573428,
+      "tag": "0018_from_stock",
+      "breakpoints": true
     }
   ]
 }

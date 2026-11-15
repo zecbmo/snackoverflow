@@ -489,6 +489,13 @@ export const mealPlanEntries = pgTable(
     nutrition: jsonb('nutrition').$type<Nutrition>(),
     /** A batch cook: made for the freezer, eaten by nobody now, so no one gets its calories. */
     batch: boolean('batch').notNull().default(false),
+    /**
+     * For food and leftovers: whether eating it takes it out of stock. Null until it's first
+     * eaten; the line then keeps stock in step with its amount (stock events link back to it).
+     */
+    fromStock: boolean('from_stock'),
+    /** A cooked recipe: servings kept as leftovers rather than eaten, so they show as kept, not free. */
+    keptServings: doublePrecision('kept_servings').notNull().default(0),
     status: planStatusEnum('status').notNull().default('planned'),
     /** How it got here: planned ahead, or logged by scanning in Eat mode. */
     source: text('source').notNull().default('plan'),

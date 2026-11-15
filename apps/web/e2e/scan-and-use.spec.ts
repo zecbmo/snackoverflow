@@ -38,8 +38,11 @@ test('scan in, use and undo', async ({ page }, info) => {
 
   // Use it all straight from the row, then undo.
   await page.getByRole('button', { name: `Use ${milk}`, exact: true }).click();
-  await page.getByRole('button', { name: 'Used it all' }).click();
-  await expect(page.getByText(`Used up the ${milk}.`)).toBeVisible();
+  const use = page.getByRole('dialog', { name: `Use ${milk}` });
+  await use.getByRole('group', { name: 'Quick amounts' }).getByRole('button', { name: /^All / }).click();
+  await expect(use).toContainText("That's the last of it.");
+  await use.getByRole('button', { name: /^Just use / }).click();
+  await expect(page.getByText(`Used the last of the ${milk}.`)).toBeVisible();
   await expect(row(milk)).toHaveCount(0);
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(row(milk)).toBeVisible();

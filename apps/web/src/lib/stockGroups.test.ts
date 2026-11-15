@@ -30,6 +30,7 @@ const base: StockItemDto = {
   isMeal: false,
   actions: { open: null, freeze: null, defrost: "It isn't frozen.", freezeWarning: null },
   foodGroup: null,
+  kcalPer100g: null,
 };
 
 describe('groupStock', () => {

@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { productInput, scanInput, useAmountInput } from './schemas';
-import { amountStepper, applyStillSome, applyUse, itemsText, mergePacks, oneItem, orderForUse, quickAmounts, shouldAskOpened, stepAmount, stepperGrams } from './stock';
+import {
+  amountStepper,
+  applyStillSome,
+  applyUse,
+  isStarted,
+  itemOf,
+  itemsText,
+  mergePacks,
+  oneItem,
+  orderForUse,
+  quickAmounts,
+  readyToEat,
+  shouldAskOpened,
+  stepAmount,
+  stepperGrams,
+  outcomeOfUse,
+  stepForUse,
+} from './stock';
 
 const fullPack = { fractionLeft: 1, initialGrams: 400, remainingGrams: 400 };
 
@@ -246,3 +263,89 @@ describe('quickAmounts', () => {
   });
 });
 
+
+describe('using a row: the open pack first', () => {
+  const pack = (id: string, bestBefore: string, more: Partial<{ state: 'closed' | 'opened' | 'frozen' | 'defrosted'; fractionLeft: number }> = {}) => ({
+    id,
+    bestBefore,
+    addedAt: '2026-11-01T10:00:00Z',
+    state: 'closed' as const,
+    fractionLeft: 1,
+    ...more,
+  });
+
+  it('takes a started pack before a full one with an earlier date', () => {
+    const order = orderForUse([pack('early', '2026-11-14'), pack('part-used', '2026-11-20', { fractionLeft: 0.5 }), pack('opened', '2026-11-18', { state: 'opened' })]);
+    expect(order.map((p) => p.id)).toEqual(['opened', 'part-used', 'early']);
+  });
+
+  it("doesn't count a part-used frozen pack as open", () => {
+    expect(isStarted({ state: 'frozen', fractionLeft: 0.5 })).toBe(false);
+    expect(isStarted({ state: 'defrosted', fractionLeft: 1 })).toBe(true);
+  });
+
+  it('takes grams off exactly, whatever the fraction rounds to', () => {
+    const r = applyUse({ fractionLeft: 1, initialGrams: 415, remainingGrams: 415 }, { kind: 'grams', grams: 100 });
+    expect(r.usedGrams).toBe(100);
+    expect(r.after.remainingGrams).toBe(315);
+  });
+});
+
+describe('outcomeOfUse: what a use will do, said before it happens', () => {
+  const open = { remainingGrams: 550, state: 'opened' as const, fractionLeft: 0.55 };
+  const full = { remainingGrams: 1000, state: 'closed' as const, fractionLeft: 1 };
+  const row = [open, full, full];
+
+  it('leaves some in the open pack', () => {
+    expect(outcomeOfUse(row, 250)).toMatchObject({ kind: 'within', started: true, packLeft: 300, left: 2300, packsLeft: 3 });
+  });
+
+  it('finishes the open pack exactly', () => {
+    expect(outcomeOfUse(row, 550)).toMatchObject({ kind: 'finishes', left: 2000, packsLeft: 2 });
+  });
+
+  it('spills into the next pack, and the one after', () => {
+    expect(outcomeOfUse(row, 600)).toMatchObject({ kind: 'spills', fromNext: 50, left: 1950, packsLeft: 2 });
+    expect(outcomeOfUse(row, 1600)).toMatchObject({ kind: 'spills', fromNext: 1050, left: 950, packsLeft: 1 });
+  });
+
+  it('is the last of it', () => {
+    expect(outcomeOfUse(row, 2550)).toMatchObject({ kind: 'last', left: 0, packsLeft: 0 });
+    expect(outcomeOfUse([open], 9999)).toMatchObject({ kind: 'last' });
+  });
+
+  it('says when it opens a new pack', () => {
+    expect(outcomeOfUse([full, full], 100)).toMatchObject({ kind: 'within', started: false, packLeft: 900 });
+  });
+
+  it('has nothing to say without an amount or a known size', () => {
+    expect(outcomeOfUse(row, 0)).toBeNull();
+    expect(outcomeOfUse([{ remainingGrams: null, state: 'closed', fractionLeft: 1 }], 100)).toBeNull();
+  });
+});
+
+describe('the Use sheet', () => {
+  const base = { displayUnit: 'g' as const, gramsPerCount: null, countUnit: null, densityGPerMl: null, isMeal: false, itemGrams: null, remainingGrams: 800, initialGrams: 800 };
+
+  it('uses a loaf by the slice, but chicken by weight', () => {
+    expect(itemOf({ ...base, countUnit: 'slice', gramsPerCount: 40 })).toEqual({ grams: 40, name: 'slice' });
+    expect(itemOf({ ...base, countUnit: 'thigh', gramsPerCount: 100 })).toBeNull();
+    expect(itemsText({ ...base, countUnit: 'slice', gramsPerCount: 40 }, 800)).toBe('20 slices');
+  });
+
+  it('steps by an item, half a portion, or an amount that suits the pack', () => {
+    expect(stepForUse({ ...base, countUnit: 'slice', gramsPerCount: 40 })).toBe(1);
+    expect(stepForUse({ ...base, isMeal: true, gramsPerCount: 400 })).toBe(0.5);
+    expect(stepForUse({ ...base, initialGrams: 1000 })).toBe(50);
+    expect(stepForUse({ ...base, initialGrams: 150 })).toBe(10);
+    expect(stepForUse({ ...base, displayUnit: 'ml', densityGPerMl: 1.03, initialGrams: 2338 })).toBe(100);
+  });
+
+  it('puts "I ate it" first for food eaten as it is', () => {
+    expect(readyToEat({ isMeal: true, ingredientId: null, foodGroup: null })).toBe(true);
+    expect(readyToEat({ isMeal: false, ingredientId: null, foodGroup: 'Snacks' })).toBe(true);
+    expect(readyToEat({ isMeal: false, ingredientId: 'banana', foodGroup: 'Fruit' })).toBe(true);
+    expect(readyToEat({ isMeal: false, ingredientId: 'chicken', foodGroup: 'Meat' })).toBe(false);
+    expect(readyToEat({ isMeal: false, ingredientId: 'flour', foodGroup: 'Grains & Cereals' })).toBe(false);
+  });
+});

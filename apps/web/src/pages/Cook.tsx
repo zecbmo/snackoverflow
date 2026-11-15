@@ -1,10 +1,11 @@
 /**
  * Cook a recipe (or batch cook it): check what comes out of stock, earliest
  * best-before first; keep leftovers (in halves, up to what was cooked, cut into smaller
- * portions if you like); when it wasn't planned, put what was eaten on the calendar;
- * then answer "Is it opened now?" for packs used in part. The whole cook can be undone.
+ * portions if you like), starting at the servings nobody on the planned meal is having, and
+ * say who's eating now so it's logged to their day; when it wasn't planned, put what was eaten
+ * on the calendar. Packs used in part are opened without asking. The whole cook can be undone.
  */
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { amountText, type CookPlanDto, type CookResultDto, formatAmount, MEAL_SLOTS, type MealSlot, type PlanEntryDto, slotForTime, type StockItemDto } from '@snackoverflow/shared';
@@ -77,7 +78,10 @@ export function CookPage() {
   const [slot, setSlot] = useState<MealSlot>(() => slotForTime(new Date().getHours()));
   const [planned, setPlanned] = useState<string | null>(null);
   const [result, setResult] = useState<CookResultDto | null>(null);
-  const [opened, setOpened] = useState<Set<string>>(new Set());
+  // The planned meal being cooked: who has portions, so leftovers can start at what's spare.
+  const entry = useQuery({ queryKey: ['plan', 'entry', entryId], queryFn: () => api.get<PlanEntryDto>(`/api/plan/${entryId}`), enabled: Boolean(entryId) }).data;
+  // People on the meal who aren't eating it now after all (everyone is, to start with).
+  const [notEating, setNotEating] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -85,7 +89,7 @@ export function CookPage() {
   }, [plan.data, lines]);
 
   useEffect(() => {
-    if (!plan.data || groups.length || !locations.length) return;
+    if (!plan.data || groups.length || !locations.length || (entryId && !entry)) return;
     const fridge = locations.find((l) => l.type === 'fridge') ?? locations[0]!;
     const freezer = locations.find((l) => l.type === 'freezer');
     const total = Math.round(plan.data.servings);
@@ -96,9 +100,11 @@ export function CookPage() {
         ...(total - inFridge > 0 ? [{ locationId: freezer.id, portions: total - inFridge }] : []),
       ]);
     } else {
-      setGroups([{ locationId: fridge.id, portions: 0 }]);
+      // Planned for three with two people eating: one serving is spare, so start by keeping it.
+      const spare = entry && !entry.batch && entry.people.length ? plan.data.servings - entry.people.reduce((n, p) => n + p.portions, 0) : 0;
+      setGroups([{ locationId: fridge.id, portions: Math.max(0, Math.floor(spare * 2 + 0.001) / 2) }]);
     }
-  }, [plan.data, locations, batch, groups.length]);
+  }, [plan.data, locations, batch, groups.length, entryId, entry]);
 
   if (plan.isPending || !lines) return <Spinner />;
   if (plan.error || !plan.data) return <ErrorNote error={plan.error ?? 'Not found'} />;
@@ -113,6 +119,7 @@ export function CookPage() {
       const r = await api.post<CookResultDto>(`/api/recipes/${id}/cook`, {
         servings: p.servings,
         ...(entryId ? { mealPlanEntryId: entryId } : {}),
+        ...(eatingNow ? { eaters: eatingNow.filter((p) => !notEating.has(p.userId)).map((p) => p.userId) } : {}),
         lines: lines
           .filter((l) => !l.skipped)
           .map((l) => ({
@@ -129,7 +136,6 @@ export function CookPage() {
         split,
       });
       setResult(r);
-      setOpened(new Set(r.askOpened.map((i) => i.id)));
       await qc.invalidateQueries({ queryKey: ['stock'] });
       await qc.invalidateQueries({ queryKey: ['plan'] });
       // Cooked without a plan and not all of it kept: offer to put what was eaten on the calendar.
@@ -162,7 +168,6 @@ export function CookPage() {
   const finish = async () => {
     setBusy(true);
     try {
-      for (const sid of opened) await api.post(`/api/stock/${sid}/open`, {});
       await qc.invalidateQueries({ queryKey: ['stock'] });
       toast.show(allKept ? 'Batch cooked. Portions are in stock.' : 'Enjoy!', {
         action: result
@@ -194,6 +199,9 @@ export function CookPage() {
   const room = p.servings - portions;
   const pieces = portions * split;
   const kcalEach = recipe?.kcalPerServing ? Math.round(recipe.kcalPerServing / split) : null;
+  // The people on the planned meal: they're eating it now, and it's logged to their day.
+  const eatingNow = entry && !entry.batch && !batch && entry.people.length ? entry.people : null;
+  const spareNote = eatingNow && p.servings - eatingNow.reduce((n, x) => n + x.portions, 0) >= 0.5;
 
   return (
     <>
@@ -286,6 +294,7 @@ export function CookPage() {
                   ? 'Each place gets its own best-before.'
                   : 'Leftovers keep for 2 days in the fridge (rice dishes 1 day), or freeze them.'}{' '}
                 You cooked {formatAmount(p.servings)}, so you can keep up to {formatAmount(p.servings)}.
+                {spareNote ? ` ${eatingNow.length === 1 ? 'One person is' : `${eatingNow.length} people are`} eating, so we've started with what's spare.` : ''}
               </p>
               {groups.map((g, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -343,6 +352,39 @@ export function CookPage() {
                 </div>
               )}
             </Card>
+            {eatingNow && !allKept && (
+              <Card className="flex flex-col gap-2 p-5">
+                <h2 className="text-xl font-bold">Who's eating now?</h2>
+                <p className="text-muted">
+                  It's logged to their {SLOT_LABEL[entry!.slot].toLowerCase()}
+                  {entry!.date === me.today ? ' today' : ''}
+                  {recipe?.kcalPerServing ? `, about ${recipe.kcalPerServing} kcal a serving` : ''}. Untick anyone who isn't having theirs yet.
+                </p>
+                <div className="flex flex-wrap gap-x-5 gap-y-1">
+                  {eatingNow.map((x) => (
+                    <label key={x.userId} className="flex min-h-11 items-center gap-2 lg:min-h-8">
+                      <input
+                        type="checkbox"
+                        className="size-5 accent-[var(--accent)]"
+                        checked={!notEating.has(x.userId)}
+                        onChange={(e) =>
+                          setNotEating((s) => {
+                            const n = new Set(s);
+                            if (e.target.checked) n.delete(x.userId);
+                            else n.add(x.userId);
+                            return n;
+                          })
+                        }
+                      />
+                      <span>
+                        {x.userId === me.user.id ? 'You' : x.name}
+                        {x.portions !== 1 && <span className="text-muted"> · {formatAmount(x.portions)} servings</span>}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </Card>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Button size="lg" onClick={() => setStep('take')}>
                 Back
@@ -395,30 +437,12 @@ export function CookPage() {
 
         {step === 'after' && result && (
           <>
-            {result.askOpened.length > 0 && (
-              <Card className="flex flex-col gap-2 p-5">
-                <h2 className="text-xl font-bold">Are these opened now?</h2>
-                <p className="text-muted">Opened food goes off sooner, so we'll update the dates.</p>
-                {result.askOpened.map((i: StockItemDto) => (
-                  <label key={i.id} className="flex min-h-12 items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="size-5 accent-[var(--accent)]"
-                      checked={opened.has(i.id)}
-                      onChange={(e) =>
-                        setOpened((s) => {
-                          const n = new Set(s);
-                          if (e.target.checked) n.add(i.id);
-                          else n.delete(i.id);
-                          return n;
-                        })
-                      }
-                    />
-                    <span>
-                      {i.productName} <span className="text-muted">· {i.locationName}</span>
-                    </span>
-                  </label>
-                ))}
+            {result.opened.length > 0 && (
+              <Card className="p-5">
+                <p>
+                  Open now, so {result.opened.length === 1 ? 'its date' : 'their dates'} may be sooner:{' '}
+                  {result.opened.map((i: StockItemDto) => `${i.productName} (best before ${dateLabel(i.bestBefore, me.today).toLowerCase()})`).join(', ')}.
+                </p>
               </Card>
             )}
             {result.askStillSome.length > 0 && (

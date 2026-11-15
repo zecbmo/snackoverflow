@@ -10,6 +10,8 @@ const food = (title: string, source: FoodResultDto['source'] = 'product'): FoodR
   kcalPerServing: 100,
   servingLabel: '1 pack',
   unitGrams: null,
+  eatBy: null,
+  ingredientId: null,
   displayUnit: 'g',
   countUnit: null,
   inStock: null,

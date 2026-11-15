@@ -253,8 +253,8 @@ function PackStepper({
   const big = s.steps[1];
   const small = s.steps[0]!;
   const stepBtn = 'min-w-11 px-2 tabular-nums lg:min-w-9';
-  // Grams and ml in whole numbers; items and portions in halves.
-  const precision = s.unit === 'g' || s.unit === 'ml' ? 1 : 0.5;
+  // Grams, ml and counted food in whole numbers; portions in halves.
+  const precision = s.unit === 'portion' ? 0.5 : 1;
   const over = s.packSize !== null && value !== null && value > s.packSize;
   const name = label ?? `Amount of ${pack.productName}`;
 
