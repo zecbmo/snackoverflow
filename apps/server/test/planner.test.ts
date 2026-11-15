@@ -15,6 +15,7 @@ import type {
   RunningLowDto,
   ScanAddResult,
   SessionDto,
+  StapleDto,
   ShoppingItemDto,
   StockChangeDto,
   StockItemDto,
@@ -250,6 +251,31 @@ describe('shopping list', () => {
     const stock = await api.get<StockItemDto[]>('/api/stock');
     expect(stock).toHaveLength(2);
     expect(stock.every((s) => s.productName === 'Semi Skimmed Milk' && s.locationType === 'fridge')).toBe(true);
+  });
+
+  it('puts a staple on the list by itself when stock drops below its level', async () => {
+    const milk = await api.post<ProductDto>('/api/products', { name: 'Semi skimmed milk', ingredientId: ing.milk!.id, packAmount: 1000, packUnit: 'ml' });
+    await api.post('/api/stock', { productId: milk.id, locationId: loc.fridge.id });
+    const [pack] = await api.get<StockItemDto[]>('/api/stock');
+    // Made a staple from the product: it's kept by the food, so any milk counts, in ml.
+    const [staple] = await api.put<StapleDto[]>('/api/staples', { productId: milk.id, min: 500 });
+    expect(staple).toMatchObject({ name: ing.milk!.name, ingredientId: ing.milk!.id, productId: null, unit: 'ml', min: 500, have: 1000, low: false, onList: false });
+    expect(await api.get<ShoppingItemDto[]>('/api/shopping')).toEqual([]);
+    // Most of it gets used: below the level, so it's on the list next time the list is read.
+    await api.post(`/api/stock/${pack!.id}/use`, { amount: { kind: 'fraction', fraction: 0.75 } });
+    const list = await api.get<ShoppingItemDto[]>('/api/shopping');
+    expect(list.map((i) => [i.text, i.reason])).toEqual([[ing.milk!.name, 'running-low']]);
+    expect((await api.get<StapleDto[]>('/api/staples'))[0]).toMatchObject({ have: 250, low: true, onList: true });
+    // It isn't added twice, even once ticked (bought, not put away yet).
+    await api.patch(`/api/shopping/${list[0]!.id}`, { checked: true });
+    expect(await api.get<ShoppingItemDto[]>('/api/shopping')).toHaveLength(1);
+    // Raising the level of something well stocked puts it straight on the list; removing the staple stops it.
+    const crisps = await api.post<ProductDto>('/api/products', { name: 'Pringles Original', packAmount: 165, packUnit: 'g' });
+    await api.post('/api/stock', { productId: crisps.id, locationId: loc.cupboard.id });
+    const both = await api.put<StapleDto[]>('/api/staples', { productId: crisps.id, min: 2 });
+    expect(both[1]).toMatchObject({ name: 'Pringles Original', unit: 'pack', min: 2, have: 1, low: true, onList: true });
+    await api.del(`/api/staples/${both[1]!.id}`);
+    expect(await api.get<StapleDto[]>('/api/staples')).toHaveLength(1);
   });
 
   it('spots staples running low from how fast they get used', async () => {

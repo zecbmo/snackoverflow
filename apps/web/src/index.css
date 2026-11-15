@@ -240,3 +240,17 @@ html.native-scanning #root,
 html.native-scanning .bg-scan {
   background: transparent !important;
 }
+
+/*
+ * Scanning from a sheet (Log food): the page behind is hidden and the dimming goes, so the
+ * camera shows above the sheet, which sits at the bottom of the screen.
+ */
+html.native-scan-sheet #root {
+  visibility: hidden;
+}
+html.native-scan-sheet dialog[open] {
+  visibility: visible;
+}
+html.native-scan-sheet dialog::backdrop {
+  background: transparent !important;
+}

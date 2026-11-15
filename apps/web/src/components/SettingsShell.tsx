@@ -19,6 +19,7 @@ export function SettingsShell({ children }: { children: ReactNode }) {
     { to: '/ingredients', label: 'Ingredients & units', icon: 'leaf' },
     { to: '/unmatched', label: 'Unmatched ingredients', icon: 'recipe', badge: unmatched ? `${unmatched} to fix` : undefined },
     { to: '/swap-groups', label: 'Swap groups', icon: 'move' },
+    { to: '/staples', label: 'Shopping staples', icon: 'cart' },
     // Each chain's menu has its own page under /takeaways.
     { to: '/takeaways', label: 'Fast food & takeaways', icon: 'burger', end: false },
     { to: '/locations', label: 'Locations', icon: 'pin' },

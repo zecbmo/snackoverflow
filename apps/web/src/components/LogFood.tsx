@@ -8,6 +8,7 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import {
   amountText,
@@ -26,6 +27,7 @@ import {
 import { api, errorMessage, isOffline } from '../lib/api';
 import { rememberFoods, searchRemembered } from '../lib/foodCache';
 import { enqueueScan } from '../lib/offlineQueue';
+import { isNative } from '../lib/platform';
 import { usePlan, useUsers } from '../lib/queries';
 import { beep, useBarcodeScanner } from '../scanner/useBarcodeScanner';
 import { Icon, type IconName } from './Icon';
@@ -377,7 +379,7 @@ function SearchStage({
           onClick={onScan}
           aria-label="Scan a barcode"
           title="Scan a barcode"
-          className="absolute right-1 top-1/2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-md text-accent-text hover:bg-card-muted lg:size-7"
+          className="absolute right-1 top-1/2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-md bg-accent text-accent-ink hover:brightness-110 lg:right-0.5 lg:size-7"
         >
           <Icon name="scan" className="size-5 lg:size-[18px]" />
         </button>
@@ -546,6 +548,17 @@ function ResultRow({ food, onClick, busy = false }: { food: FoodResultDto; onCli
   );
 }
 
+/** The four corners that say where to hold the barcode. */
+function ScanFrame({ className }: { className: string }) {
+  return (
+    <span aria-hidden className={className}>
+      {(['left-0 top-0 border-l-4 border-t-4 rounded-tl-2xl', 'right-0 top-0 border-r-4 border-t-4 rounded-tr-2xl', 'bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl', 'bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl'] as const).map((c) => (
+        <span key={c} className={`absolute size-9 border-white ${c}`} />
+      ))}
+    </span>
+  );
+}
+
 /** The camera (or a typed barcode). Known barcodes go straight to "How much?"; new ones ask what they are. */
 function ScanStage({ onBack, onFood, onUnknown }: { onBack: () => void; onFood: (f: FoodResultDto) => void; onUnknown: (productId: string) => void }) {
   const toast = useToast();
@@ -570,19 +583,32 @@ function ScanStage({ onBack, onFood, onUnknown }: { onBack: () => void; onFood: 
     beep();
     void look(code);
   }, !busy);
+  // The Android app's camera is a native view behind the whole page, so there's no picture to put in a box
+  // here: the page behind is hidden while scanning and the camera shows above this sheet (see index.css).
+  const native = isNative();
+  useEffect(() => {
+    if (!native) return;
+    document.documentElement.classList.add('native-scan-sheet');
+    return () => document.documentElement.classList.remove('native-scan-sheet');
+  }, [native]);
   return (
     <div className="flex flex-col gap-3">
       <BackLink onClick={onBack} />
-      <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-black">
-        <video ref={videoRef} muted playsInline className="size-full object-cover" />
-        <p className="absolute inset-x-0 bottom-0 bg-black/50 px-3 py-2 text-center text-sm text-white">
+      <div className={native ? 'rounded-lg bg-card-muted' : 'relative aspect-[4/3] overflow-hidden rounded-lg bg-black'}>
+        {!native && <video ref={videoRef} muted playsInline className="size-full object-cover" />}
+        {/* Where to hold the barcode: over the picture here, or over the camera above the sheet in the Android app. */}
+        {!native && <ScanFrame className="pointer-events-none absolute inset-x-[12%] bottom-[22%] top-[12%]" />}
+        {native && createPortal(<ScanFrame className="pointer-events-none fixed inset-x-[10%] top-[14%] z-10 aspect-[3/2]" />, document.body)}
+        <p className={native ? 'px-3 py-2 text-center text-sm' : 'absolute inset-x-0 bottom-0 bg-black/50 px-3 py-2 text-center text-sm text-white'}>
           {busy
             ? 'Looking it up…'
             : status === 'denied'
               ? 'The camera is blocked. Type the barcode below.'
               : status === 'unavailable' || status === 'error'
                 ? "There's no camera here. Type the barcode below."
-                : 'Point the camera at the barcode.'}
+                : native
+                  ? 'Point the camera at the barcode: the picture is above.'
+                  : 'Point the camera at the barcode.'}
         </p>
       </div>
       <form

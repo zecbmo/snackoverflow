@@ -8,6 +8,7 @@ import { and, desc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
 import {
   amountText,
   itemOf,
+  tidyCapitals,
   type BarcodeFoodDto,
   type CalendarDate,
   type FoodResultDto,
@@ -103,12 +104,17 @@ const blank = { favourite: false, usualServings: null } as const;
 
 /**
  * How food in the kitchen is eaten when that isn't a pack at a time: by the item or the slice
- * (bananas, a loaf), else by weight from 100g (chicken, rice). Snacks and multipacks keep their pack or item.
+ * (bananas, a loaf), else by weight from 100g (chicken, rice). A product with a serving size on
+ * its label is eaten by the serving. Other snacks and multipacks keep their pack or item.
  */
 function eatBy(p: ProductRow, first: StockItemDto | undefined): FoodResultDto['eatBy'] {
-  if (!first || !p.ingredientId || !p.packGrams || p.portionGrams || p.recipeId) return null;
   const per100 = p.nutritionPer100g?.kcal;
   const kcal = (grams: number) => (per100 == null ? null : Math.round((per100 * grams) / 100));
+  // The label's own serving ("30g" of a 165g tube), in stock or not.
+  if (p.servingGrams && !p.portionGrams && !p.recipeId) {
+    return { grams: p.servingGrams, unit: 'serving', label: `1 serving (${amountText(p.servingGrams, { displayUnit: p.displayUnit })})`, kcal: kcal(p.servingGrams) };
+  }
+  if (!first || !p.ingredientId || !p.packGrams || p.portionGrams || p.recipeId) return null;
   const one = itemOf(first);
   if (one) return { grams: one.grams, unit: one.name, label: `1 ${one.name} (${Math.round(one.grams)}g)`, kcal: kcal(one.grams) };
   const ml = first.displayUnit === 'ml';
@@ -587,13 +593,14 @@ async function offResults(ctx: AppContext, auth: Auth, products: OffProduct[]): 
     const pack = packFields(qty?.amount, qty?.unit, ctx.seed.units, {});
     const grams = pack.packGrams ?? 100;
     const per100 = p.nutritionPer100g?.kcal;
+    const serving = p.servingGrams && p.servingGrams < grams * 0.95 ? p.servingGrams : null;
     results.push({
-      eatBy: null,
+      eatBy: serving ? { grams: serving, unit: 'serving', label: `1 serving (${Math.round(serving * 10) / 10}${pack.displayUnit === 'ml' ? 'ml' : 'g'})`, kcal: per100 == null ? null : Math.round((per100 * serving) / 100) } : null,
       ingredientId: null,
       source: 'off',
       id: p.barcode,
-      title: p.name,
-      subtitle: [p.brand, p.quantity].filter(Boolean).join(' · ') || 'Open Food Facts',
+      title: tidyCapitals(p.name),
+      subtitle: [p.brand && tidyCapitals(p.brand), p.quantity].filter(Boolean).join(' · ') || 'Open Food Facts',
       kcalPerServing: per100 == null ? null : Math.round((per100 * grams) / 100),
       servingLabel: pack.packGrams ? `1 pack (${p.quantity})` : '100g',
       unitGrams: grams,

@@ -145,6 +145,7 @@ export function productDto(p: ProductRow, codes: string[], catalog: Catalog, pri
     source: p.source,
     pricePence,
     portionGrams: p.portionGrams,
+    servingGrams: p.servingGrams,
     foodGroup: p.foodGroup ?? (p.ingredientId ? (catalog.ingredients.get(p.ingredientId)?.foodGroup ?? null) : null),
     ownFoodGroup: p.foodGroup,
     offSharedAt: p.offSharedAt ? p.offSharedAt.toISOString() : null,

@@ -83,8 +83,10 @@ test('choose stock columns, and add an item to the shopping list from its panel'
 
   await page.getByRole('button', { name: /^Greek Yogurt, / }).first().click();
   const panel = page.getByRole('dialog', { name: 'Greek Yogurt' });
-  await panel.getByRole('button', { name: 'Add to shopping list' }).click();
+  await panel.getByRole('button', { name: 'Add Greek Yogurt to the shopping list' }).click();
   await expect(page.getByText('Added Greek Yogurt to the shopping list.')).toBeVisible();
+  // Once it's on the list there's nothing to add: the button says so and is switched off.
+  await expect(panel.getByRole('button', { name: 'Greek Yogurt is on the shopping list' })).toBeDisabled();
   const list = await (await page.request.get('/api/shopping')).json();
   expect(list.some((i: { text: string }) => /Greek Yogurt/i.test(i.text))).toBe(true);
 });

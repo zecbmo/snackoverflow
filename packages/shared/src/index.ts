@@ -15,3 +15,4 @@ export * from './foodGroups';
 export * from './chains';
 export * from './search';
 export * from './nutrition';
+export * from './productNames';

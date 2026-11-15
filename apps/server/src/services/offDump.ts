@@ -11,7 +11,7 @@ import { Readable } from 'node:stream';
 import { createGunzip } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import type { Nutrition, OffDumpStatusDto } from '@snackoverflow/shared';
+import { type Nutrition, type OffDumpStatusDto, parseServingGrams } from '@snackoverflow/shared';
 import type { AppContext } from '../context';
 import type { Db } from '../db/client';
 import { offImports, offProducts } from '../db/schema';
@@ -93,6 +93,7 @@ export function parseDumpLine(line: string, cols: Columns, country: string | nul
     name: name.slice(0, 300),
     brand: brand?.slice(0, 200) ?? null,
     quantity: quantity?.slice(0, 100) ?? null,
+    servingGrams: parseServingGrams(get('serving_size'), num(get('serving_quantity'))),
     categories,
     imageUrl: get('image_small_url')?.trim() || null,
     nutritionPer100g: nutrition,
@@ -114,6 +115,7 @@ async function saveBatch(db: Db, rows: Row[]) {
         name: sql`excluded.name`,
         brand: sql`excluded.brand`,
         quantity: sql`excluded.quantity`,
+        servingGrams: sql`excluded.serving_grams`,
         categories: sql`excluded.categories`,
         imageUrl: sql`excluded.image_url`,
         nutritionPer100g: sql`excluded.nutrition_per_100g`,
@@ -258,7 +260,7 @@ export async function offDumpStatus(ctx: AppContext): Promise<OffDumpStatusDto> 
 }
 
 function toOff(r: typeof offProducts.$inferSelect): OffProduct {
-  return { barcode: r.barcode, name: r.name, brand: r.brand, quantity: r.quantity, imageUrl: r.imageUrl, categories: r.categories, nutritionPer100g: r.nutritionPer100g };
+  return { barcode: r.barcode, name: r.name, brand: r.brand, quantity: r.quantity, servingGrams: r.servingGrams, imageUrl: r.imageUrl, categories: r.categories, nutritionPer100g: r.nutritionPer100g };
 }
 
 /** A barcode from the local copy (no network). */

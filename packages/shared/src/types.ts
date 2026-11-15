@@ -134,6 +134,8 @@ export interface ProductDto {
   pricePence: number | null;
   /** One item of a multipack, in grams (null: an item is the whole pack). */
   portionGrams: number | null;
+  /** One serving as the label gives it (30g of a tube of crisps), from Open Food Facts; Log food starts there. */
+  servingGrams: number | null;
   /** Category: the product's own, else its ingredient's. */
   foodGroup: string | null;
   /** The product's own category, when set (for editing). */
@@ -684,6 +686,27 @@ export interface EarmarkDto {
   ingredientId: string;
   grams: number;
   meals: { entryId: string; title: string; date: CalendarDate; grams: number }[];
+}
+
+/** A shopping staple: food to always have in, and how it stands against its level. */
+export interface StapleDto {
+  id: string;
+  /** A generic food (any product of it counts), or else one product. */
+  ingredientId: string | null;
+  productId: string | null;
+  name: string;
+  /** The level to keep, and what's in the house now, in `unit`. */
+  min: number;
+  have: number;
+  /** g, ml, items ("egg", "slice": see `unitName`), or packs of a product. */
+  unit: 'g' | 'ml' | 'count' | 'pack';
+  unitName: string | null;
+  /** A sensible − / + step in that unit. */
+  step: number;
+  /** Below its level. */
+  low: boolean;
+  /** Already on the shopping list (ticked or not). */
+  onList: boolean;
 }
 
 export interface ShoppingItemDto {

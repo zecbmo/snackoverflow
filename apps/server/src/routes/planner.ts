@@ -12,6 +12,7 @@ import {
   putAwayInput,
   scanInput,
   shoppingItemInput,
+  stapleInput,
   todayIn,
   uneatPlanEntryInput,
   updatePlanEntryInput,
@@ -26,6 +27,7 @@ import { createEntryWithStock, deleteEntry, earmarks, eatEntry, getEntry, listPl
 import { resolveBarcode } from '../services/scan';
 import { pricingOn } from '../services/pricing';
 import { addItem, buildFromPlan, deleteItems, listShopping, putAway, runningLow, syncPlanItems, updateItem } from '../services/shopping';
+import { deleteStaple, listStaples, saveStaple, syncStapleItems } from '../services/staples';
 import { getStockItem, type StockDeps } from '../services/stock';
 
 const planQuery = z.object({
@@ -117,9 +119,35 @@ export async function plannerRoutes(app: FastifyInstance) {
   app.get('/api/shopping', async (req) => {
     const auth = requireAuth(req);
     // The plan's part of the list follows the plan and stock on its own.
-    const changed = await ctx.db.transaction((tx) => syncPlanItems(tx, auth, ctx.now()));
+    // And staples below their level put themselves on it.
+    const changed = await ctx.db.transaction(async (tx) => {
+      const plan = await syncPlanItems(tx, auth, ctx.now());
+      const low = await syncStapleItems(tx, auth);
+      return plan || low;
+    });
     if (changed) ctx.live.publish(auth.household.id, 'shopping');
     return listShopping(ctx.db, auth, pricingOn(ctx, auth.household), ctx.now());
+  });
+
+  // --- Shopping staples: food to always have in ---------------------------------------
+  app.get('/api/staples', async (req) => listStaples(ctx.db, requireAuth(req)));
+
+  app.put('/api/staples', async (req) => {
+    const auth = requireAuth(req);
+    const input = parse(stapleInput, req.body);
+    await ctx.db.transaction(async (tx) => {
+      await saveStaple(tx, auth, input);
+      // Below the new level already: straight onto the list.
+      await syncStapleItems(tx, auth);
+    });
+    ctx.live.publish(auth.household.id, 'shopping');
+    return listStaples(ctx.db, auth);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/staples/:id', async (req) => {
+    const auth = requireAuth(req);
+    await deleteStaple(ctx.db, auth, req.params.id);
+    return listStaples(ctx.db, auth);
   });
 
   app.post('/api/shopping', async (req) => {

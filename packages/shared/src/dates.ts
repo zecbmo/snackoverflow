@@ -98,6 +98,11 @@ export function formatShortDate(date: CalendarDate): string {
   return `${Number(d)} ${MONTHS[Number(m) - 1]}`;
 }
 
+/** A date with its year, for when the year matters (a tin that keeps till next year): "6 Dec 2026". */
+export function formatFullDate(date: CalendarDate): string {
+  return `${formatShortDate(date)} ${date.slice(0, 4)}`;
+}
+
 /** Short, friendly label for how long something has left: "Today", "Tomorrow", "3 days", "2 weeks", "Feb". */
 export function bestBeforeLabel(bestBefore: CalendarDate, today: CalendarDate): string {
   const days = daysBetween(today, bestBefore);

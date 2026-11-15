@@ -459,6 +459,16 @@ export const shoppingItemInput = z
   })
   .refine((v) => v.text || v.ingredientId || v.productId, 'Say what to get');
 
+/** Make a food a shopping staple, or change its level (in the food's own unit). */
+export const stapleInput = z
+  .object({
+    ingredientId: id.nullish(),
+    productId: id.nullish(),
+    min: z.number().positive().max(100_000),
+  })
+  .refine((v) => v.ingredientId || v.productId, 'Say which food');
+export type StapleInput = z.infer<typeof stapleInput>;
+
 export const updateShoppingItemInput = z.object({
   checked: z.boolean().optional(),
   packs: z.number().int().min(1).max(99).optional(),

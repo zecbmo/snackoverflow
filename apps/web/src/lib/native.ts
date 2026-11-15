@@ -164,6 +164,13 @@ export async function initNative(queryClient: QueryClient, navigate: Navigate, t
     }
   };
 
+  // The phone's back button closes whatever is open on top (a menu, a sheet) before it goes back a page.
+  await App.addListener('backButton', ({ canGoBack }) => {
+    if (closeTopLayer()) return;
+    if (canGoBack) window.history.back();
+    else void App.exitApp();
+  });
+
   await App.addListener('appUrlOpen', ({ url }) => void onLink(url));
   // Opened from a notification while the app wasn't running.
   const launch = await App.getLaunchUrl();
@@ -177,6 +184,23 @@ export async function initNative(queryClient: QueryClient, navigate: Navigate, t
   // Receipts shared in from other apps: at start-up, on resume, and while open.
   await Inbox.addListener('sharedFile', () => void handleSharedFile(navigate, toast));
   void handleSharedFile(navigate, toast);
+}
+
+/**
+ * Close the thing on top, if there is one: an open menu, else the newest open sheet. True if
+ * something was closed. Sheets close the way Escape closes them, so anything they need to tidy up runs.
+ */
+export function closeTopLayer(): boolean {
+  if (document.querySelector('[role="menu"]')) {
+    // Menus close on a press outside them.
+    document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    return true;
+  }
+  const sheets = [...document.querySelectorAll<HTMLDialogElement>('dialog[open]')];
+  const top = sheets[sheets.length - 1];
+  if (!top) return false;
+  top.dispatchEvent(new Event('cancel', { cancelable: true }));
+  return true;
 }
 
 /** For testing on a device: check the inbox now instead of waiting up to 15 minutes. */

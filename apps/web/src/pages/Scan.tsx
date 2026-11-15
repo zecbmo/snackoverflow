@@ -1,40 +1,40 @@
 /**
  * The till experience: the camera stays open, every barcode gives a beep, a big
  * tick and a strip with the name and estimated best-before. Unknown barcodes get
- * an amber flash and a quick "what is it?" sheet. Undo on every scan.
- * Food you've eaten is logged from Log food (which has its own barcode scanner), not here.
+ * an amber flash and a quick "what is it?" sheet. Undo on every scan. Where it goes is a row
+ * of buttons at the bottom, in reach of a thumb. Scanning is for putting shopping away: food
+ * you've used or eaten is taken out from the stock row or Log food (which has its own scanner).
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { formatPackSize, MEAL_SLOTS, type MealSlot, type ProductDto, type ProductPhotoReadDto, type ScanAddResult, type ScanUseResult, type StockItemDto } from '@snackoverflow/shared';
+import { formatFullDate, formatPackSize, MEAL_SLOTS, type MealSlot, type ProductDto, type ProductPhotoReadDto, type ScanAddResult, type StockItemDto } from '@snackoverflow/shared';
 import { Icon, locationIcon } from '../components/Icon';
 import { useMe } from '../components/Layout';
 import { useLogFood } from '../components/LogFood';
-import { useStockActions } from '../components/StockActions';
 import { useToast } from '../components/Toast';
-import { Button, Field, Select, Sheet, TextInput } from '../components/ui';
+import { Button, Field, Select, Sheet, TextInput, Toggle } from '../components/ui';
 import { api, errorMessage, isOffline } from '../lib/api';
 import { enqueueScan, type QueuedScan, removeQueued } from '../lib/offlineQueue';
-import { longDate } from '../lib/format';
 import { photoBody } from '../lib/images';
 import { parsePounds } from '../lib/money';
 import { canShareWithOff, rememberedShare, rememberShare, shareWithOff } from '../lib/off';
+import { isNative } from '../lib/platform';
 import { useIngredients, useLocations } from '../lib/queries';
 import { beep, useBarcodeScanner } from '../scanner/useBarcodeScanner';
-
-type Mode = 'add' | 'use';
 
 interface Entry {
   key: number;
   barcode: string;
-  mode: Mode;
   add?: ScanAddResult;
-  use?: ScanUseResult;
   /** Saved on the phone with no signal; sent when back online. */
   queued?: QueuedScan;
   error?: string;
   undone?: boolean;
+  /** More packs of the same thing, added from the review card. */
+  extra?: number;
+  /** Reviewed and saved: its card is put away. */
+  reviewed?: boolean;
 }
 
 const LOCATION_KEY = 'so.scan.location';
@@ -58,10 +58,8 @@ export function ScanPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
-  const actions = useStockActions();
   const locations = useLocations().data ?? [];
   const [params] = useSearchParams();
-  const [mode, setMode] = useState<Mode>(() => (params.get('mode') === 'use' ? 'use' : 'add'));
   // Eat mode moved to Log food: old links (and notifications) open its barcode scanner instead.
   const logFood = useLogFood();
   const eatLink = params.get('mode') === 'eat';
@@ -72,10 +70,9 @@ export function ScanPage() {
     logFood.openLog({ slot: eatSlot, scan: true });
   }, [eatLink, eatSlot, navigate, logFood]);
   const [addLocation, setAddLocation] = useState<string | null>(readStoredLocation);
-  const [useLocation, setUseLocation] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [flash, setFlash] = useState<{ kind: 'ok' | 'unknown' | 'miss'; n: number } | null>(null);
-  const [sheet, setSheet] = useState<'location' | 'keyboard' | 'name' | 'date' | 'summary' | null>(null);
+  const [sheet, setSheet] = useState<'keyboard' | 'name' | 'date' | 'summary' | null>(null);
   const busy = useRef(false);
   const last = useRef<{ code: string; at: number } | null>(null);
   const nextKey = useRef(1);
@@ -83,7 +80,6 @@ export function ScanPage() {
   // Default to the remembered location, else the first fridge.
   const fallback = locations.find((l) => l.type === 'fridge') ?? locations[0];
   const addLocationId = locations.some((l) => l.id === addLocation) ? addLocation : (fallback?.id ?? null);
-  const location = locations.find((l) => l.id === (mode === 'add' ? addLocationId : useLocation));
   const current = entries.find((e) => !e.undone);
 
   const update = (key: number, patch: Partial<Entry>) => setEntries((all) => all.map((e) => (e.key === key ? { ...e, ...patch } : e)));
@@ -98,37 +94,30 @@ export function ScanPage() {
       last.current = { code, at: now };
       const key = nextKey.current++;
       try {
-        if (mode === 'add') {
-          const r = await api.post<ScanAddResult>('/api/scan/add', { barcode: code, locationId: addLocationId ?? undefined });
-          setEntries((all) => [{ key, barcode: code, mode, add: r }, ...all]);
-          beep(r.known ? 'ok' : 'warn');
-          setFlash({ kind: r.known ? 'ok' : 'unknown', n: key });
-          if (!r.known) setSheet('name');
-        } else {
-          const r = await api.post<ScanUseResult>('/api/scan/use', { barcode: code, locationId: useLocation ?? undefined });
-          setEntries((all) => [{ key, barcode: code, mode, use: r }, ...all]);
-          beep(r.status === 'used' ? 'ok' : 'warn');
-          setFlash({ kind: r.status === 'used' ? 'ok' : 'miss', n: key });
-        }
+        const r = await api.post<ScanAddResult>('/api/scan/add', { barcode: code, locationId: addLocationId ?? undefined });
+        setEntries((all) => [{ key, barcode: code, add: r }, ...all]);
+        beep(r.known ? 'ok' : 'warn');
+        setFlash({ kind: r.known ? 'ok' : 'unknown', n: key });
+        if (!r.known) setSheet('name');
         void qc.invalidateQueries({ queryKey: ['stock'] });
       } catch (e) {
         if (isOffline(e)) {
           // No signal: keep the scan and send it later, like a till that keeps working offline.
-          const queued = enqueueScan({ mode, barcode: code, locationId: (mode === 'add' ? addLocationId : useLocation) ?? undefined });
+          const queued = enqueueScan({ mode: 'add', barcode: code, locationId: addLocationId ?? undefined });
           beep('ok');
           setFlash({ kind: 'ok', n: key });
-          setEntries((all) => [{ key, barcode: code, mode, queued }, ...all]);
+          setEntries((all) => [{ key, barcode: code, queued }, ...all]);
         } else {
           beep('warn');
           setFlash({ kind: 'miss', n: key });
-          setEntries((all) => [{ key, barcode: code, mode, error: errorMessage(e) }, ...all]);
+          setEntries((all) => [{ key, barcode: code, error: errorMessage(e) }, ...all]);
         }
       } finally {
         busy.current = false;
         last.current = { code, at: Date.now() };
       }
     },
-    [mode, addLocationId, useLocation, qc],
+    [addLocationId, qc],
   );
 
   const scanning = sheet === null;
@@ -147,7 +136,7 @@ export function ScanPage() {
       toast.show('Removed.');
       return;
     }
-    const eventId = entry.add?.change.eventId ?? (entry.use?.status === 'used' ? entry.use.change.eventId : null);
+    const eventId = entry.add?.change.eventId;
     if (!eventId) return;
     try {
       await api.post(`/api/events/${eventId}/undo`);
@@ -159,19 +148,39 @@ export function ScanPage() {
     }
   };
 
-  const onlySome = async (entry: Entry) => {
-    if (entry.use?.status !== 'used') return;
-    const item = entry.use.change.item;
-    await undo(entry);
-    actions.use({ ...item, fractionLeft: item.fractionLeft || 1 } as StockItemDto);
+  /** Save what the review card changed: the name with or without its brand, and any more packs of it. */
+  const saveReview = async (entry: Entry, r: { name?: string; packs: number }) => {
+    if (!entry.add) return;
+    try {
+      let product = entry.add.product;
+      if (r.name) product = await api.patch<ProductDto>(`/api/products/${product.id}`, { name: r.name });
+      const item = entry.add.change.item;
+      if (r.packs > 1) await api.post('/api/stock', { productId: product.id, locationId: item.locationId, count: r.packs - 1, bestBefore: item.bestBefore });
+      update(entry.key, { add: { ...entry.add, product }, extra: r.packs - 1, reviewed: true });
+      void qc.invalidateQueries({ queryKey: ['stock'] });
+      void qc.invalidateQueries({ queryKey: ['products'] });
+      toast.show(r.packs > 1 ? `Saved: ${r.packs} packs of ${product.name}.` : 'Saved.');
+    } catch (e) {
+      toast.show(errorMessage(e), { tone: 'error' });
+    }
   };
 
   const live = entries.filter((e) => !e.undone && !e.error);
+  const packsScanned = live.reduce((n, e) => n + 1 + (e.extra ?? 0), 0);
   const needsName = live.filter((e) => e.add && !e.add.known && !e.add.product.name).length;
+  const pickLocation = (id: string) => {
+    setAddLocation(id);
+    try {
+      localStorage.setItem(LOCATION_KEY, id);
+    } catch {
+      // Remembering is a nicety.
+    }
+  };
 
   return (
     <div className="fixed inset-0 flex flex-col bg-scan text-white">
-      <video ref={videoRef} muted playsInline className="absolute inset-0 size-full object-cover opacity-70" aria-hidden />
+      {/* The Android app's camera is a native view behind the page; an empty <video> there shows the web view's play-button placeholder. */}
+      {!isNative() && <video ref={videoRef} muted playsInline className="absolute inset-0 size-full object-cover opacity-70" aria-hidden />}
       <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" aria-hidden />
 
       <div className="relative z-10 flex flex-1 flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))]">
@@ -184,30 +193,7 @@ export function ScanPage() {
           >
             <Icon name="close" />
           </button>
-          <button
-            type="button"
-            onClick={() => setSheet('location')}
-            className="inline-flex min-h-12 items-center gap-2 rounded-full bg-white/10 px-4 text-lg font-semibold backdrop-blur"
-          >
-            <Icon name={location ? locationIcon(location.type) : 'box'} className="size-5" />
-            {location?.name ?? 'Any location'}
-            <Icon name="chevronDown" className="size-4" />
-          </button>
-        </div>
-
-        <div role="tablist" aria-label="Scan mode" className="mt-4 grid grid-cols-2 rounded-2xl bg-white/10 p-1 backdrop-blur">
-          {(['add', 'use'] as const).map((m) => (
-            <button
-              key={m}
-              role="tab"
-              type="button"
-              aria-selected={mode === m}
-              onClick={() => setMode(m)}
-              className={`min-h-12 rounded-xl text-lg font-semibold ${mode === m ? 'bg-white text-[#1a1c1a]' : 'text-white'}`}
-            >
-              {m === 'add' ? 'Add' : 'Use'}
-            </button>
-          ))}
+          <h1 className="text-lg font-semibold">Scan shopping</h1>
         </div>
 
         <div className="relative mx-auto mt-10 aspect-[3/2] w-full max-w-sm">
@@ -231,18 +217,34 @@ export function ScanPage() {
             ? 'Camera blocked. Allow camera access in your browser, or type the barcode.'
             : status === 'unavailable' || status === 'error'
               ? 'No camera here. Type the barcode instead.'
-              : mode === 'add'
-                ? 'Keep scanning. Each beep adds one pack.'
-                : 'Keep scanning. Each beep uses one pack.'}
+              : 'Keep scanning. Each beep adds one pack.'}
         </p>
       </div>
 
       <div className="relative z-10 flex flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        {current && <ResultCard entry={current} onUndo={() => void undo(current)} onDate={() => setSheet('date')} onName={() => setSheet('name')} onSome={() => void onlySome(current)} />}
+        {current && !current.reviewed && (
+          <ResultCard key={current.key} entry={current} onUndo={() => void undo(current)} onDate={() => setSheet('date')} onName={() => setSheet('name')} onSave={(r) => saveReview(current, r)} />
+        )}
+        {/* Where the next scan goes: one tap, down here by the thumb, remembered for next time. */}
+        <div role="radiogroup" aria-label="Put it in" className="flex gap-1 overflow-x-auto rounded-2xl bg-white/10 p-1 backdrop-blur">
+          {locations.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              role="radio"
+              aria-checked={l.id === addLocationId}
+              onClick={() => pickLocation(l.id)}
+              className={`inline-flex min-h-12 min-w-fit flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-2 text-[0.9375rem] font-semibold ${l.id === addLocationId ? 'bg-white text-[#1a1c1a]' : 'text-white'}`}
+            >
+              <Icon name={locationIcon(l.type)} className="size-[18px] shrink-0" />
+              {l.name}
+            </button>
+          ))}
+        </div>
         <div className="flex items-stretch gap-3">
           <div className="flex flex-1 items-center gap-3 rounded-2xl bg-white/10 px-4 py-2 backdrop-blur">
-            <span className="text-3xl font-bold tabular-nums sm:text-4xl" aria-label={`${live.length} scanned`}>
-              {live.length}
+            <span className="text-3xl font-bold tabular-nums sm:text-4xl" aria-label={`${packsScanned} scanned`}>
+              {packsScanned}
             </span>
             <span className="text-[0.9375rem] leading-tight text-white/80">
               scanned this session
@@ -263,23 +265,6 @@ export function ScanPage() {
         </div>
       </div>
 
-      <LocationSheet
-        open={sheet === 'location'}
-        mode={mode}
-        selected={mode === 'add' ? addLocationId : useLocation}
-        onClose={() => setSheet(null)}
-        onPick={(id) => {
-          if (mode === 'add' && id) {
-            setAddLocation(id);
-            try {
-              localStorage.setItem(LOCATION_KEY, id);
-            } catch {
-              // Remembering is a nicety.
-            }
-          } else setUseLocation(id);
-          setSheet(null);
-        }}
-      />
       <KeyboardSheet open={sheet === 'keyboard'} onClose={() => setSheet(null)} onSubmit={(code) => void handleCode(code)} />
       {current?.add && (
         <NameSheet
@@ -302,27 +287,26 @@ export function ScanPage() {
       <Sheet open={sheet === 'summary'} onClose={() => setSheet(null)} title="This session">
         <ul className="mb-4 flex flex-col divide-y divide-line">
           {live.map((e) => {
-            const item = e.add?.change.item ?? (e.use?.status === 'used' ? e.use.change.item : null) ?? null;
-            const name = e.add ? (e.add.product.name ?? 'Unnamed product') : (e.use?.product?.name ?? e.barcode);
+            const item = e.add?.change.item ?? null;
+            const name = e.add ? (e.add.product.name ?? 'Unnamed product') : e.barcode;
             return (
               <li key={e.key}>
                 {item ? (
                   <Link to={`/stock/${item.id}`} className="flex min-h-14 items-center gap-3 py-2">
                     <span className="flex-1">
-                      <span className="block font-semibold">{name}</span>
+                      <span className="block font-semibold">
+                        {name}
+                        {e.extra ? ` × ${1 + e.extra}` : ''}
+                      </span>
                       <span className="block text-sm text-muted">
-                        {e.mode === 'add' ? `Added to ${item.locationName} · best before ${longDate(item.bestBefore)}` : `Used from ${item.locationName}`}
+                        Added to {item.locationName} · best before {item.bestBefore ? formatFullDate(item.bestBefore) : 'not set'}
                       </span>
                     </span>
                     <Icon name="chevronRight" className="size-5 text-muted" />
                   </Link>
-                ) : e.queued ? (
-                  <p className="py-3">
-                    <span className="font-semibold">Barcode {e.barcode}</span> <span className="text-muted">will sync when you're online</span>
-                  </p>
                 ) : (
                   <p className="py-3">
-                    <span className="font-semibold">{name}</span> <span className="text-muted">wasn't in stock</span>
+                    <span className="font-semibold">Barcode {e.barcode}</span> <span className="text-muted">will sync when you're online</span>
                   </p>
                 )}
               </li>
@@ -344,26 +328,55 @@ export function ScanPage() {
   );
 }
 
-function ResultCard({ entry, onUndo, onDate, onName, onSome }: { entry: Entry; onUndo: () => void; onDate: () => void; onName: () => void; onSome: () => void }) {
+/** The brand as part of a scanned product's name: whether it's there now, and the name each way. */
+function brandInName(product: ProductDto): { on: boolean; withBrand: string; bare: string } | null {
+  const brand = product.brand?.trim();
+  const name = product.name ?? '';
+  if (!brand || !name || brand.length > 30) return null;
+  const starts = name.toLowerCase().startsWith(`${brand.toLowerCase()} `);
+  // The brand is in the name some other way ("Coca-Cola Zero"): nothing to switch.
+  if (!starts && name.toLowerCase().includes(brand.toLowerCase())) return null;
+  const bare = starts ? name.slice(brand.length + 1) : name;
+  return { on: starts, withBrand: `${brand} ${bare}`, bare };
+}
+
+/** What a scan's review card can change before it's saved. */
+interface Review {
+  name?: string;
+  packs: number;
+}
+
+/**
+ * What the last scan did, with Undo, and a quick review: the brand in or out of the name, and
+ * how many packs. Nothing here needs touching: if it scanned right, scan the next thing. Change
+ * something and Save appears; saving puts the card away.
+ */
+function ResultCard({ entry, onUndo, onDate, onName, onSave }: { entry: Entry; onUndo: () => void; onDate: () => void; onName: () => void; onSave: (r: Review) => Promise<void> }) {
+  const [brand, setBrand] = useState<boolean | null>(null);
+  const [packs, setPacks] = useState(1);
+  const [saving, setSaving] = useState(false);
   let label: string;
   let labelClass = 'text-fresh-green-text';
   let title: string;
   let detail: string;
   let primary: { text: string; onClick: () => void } | null = null;
   let canUndo = true;
+  let naming: ReturnType<typeof brandInName> = null;
+  let reviewable = false;
+  let needsSize = false;
   if (entry.queued) {
     label = 'Saved offline';
     labelClass = 'text-accent-text';
     title = `Barcode ${entry.barcode}`;
-    detail = `No signal. We'll ${entry.mode === 'add' ? 'add' : 'use'} it as soon as you're back online.`;
+    detail = "No signal. We'll add it as soon as you're back online.";
   } else if (entry.error) {
     label = "Couldn't save that";
     labelClass = 'text-danger';
     title = entry.barcode;
     detail = entry.error;
     canUndo = false;
-  } else if (entry.add) {
-    const { product, change, estimated, known } = entry.add;
+  } else {
+    const { product, change, estimated, known } = entry.add!;
     if (!known && !product.name) {
       label = 'New barcode';
       labelClass = 'text-fresh-amber-text';
@@ -371,76 +384,97 @@ function ResultCard({ entry, onUndo, onDate, onName, onSome }: { entry: Entry; o
       detail = `Added to ${change.item.locationName}. Name it now or later.`;
       primary = { text: 'Name it', onClick: onName };
     } else {
+      naming = brandInName(product);
+      reviewable = true;
+      const name = naming && brand !== null ? (brand ? naming.withBrand : naming.bare) : product.name;
       label = `Added to ${change.item.locationName}`;
-      title = `${product.name}${packLabel(product)}`;
-      detail = change.item.bestBefore ? `Best before ${longDate(change.item.bestBefore)}${estimated ? ' (estimated)' : ''}` : 'No best-before date yet';
+      title = `${name}${packLabel(product)}`;
+      const serving = product.servingGrams ? ` · ${Math.round(product.servingGrams * 10) / 10}${product.displayUnit === 'ml' ? 'ml' : 'g'} a serving` : '';
+      detail = `${change.item.bestBefore ? `Best before ${formatFullDate(change.item.bestBefore)}${estimated ? ' (estimated)' : ''}` : 'No best-before date yet'}${serving}`;
       primary = { text: 'Change date', onClick: onDate };
+      // Nobody knows how big the pack is (Open Food Facts didn't say): the amount can't be shown until it's set.
+      needsSize = !product.packAmount;
     }
-  } else if (entry.use?.status === 'used') {
-    label = `Used from ${entry.use.change.item.locationName}`;
-    labelClass = 'text-accent-text';
-    title = `${entry.use.product.name ?? 'Unnamed product'}${packLabel(entry.use.product)}`;
-    detail = entry.use.packsLeft === 0 ? 'That was the last one' : `${entry.use.packsLeft} ${entry.use.packsLeft === 1 ? 'pack' : 'packs'} left`;
-    primary = { text: 'Only used some', onClick: onSome };
-  } else {
-    label = 'Not in stock';
-    labelClass = 'text-danger';
-    title = entry.use?.product?.name ?? entry.barcode;
-    detail = entry.use?.product ? "There's none of this in stock." : "We don't know this barcode yet. Scan it in Add mode first.";
-    canUndo = false;
   }
+  const brandOn = naming ? (brand ?? naming.on) : false;
+  const dirty = reviewable && ((naming !== null && brandOn !== naming.on) || packs !== 1);
+  const save = async () => {
+    setSaving(true);
+    await onSave({ name: naming && brandOn !== naming.on ? (brandOn ? naming.withBrand : naming.bare) : undefined, packs });
+    setSaving(false);
+  };
+  const step = 'inline-flex size-10 items-center justify-center rounded-full border border-line text-lg disabled:opacity-40';
+  // Kept short: on a phone it sits above the location buttons and Done, which must stay on screen.
   return (
-    <div className="animate-slide-up rounded-3xl bg-card p-4 text-ink" role="status" aria-live="polite">
-      <div className="mb-3 flex items-center gap-4">
-        <span aria-hidden className="inline-flex size-14 shrink-0 items-center justify-center rounded-2xl bg-card-muted">
-          <Icon name="bottle" className="size-7" />
-        </span>
-        <div className="min-w-0">
-          <p className={`font-semibold ${labelClass}`}>{label}</p>
-          <p className="truncate text-xl font-semibold">{title}</p>
-          <p className="text-muted">{detail}</p>
-        </div>
-      </div>
-      {(primary || canUndo) && (
-        <div className="grid grid-cols-2 gap-3">
-          {primary ? (
-            <Button variant="outline" size="lg" onClick={primary.onClick}>
-              {primary.text}
-            </Button>
+    <div className="animate-slide-up rounded-2xl bg-card p-3 text-ink" role="status" aria-live="polite">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm font-semibold ${labelClass}`}>{label}</p>
+          <p className="truncate text-lg font-semibold leading-tight">{title}</p>
+          {primary && reviewable ? (
+            // The date line is the way to change the date: one less button on a small screen.
+            <button type="button" title={primary.text} onClick={primary.onClick} className="block max-w-full truncate text-left text-sm text-muted underline decoration-dotted underline-offset-2">
+              {detail}
+              <span className="sr-only">: {primary.text.toLowerCase()}</span>
+            </button>
           ) : (
-            <span />
+            <p className="truncate text-sm text-muted">{detail}</p>
           )}
-          {canUndo && (
-            <Button variant="danger" size="lg" onClick={onUndo}>
-              Undo
-            </Button>
+        </div>
+        {needsSize && !dirty && (
+          <Button variant="primary" size="sm" title="The pack's size isn't known, so its amount can't be shown" onClick={onName}>
+            Set size
+          </Button>
+        )}
+        {primary && !reviewable && (
+          <Button variant="primary" size="sm" onClick={primary.onClick}>
+            {primary.text}
+          </Button>
+        )}
+        {canUndo && !dirty && (
+          <Button variant="danger" size="sm" onClick={onUndo}>
+            Undo
+          </Button>
+        )}
+      </div>
+      {reviewable && (
+        <div className="mt-2 flex items-center gap-3 border-t border-line pt-2">
+          {naming && (
+            <div className="flex min-w-0 items-center gap-2">
+              <Toggle checked={brandOn} onChange={setBrand} label={`${entry.add!.product.brand} in the name`} />
+              <span className="text-sm">Brand</span>
+            </div>
           )}
+          <div className="ml-auto flex shrink-0 items-center gap-1.5" role="group" aria-label="How many packs">
+            <button type="button" aria-label="One fewer pack" disabled={packs <= 1} onClick={() => setPacks((n) => Math.max(1, n - 1))} className={step}>
+              −
+            </button>
+            <span className="min-w-14 text-center text-sm font-semibold tabular-nums" aria-live="polite">
+              {packs} {packs === 1 ? 'pack' : 'packs'}
+            </span>
+            <button type="button" aria-label="One more pack" disabled={packs >= 24} onClick={() => setPacks((n) => Math.min(24, n + 1))} className={step}>
+              +
+            </button>
+          </div>
+        </div>
+      )}
+      {dirty && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setBrand(null);
+              setPacks(1);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
         </div>
       )}
     </div>
-  );
-}
-
-function LocationSheet({ open, mode, selected, onClose, onPick }: { open: boolean; mode: Mode; selected: string | null; onClose: () => void; onPick: (id: string | null) => void }) {
-  const locations = useLocations().data ?? [];
-  const options = [...(mode === 'use' ? [{ id: null, name: 'Any location', type: '' }] : []), ...locations];
-  return (
-    <Sheet open={open} onClose={onClose} title={mode === 'add' ? 'Put it in…' : 'Take it from…'}>
-      <div className="flex flex-col gap-2">
-        {options.map((l) => (
-          <button
-            key={l.id ?? 'any'}
-            type="button"
-            onClick={() => onPick(l.id)}
-            aria-pressed={selected === l.id}
-            className={`flex min-h-14 items-center gap-3 rounded-xl border px-4 text-left font-medium ${selected === l.id ? 'border-accent bg-accent-soft' : 'border-line'}`}
-          >
-            <Icon name={l.type ? locationIcon(l.type) : 'box'} className="size-5" />
-            {l.name}
-          </button>
-        ))}
-      </div>
-    </Sheet>
   );
 }
 

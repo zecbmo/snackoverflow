@@ -25,6 +25,7 @@ import {
   recipeScans,
   savedMeals,
   shoppingItems,
+  staples,
   stockEvents,
   stockItems,
   users,
@@ -41,6 +42,7 @@ export async function wipeFoodData(db: Db, auth: Auth): Promise<void> {
     await tx.delete(foodFavourites).where(eq(foodFavourites.householdId, hh));
     await tx.delete(savedMeals).where(eq(savedMeals.householdId, hh));
     await tx.delete(shoppingItems).where(eq(shoppingItems.householdId, hh));
+    await tx.delete(staples).where(eq(staples.householdId, hh));
     await tx.delete(receipts).where(eq(receipts.householdId, hh));
     await tx.delete(receiptAliases).where(eq(receiptAliases.householdId, hh));
     await tx.delete(prices).where(eq(prices.householdId, hh));

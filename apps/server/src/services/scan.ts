@@ -1,6 +1,6 @@
 /** Turning a scanned barcode into a product: this household's products first, then Open Food Facts, else an unknown product to name later. */
 import { and, eq, isNull, notInArray } from 'drizzle-orm';
-import { expandReceiptText, parsePackQuantity } from '@snackoverflow/shared';
+import { expandReceiptText, parsePackQuantity, scannedProductName, tidyCapitals } from '@snackoverflow/shared';
 import type { AppContext, Auth } from '../context';
 import type { OffProduct } from './off';
 import { lookupLocalOff } from './offDump';
@@ -17,11 +17,17 @@ export interface ResolvedProduct {
 
 export async function resolveBarcode(ctx: AppContext, auth: Auth, code: string): Promise<ResolvedProduct> {
   const existing = await findProductByBarcode(ctx.db, auth.household.id, code);
-  if (existing && existing.name !== null) return { product: existing, known: true, created: false };
+  if (existing && existing.name !== null) {
+    // Made from Open Food Facts when it had no pack size: it may have learned it since (and its serving size with it).
+    // Only then, so a product that's complete is never looked up again.
+    if (existing.source === 'off' && existing.packGrams === null) {
+      const filled = await fillFromOff(ctx, auth, existing, code);
+      if (filled) return { product: filled, known: true, created: false };
+    }
+    return { product: existing, known: true, created: false };
+  }
 
-  // The local copy of Open Food Facts first (no network), then their API.
-  const local = ctx.config.OFF_DUMP_ENABLED ? await lookupLocalOff(ctx.db, code) : null;
-  const off = local ?? (ctx.config.OFF_ENABLED ? await ctx.off.lookup(code) : null);
+  const off = await offFor(ctx, code);
   const catalog = await loadCatalog(ctx.db, auth.household.id);
   if (existing) {
     // Nobody has named it yet: Open Food Facts may know it by now (or was unreachable last time).
@@ -62,22 +68,64 @@ export async function resolveBarcode(ctx: AppContext, auth: Auth, code: string):
   return { product: result, known: result.name !== null, created: true };
 }
 
+/**
+ * What Open Food Facts knows about a barcode: the local copy first (no network), then their API.
+ * When the local copy has the product but not its pack size, the API is asked as well and fills
+ * the gaps (the pack size, and the serving size with it): the copy can be a week behind, and
+ * without a pack size the amount in stock can't be shown.
+ */
+async function offFor(ctx: AppContext, code: string): Promise<OffProduct | null> {
+  const local = ctx.config.OFF_DUMP_ENABLED ? await lookupLocalOff(ctx.db, code) : null;
+  if (local && (local.quantity || !ctx.config.OFF_ENABLED)) return local;
+  const live = ctx.config.OFF_ENABLED ? await ctx.off.lookup(code) : null;
+  if (!local) return live;
+  return live ? { ...local, quantity: live.quantity, servingGrams: local.servingGrams ?? live.servingGrams ?? null } : local;
+}
+
+/**
+ * Fill in a product's pack size and serving size from Open Food Facts when it has learned them
+ * since. Only what's missing: anything the household has set is left alone. Null when there's nothing new.
+ */
+async function fillFromOff(ctx: AppContext, auth: Auth, existing: ProductRow, code: string): Promise<ProductRow | null> {
+  const off = await offFor(ctx, code).catch(() => null);
+  if (!off?.name) return null;
+  const values = offValues(ctx, auth, off, await loadCatalog(ctx.db, auth.household.id));
+  const patch: Partial<typeof products.$inferInsert> = {};
+  if (existing.packGrams === null && values.packGrams) {
+    patch.packGrams = values.packGrams;
+    patch.packAmount = values.packAmount;
+    patch.packUnit = values.packUnit;
+    patch.displayUnit = values.displayUnit;
+  }
+  const pack = patch.packGrams ?? existing.packGrams;
+  if (existing.servingGrams === null && off.servingGrams && (!pack || off.servingGrams < pack * 0.95)) patch.servingGrams = off.servingGrams;
+  if (!Object.keys(patch).length) return null;
+  const [updated] = await ctx.db.update(products).set(patch).where(eq(products.id, existing.id)).returning();
+  ctx.live.publish(auth.household.id, 'products');
+  return updated ?? null;
+}
+
 /** A product's fields from Open Food Facts, linked to the household's ingredient or shelf-life category when one fits. */
 function offValues(ctx: AppContext, auth: Auth, off: OffProduct, catalog: Awaited<ReturnType<typeof loadCatalog>>): typeof products.$inferInsert {
-  const name = off.name!;
-  const ingredient = suggestIngredient(name, [...catalog.ingredients.values()], ingredientAliases(ctx.seed));
-  const category = ingredient ? null : suggestCategory(name, off.categories, [...catalog.categories.values()]);
+  const ingredient = suggestIngredient(off.name!, [...catalog.ingredients.values()], ingredientAliases(ctx.seed));
+  // Capitals tidied, and the brand in front of a branded thing whose name alone doesn't say what it is (Pringles "Original").
+  const name = scannedProductName(off.name!, off.brand, { generic: Boolean(ingredient) });
+  const category = ingredient ? null : suggestCategory(off.name!, off.categories, [...catalog.categories.values()]);
   const qty = parsePackQuantity(off.quantity);
+  const pack = packFields(qty?.amount, qty?.unit, ctx.seed.units, measuresFor(ingredient?.id ?? null, catalog));
+  // The label's serving ("30g"), unless it's the whole pack or more: then the pack is the serving already.
+  const serving = off.servingGrams && (!pack.packGrams || off.servingGrams < pack.packGrams * 0.95) ? off.servingGrams : null;
   return {
     householdId: auth.household.id,
     name,
-    brand: off.brand,
+    brand: off.brand ? tidyCapitals(off.brand) : null,
     imageUrl: off.imageUrl,
     ingredientId: ingredient?.id ?? null,
     shelfLifeCategoryId: category?.id ?? null,
     nutritionPer100g: off.nutritionPer100g,
     source: 'off',
-    ...packFields(qty?.amount, qty?.unit, ctx.seed.units, measuresFor(ingredient?.id ?? null, catalog)),
+    servingGrams: serving,
+    ...pack,
   };
 }
 

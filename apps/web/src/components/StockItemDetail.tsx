@@ -12,6 +12,7 @@ import { useProductStock, useStockItem } from '../lib/queries';
 import { Icon } from './Icon';
 import { useMe } from './Layout';
 import { useStockActions } from './StockActions';
+import { stapleFor, StapleSettings, useStaples } from './StapleSettings';
 import { StockRowActions } from './StockRowActions';
 import { useToast } from './Toast';
 import { Button, ErrorNote, Field, Pill, Sheet, Spinner, TextInput } from './ui';
@@ -75,26 +76,6 @@ function DateSheet({ item, open, onClose }: { item: StockItemDto; open: boolean;
   );
 }
 
-/** Puts this product on the shopping list (one more pack). */
-function AddToListButton({ item }: { item: StockItemDto }) {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const add = async () => {
-    try {
-      await api.post('/api/shopping', { productId: item.productId, packs: 1 });
-      await qc.invalidateQueries({ queryKey: ['shopping'] });
-      toast.show(`Added ${item.productName} to the shopping list.`);
-    } catch (e) {
-      toast.show(errorMessage(e), { tone: 'error' });
-    }
-  };
-  return (
-    <Button size="sm" variant="ghost" onClick={() => void add()}>
-      <Icon name="cart" className="size-4" /> Add to shopping list
-    </Button>
-  );
-}
-
 /** The detail itself. `onOpenPack` switches the side panel to another pack; without it, packs are links. */
 export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: string; onOpenPack?: (id: string) => void; showActions?: boolean }) {
   const me = useMe();
@@ -103,6 +84,7 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
   const siblings = useProductStock(item?.productId ?? '').data?.filter((s) => s.id !== id) ?? [];
   const [dateOpen, setDateOpen] = useState(false);
   const actions = useStockActions();
+  const staples = useStaples().data;
 
   if (q.isPending) return <Spinner />;
   if (q.error || !item) return <ErrorNote error={q.error ?? 'Not found'} />;
@@ -155,8 +137,17 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
 
       <div className="flex flex-wrap items-center gap-2">
         {showActions && !gone && <StockRowActions item={item} name={item.productName} size="sm" />}
-        <AddToListButton item={item} />
+        {/* The product behind it: its name, brand, pack and serving size, nutrition and barcodes. */}
+        <Link
+          to={`/products/${item.productId}`}
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-card px-3 text-sm font-semibold text-ink hover:bg-card-muted lg:min-h-8 lg:rounded-md lg:px-2.5"
+        >
+          <Icon name="tag" className="size-4" /> Product details
+        </Link>
       </div>
+
+      {/* Always want this in? Below its level it puts itself on the shopping list. */}
+      {!item.isMeal && <StapleSettings key={item.productId} staple={stapleFor(staples, item)} item={item} />}
 
       {siblings.length > 0 && (
         <section>
@@ -207,10 +198,6 @@ export function StockItemDetail({ id, onOpenPack, showActions = true }: { id: st
           ))}
         </ul>
       </section>
-
-      <Link to={`/products/${item.productId}`} className="inline-flex min-h-11 items-center gap-1 self-start text-sm font-semibold text-accent-text lg:min-h-8">
-        Product details and barcodes <Icon name="chevronRight" className="size-4" />
-      </Link>
 
       <DateSheet key={`d-${item.bestBefore}`} item={item} open={dateOpen} onClose={() => setDateOpen(false)} />
     </div>

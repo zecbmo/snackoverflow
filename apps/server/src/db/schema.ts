@@ -216,6 +216,8 @@ export const products = pgTable(
     recipeId: uuid('recipe_id'),
     /** Weight of one portion, for meals counted in portions. */
     portionGrams: doublePrecision('portion_grams'),
+    /** One serving as the label gives it, in grams (or ml), from Open Food Facts: what Log food starts at. */
+    servingGrams: doublePrecision('serving_grams'),
     /** Cooked meals kept in smaller portions: how many of these make one serving (1 = a full serving). */
     portionSplit: integer('portion_split').notNull().default(1),
     /** Overrides the ingredient's category. */
@@ -538,6 +540,8 @@ export const offProducts = pgTable(
     name: text('name').notNull(),
     brand: text('brand'),
     quantity: text('quantity'),
+    /** One serving as the label gives it, in grams (or ml). */
+    servingGrams: doublePrecision('serving_grams'),
     categories: jsonb('categories').$type<string[]>().notNull().default([]),
     imageUrl: text('image_url'),
     nutritionPer100g: jsonb('nutrition_per_100g').$type<Nutrition>(),
@@ -732,6 +736,27 @@ export const prices = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('prices_product_idx').on(t.productId)],
+);
+
+/**
+ * Shopping staples: food to always have in. Below `min` in stock, it goes on the shopping list
+ * by itself. A generic food (any product of it counts), or one product for things without one.
+ */
+export const staples = pgTable(
+  'staples',
+  {
+    id: id(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    ingredientId: uuid('ingredient_id').references(() => ingredients.id, { onDelete: 'cascade' }),
+    productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }),
+    /** The level to keep, in the food's own unit: g, ml, items (eggs, slices), or packs of a product. */
+    min: doublePrecision('min').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('staples_household_idx').on(t.householdId)],
 );
 
 /** Groups of ingredients that can stand in for each other in a recipe ("Broccoli": broccoli, tenderstem). */

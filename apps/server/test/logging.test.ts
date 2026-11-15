@@ -268,6 +268,35 @@ describe('Open Food Facts and barcodes', () => {
     expect((await api.get<OffSearchDto>('/api/foods/off?q=snickers')).results.map((x) => x.title)).toEqual(['Snickers Duo']);
   });
 
+  it("takes the label's serving size from Open Food Facts, and Log food starts there", async () => {
+    off.products['5053990101573'] = { name: 'Original', brand: 'Pringles', quantity: '165 g', servingGrams: 30, nutritionPer100g: { kcal: 534 } };
+    const picked = await api.get<BarcodeFoodDto>('/api/foods/barcode/5053990101573');
+    // One serving of the tube, not the whole tube or 100g; the pack is still what the diary counts in.
+    expect(picked.food).toMatchObject({
+      title: 'Pringles Original',
+      unitGrams: 165,
+      eatBy: { grams: 30, unit: 'serving', label: '1 serving (30g)', kcal: 160 },
+    });
+    expect((await api.get<ProductDto>(`/api/products/${picked.productId}`)).servingGrams).toBe(30);
+    // Logged by the serving: 30g of 165g.
+    const e = await api.post<PlanEntryDto>('/api/plan', { date: '2026-11-12', slot: 'snack', kind: 'product', productId: picked.productId, servings: 30 / 165, eaten: true, fromStock: false });
+    expect(e.kcal).toBe(160);
+    // A "serving" that is the whole pack isn't one: the pack is the serving already.
+    off.products['5000159461123'] = { name: 'Flapjack', quantity: '80 g', servingGrams: 80, nutritionPer100g: { kcal: 450 } };
+    expect((await api.get<BarcodeFoodDto>('/api/foods/barcode/5000159461123')).food.eatBy).toBeNull();
+  });
+
+  it('fills in a pack size and serving size Open Food Facts has learned since, without touching the name', async () => {
+    off.products['5053990188642'] = { name: 'Original', brand: 'Pringles', nutritionPer100g: { kcal: 528 } };
+    const first = await api.get<BarcodeFoodDto>('/api/foods/barcode/5053990188642');
+    expect(first.food).toMatchObject({ title: 'Pringles Original', servingLabel: '100g', eatBy: null });
+    await api.patch(`/api/products/${first.productId}`, { name: 'Pringles' });
+    // Later, Open Food Facts knows the tube's size and its serving.
+    off.products['5053990188642'] = { ...off.products['5053990188642'], quantity: '165 g', servingGrams: 30 };
+    const again = await api.get<BarcodeFoodDto>('/api/foods/barcode/5053990188642');
+    expect(again.food).toMatchObject({ title: 'Pringles', unitGrams: 165, eatBy: { grams: 30, unit: 'serving' } });
+  });
+
   it('shows calories by the 100g for a product whose pack size nobody knows', async () => {
     const p = await api.post<ProductDto>('/api/products', { name: 'Mystery ice cream', nutritionPer100g: { kcal: 220 } });
     expect(await api.get<FoodResultDto>(`/api/foods/product/${p.id}`)).toMatchObject({ kcalPerServing: 220, servingLabel: '100g', unitGrams: 100 });

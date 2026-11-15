@@ -134,6 +134,20 @@
       "when": 1794763573428,
       "tag": "0018_from_stock",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794767406686,
+      "tag": "0019_staples",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794768554614,
+      "tag": "0020_serving_sizes",
+      "breakpoints": true
     }
   ]
 }

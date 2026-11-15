@@ -32,6 +32,7 @@ import { WastePage } from './pages/Waste';
 import { IngredientsPage } from './pages/Ingredients';
 import { ItemDetailPage } from './pages/ItemDetail';
 import { LocationsPage } from './pages/Locations';
+import { StaplesPage } from './pages/Staples';
 import { NotificationsPage } from './pages/Notifications';
 import { PeoplePage } from './pages/People';
 import { ProductDetailPage } from './pages/ProductDetail';
@@ -112,6 +113,7 @@ const router = createBrowserRouter([
           { path: '/swap-groups', element: <SwapGroupsPage /> },
           { path: '/takeaways', element: <TakeawaysPage /> },
           { path: '/takeaways/:key', element: <ChainMenuPage /> },
+          { path: '/staples', element: <StaplesPage /> },
           { path: '/locations', element: <LocationsPage /> },
           { path: '/people', element: <PeoplePage /> },
           { path: '/notifications', element: <NotificationsPage /> },

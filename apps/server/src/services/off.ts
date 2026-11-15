@@ -5,7 +5,7 @@
  * Facts, Open Beauty Facts) for things that aren't food. Optional: any failure (offline, timeout,
  * not found) returns null and the scan carries on as an unknown product.
  */
-import type { Nutrition } from '@snackoverflow/shared';
+import { type Nutrition, parseServingGrams } from '@snackoverflow/shared';
 
 export interface OffProduct {
   barcode: string;
@@ -15,6 +15,8 @@ export interface OffProduct {
   imageUrl: string | null;
   categories: string[];
   nutritionPer100g: Nutrition | null;
+  /** One serving as the label gives it, in grams (or ml), when Open Food Facts has it. */
+  servingGrams?: number | null;
 }
 
 /** A product this household named, to add to Open Food Facts. */
@@ -66,6 +68,8 @@ const FIELDS = [
   'quantity',
   'product_quantity',
   'product_quantity_unit',
+  'serving_size',
+  'serving_quantity',
   'image_front_small_url',
   'image_front_url',
   'categories_tags',
@@ -108,6 +112,7 @@ export function parseOffResponse(barcode: string, body: unknown): OffProduct | n
     name: str('product_name_en') ?? str('product_name') ?? str('generic_name'),
     brand,
     quantity,
+    servingGrams: parseServingGrams(str('serving_size'), num(p.serving_quantity)),
     imageUrl: str('image_front_small_url') ?? str('image_front_url'),
     categories: Array.isArray(p.categories_tags) ? (p.categories_tags as unknown[]).filter((t): t is string => typeof t === 'string') : [],
     nutritionPer100g: hasNutrition ? nutrition : null,
