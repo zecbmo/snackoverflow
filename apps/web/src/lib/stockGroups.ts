@@ -65,3 +65,17 @@ export function groupSummary(g: StockGroup): string {
   }
   return parts.join(' · ');
 }
+
+/**
+ * A phone's line under the food's name: where it is, then how much ("Cupboard · 2L",
+ * "Cupboard · 5 items"), so the amount is never the part that gets cut off. The pack count only
+ * stands in when the amount isn't known. Opened, defrosted or frozen comes last.
+ */
+export function phoneMeta(place: string, left: string, packs: number, state: string): string {
+  return [place, left || `${packs} ${packs === 1 ? 'pack' : 'packs'}`, state.toLowerCase()].filter(Boolean).join(' · ');
+}
+
+/** On a phone the coloured bar says how fresh a food is; the date is only spelled out when it's close. */
+export function phoneShowsDate(tone: 'red' | 'amber' | 'green' | 'blue' | 'grey'): boolean {
+  return tone === 'red' || tone === 'amber';
+}

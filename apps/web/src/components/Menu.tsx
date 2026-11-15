@@ -6,6 +6,7 @@
  */
 import { type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { safeInsets } from '../lib/safeArea';
 import { Icon, type IconName } from './Icon';
 
 export interface MenuItem {
@@ -56,8 +57,9 @@ export function Menu({
   const place = useCallback(() => {
     const r = button.current?.getBoundingClientRect();
     if (!r) return;
-    const below = window.innerHeight - r.bottom - 8;
-    const above = r.top - 8;
+    const safe = safeInsets();
+    const below = window.innerHeight - safe.bottom - r.bottom - 8;
+    const above = r.top - safe.top - 8;
     const up = below < 220 && above > below;
     // Always placed by its left edge and kept on screen, using the menu's real width once it's drawn
     // (a menu at the edge of a phone screen used to open half off it).
@@ -65,7 +67,7 @@ export function Menu({
     const width = list.current?.offsetWidth ?? 224;
     const wanted = align === 'end' ? r.right - width : r.left;
     setPos({
-      top: up ? Math.max(8, r.top - Math.min(above, 360) - 4) : r.bottom + 4,
+      top: up ? Math.max(safe.top + 8, r.top - Math.min(above, 360) - 4) : r.bottom + 4,
       maxHeight: Math.min(up ? above : below, 360),
       left: Math.max(8, Math.min(wanted, vw - width - 8)),
     });
@@ -113,7 +115,7 @@ export function Menu({
   const openSub = (index: number, el: HTMLElement, focus: boolean) => {
     const r = el.getBoundingClientRect();
     const left = r.right + 4 + 260 > window.innerWidth ? Math.max(8, r.left - 264) : r.right + 4;
-    setSub({ index, top: Math.min(r.top - 4, window.innerHeight - 380), left, focus });
+    setSub({ index, top: Math.min(r.top - 4, window.innerHeight - safeInsets().bottom - 380), left, focus });
   };
   const closeSub = () => {
     const parent = sub ? list.current?.querySelector<HTMLElement>(`[data-index="${sub.index}"]`) : null;
@@ -216,7 +218,7 @@ export function Menu({
               aria-label={parent.label}
               onKeyDown={onSubKeyDown}
               onClick={(e) => e.stopPropagation()}
-              style={{ position: 'fixed', top: Math.max(8, sub.top), left: sub.left, maxHeight: 380 }}
+              style={{ position: 'fixed', top: Math.max(safeInsets().top + 8, sub.top), left: sub.left, maxHeight: 380 }}
               className="z-[61] min-w-48 max-w-72 overflow-y-auto rounded-lg border border-line bg-card p-1 text-ink shadow-xl"
             >
               {renderItems(parent.submenu, true)}

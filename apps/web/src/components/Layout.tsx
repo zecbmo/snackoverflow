@@ -142,7 +142,7 @@ function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
       <button type="button" aria-label="Close menu" className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <nav className="animate-slide-up absolute inset-y-0 left-0 flex w-[80%] max-w-sm flex-col overflow-y-auto rounded-r-3xl bg-card p-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      <nav className="animate-slide-up absolute inset-y-0 left-0 flex w-[80%] max-w-sm flex-col overflow-y-auto rounded-r-3xl bg-card p-5 pt-[max(1.25rem,var(--safe-top))]">
         <div className="mb-5 flex items-center gap-3">
           <Logo />
           <span className="flex-1 font-display text-xl font-bold">Snack Overflow</span>
@@ -506,8 +506,10 @@ export function AppShell({ bare = false }: { bare?: boolean }) {
         ) : (
           <div className="flex min-h-screen">
             <ScrollToTop />
+            {/* The phone's status bar sits over the page in the Android app: keep the list from showing through it. */}
+            <div aria-hidden className="fixed inset-x-0 top-0 z-30 h-[var(--safe-top)] bg-bg" />
             <Sidebar />
-            <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 pb-32 pt-[env(safe-area-inset-top)] sm:px-6 lg:max-w-none lg:px-6 lg:pb-10">
+            <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 pb-[calc(8rem+var(--safe-bottom))] pt-[var(--safe-top)] sm:px-6 lg:max-w-none lg:px-6 lg:pb-10">
               <OfflineBanner />
               <Outlet />
             </main>

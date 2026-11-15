@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StockItemDto } from '@snackoverflow/shared';
-import { groupStock, groupSummary } from './stockGroups';
+import { groupStock, groupSummary, phoneMeta, phoneShowsDate } from './stockGroups';
 import { amountLabel, toneFor } from './format';
 
 const base: StockItemDto = {
@@ -75,5 +75,26 @@ describe('meals', () => {
     const meal = { ...base, isMeal: true, productName: 'Chilli', gramsPerCount: 350, initialGrams: 700, remainingGrams: 700, locationName: 'Fridge' };
     expect(groupSummary(groupStock([meal])[0]!)).toBe('Fridge · 2 portions');
     expect(amountLabel({ ...meal, remainingGrams: 350 })).toBe('1 portion');
+  });
+});
+
+describe('a phone row', () => {
+  it('says where, then how much', () => {
+    expect(phoneMeta('Cupboard', '2L', 1, '')).toBe('Cupboard · 2L');
+    expect(phoneMeta('Fridge', '~1.9L', 1, 'Opened')).toBe('Fridge · ~1.9L · opened');
+    expect(phoneMeta('Cupboard', '5 items', 1, '')).toBe('Cupboard · 5 items');
+  });
+
+  it('falls back to the pack count when the amount is not known', () => {
+    expect(phoneMeta('Cupboard', '', 1, '')).toBe('Cupboard · 1 pack');
+    expect(phoneMeta('Freezer', '', 3, 'Frozen')).toBe('Freezer · 3 packs · frozen');
+  });
+
+  it('spells the date out only when it is close', () => {
+    expect(phoneShowsDate('red')).toBe(true);
+    expect(phoneShowsDate('amber')).toBe(true);
+    expect(phoneShowsDate('green')).toBe(false);
+    expect(phoneShowsDate('blue')).toBe(false);
+    expect(phoneShowsDate('grey')).toBe(false);
   });
 });

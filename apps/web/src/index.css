@@ -134,9 +134,31 @@ html {
   overscroll-behavior-x: none;
 }
 
-/* A row that scrolls sideways stops at its ends: the pull isn't passed on to the page (which, in the Android app, stretched the whole screen, bottom bar and all). */
-.overflow-x-auto {
-  overscroll-behavior-x: contain;
+/*
+ * A sideways drag only ever moves a row that scrolls sideways (the filter strip, a wide table).
+ * Anywhere else it does nothing: in the Android app it used to stretch the whole screen, title,
+ * filters, bottom bar and all. `contain` wasn't enough, since Android still plays its stretch at
+ * the end of the row, on the whole web view. Up and down keep their stretch.
+ */
+body {
+  touch-action: pan-y pinch-zoom;
+}
+.overflow-x-auto,
+.overflow-auto {
+  touch-action: pan-x pan-y pinch-zoom;
+  overscroll-behavior-x: none;
+}
+
+/*
+ * Room for the phone's own bars. The Android app draws behind the status bar and the back / home
+ * buttons; Capacitor's SystemBars plugin sets --safe-area-inset-* (env() alone is wrong in older
+ * Android web views). Browsers and the installed web app fall back to env(). Use these, never env().
+ */
+:root {
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
 }
 
 body {
@@ -175,7 +197,7 @@ h3 {
 }
 
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom);
 }
 
 @keyframes pop {

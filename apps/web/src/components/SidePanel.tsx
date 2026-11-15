@@ -92,7 +92,7 @@ export function SidePanel({
       aria-labelledby={titleId}
       className="animate-panel-in fixed inset-0 z-40 flex flex-col bg-card text-ink outline-none lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[30rem] lg:max-w-[calc(100vw-4rem)] lg:border-l lg:border-line lg:shadow-2xl"
     >
-      <div className="flex shrink-0 items-start gap-2 border-b border-line px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] lg:px-4 lg:py-3">
+      <div className="flex shrink-0 items-start gap-2 border-b border-line px-4 pb-3 pt-[max(0.75rem,var(--safe-top))] lg:px-4 lg:py-3">
         <button
           type="button"
           aria-label="Close"
@@ -110,7 +110,9 @@ export function SidePanel({
         {headerActions && <div className="flex shrink-0 items-center gap-1 pt-0.5">{headerActions}</div>}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
-      {footer && <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
+      {/* No footer: still keep the scrolling part clear of the phone's buttons. */}
+      {!footer && <div aria-hidden className="h-[var(--safe-bottom)] shrink-0" />}
+      {footer && <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-4 pb-[max(0.75rem,var(--safe-bottom))] pt-3">{footer}</div>}
     </div>,
     document.body,
   );

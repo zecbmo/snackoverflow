@@ -2,7 +2,9 @@
  * Light, dark or follow the device, and the colour palette. Both are per-device choices kept in
  * localStorage; index.html applies them before first paint so there's no flash.
  */
+import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { DEFAULT_PALETTE, PALETTES, type PaletteId } from './palettes';
+import { isNative } from './platform';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -46,6 +48,37 @@ export function applyTheme(theme: Theme = getTheme(), palette: PaletteId = getPa
   const p = PALETTES.find((x) => x.id === palette) ?? PALETTES[0];
   const colour = dark ? p.dark.bg : p.light.bg;
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', colour));
+  appDark = dark;
+  syncSystemBars();
+}
+
+let appDark = false;
+let overCamera = 0;
+let watching = false;
+
+/**
+ * The Android app draws behind the phone's status bar and buttons, so their icons have to suit the
+ * app's theme, not the phone's: a light app on a dark-mode phone had white icons on white.
+ */
+function syncSystemBars(): void {
+  if (!isNative()) return;
+  if (!watching) {
+    watching = true;
+    // "Match device": follow the phone when it changes while the app is open.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme());
+  }
+  // Style.Dark means a dark screen, so light icons.
+  void SystemBars.setStyle({ style: appDark || overCamera > 0 ? SystemBarsStyle.Dark : SystemBarsStyle.Light }).catch(() => undefined);
+}
+
+/** A screen that is dark whatever the theme (the scanner's camera): light icons while it's up. Returns the undo. */
+export function darkSystemBars(): () => void {
+  overCamera += 1;
+  syncSystemBars();
+  return () => {
+    overCamera -= 1;
+    syncSystemBars();
+  };
 }
 
 export function setTheme(theme: Theme): void {

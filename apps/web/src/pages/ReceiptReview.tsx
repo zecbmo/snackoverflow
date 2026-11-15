@@ -176,7 +176,7 @@ export function ReceiptReviewPage() {
       </div>
 
       {r.status === 'review' && (
-        <div className="fixed inset-x-4 bottom-24 z-20 mx-auto max-w-xl lg:bottom-6">
+        <div className="fixed inset-x-4 bottom-[calc(6rem+var(--safe-bottom))] z-20 mx-auto max-w-xl lg:bottom-6">
           <Button variant="primary" size="lg" className="w-full shadow-lg" disabled={busy || items === 0} onClick={() => void confirm()}>
             {busy ? 'Adding…' : `Add ${items} item${items === 1 ? '' : 's'} to stock`}
           </Button>

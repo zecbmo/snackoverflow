@@ -22,7 +22,7 @@ import { Button, EmptyState, ErrorNote, Pill, Sheet, Spinner } from '../componen
 import { api, errorMessage } from '../lib/api';
 import { dateLabel, type Tone, toneClasses, toneFor, toneMeaning } from '../lib/format';
 import { useEarmarks, useLocations, useShopping, useStock, useStockItem } from '../lib/queries';
-import { groupStock, type StockGroup } from '../lib/stockGroups';
+import { groupStock, phoneMeta, phoneShowsDate, type StockGroup } from '../lib/stockGroups';
 import { groupRows, matchesSearch, sortRows } from '../lib/table';
 
 /** Kept for pages not yet on the table (Batch cooks & leftovers). */
@@ -383,11 +383,12 @@ export function StockPage() {
             title: g.name,
             meta: (
               <>
-                {[g.locationName, stateText(g).toLowerCase(), g.first.isMeal ? '' : `${g.packs.length} ${g.packs.length === 1 ? 'pack' : 'packs'}`, leftLabel(g)].filter(Boolean).join(' · ')}
+                {phoneMeta(g.locationName, leftLabel(g), g.packs.length, stateText(g))}
                 {plannedFor(g) && <> · {plannedCell(g)} planned</>}
               </>
             ),
-            badge: datePill(g),
+            // The bar on the left already says how fresh it is; the date itself only shows when it's close (amber or red).
+            badge: phoneShowsDate(toneFor(g.first, me.today)) ? datePill(g) : undefined,
             trailing: <StockRowActions item={g.first} name={g.name} packs={g.packs} onDetails={() => openGroup(g)} compact />,
           })}
           empty={

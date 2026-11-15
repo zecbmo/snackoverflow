@@ -309,7 +309,7 @@ export function ShoppingPage() {
           <QuickAdd />
         </div>
       )}
-      {putAwayButton && <div className="fixed inset-x-4 bottom-24 z-20 mx-auto max-w-xl lg:hidden [&>button]:w-full [&>button]:shadow-lg">{putAwayButton}</div>}
+      {putAwayButton && <div className="fixed inset-x-4 bottom-[calc(6rem+var(--safe-bottom))] z-20 mx-auto max-w-xl lg:hidden [&>button]:w-full [&>button]:shadow-lg">{putAwayButton}</div>}
       <Sheet open={putting !== null} onClose={() => setPutting(null)} title="Put away">
         {putting && (
           <div className="flex flex-col gap-3">

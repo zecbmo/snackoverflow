@@ -300,7 +300,7 @@ export function RecipeDetailPage() {
       ) : (
         // Phones: Cook and Batch cook stay in reach while scrolling; the title gets the full width
         // under them (two lines, tap for the rest).
-        <header className="sticky top-0 z-20 -mx-4 mb-3 border-b border-line bg-bg/95 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur sm:-mx-6 sm:px-6">
+        <header className="sticky top-0 z-20 -mx-4 mb-3 border-b border-line bg-bg/95 px-4 pb-2 pt-[max(0.75rem,var(--safe-top))] backdrop-blur sm:-mx-6 sm:px-6">
           <div className="flex items-center gap-2">
             <BackButton to="/recipes" />
             <span className="flex-1" />

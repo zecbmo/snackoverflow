@@ -123,7 +123,9 @@ export function Sheet({ open, onClose, title, children, wide = false }: { open: 
       className={`m-0 mt-auto w-full max-w-none bg-transparent p-0 backdrop:bg-black/40 sm:m-auto ${wide ? 'sm:max-w-2xl lg:max-w-3xl' : 'sm:max-w-md lg:max-w-[28rem]'}`}
     >
       {open && (
-        <div className="animate-slide-up max-h-[85vh] overflow-y-auto rounded-t-2xl bg-card p-5 pb-8 text-ink shadow-xl sm:rounded-xl lg:p-4 lg:pb-5">
+        // The outer box keeps clear of the phone's buttons; the sheet scrolls inside it, never behind them.
+        <div className="animate-slide-up overflow-hidden rounded-t-2xl bg-card pb-[var(--safe-bottom)] text-ink shadow-xl sm:rounded-xl sm:pb-0">
+        <div className="max-h-[85vh] overflow-y-auto p-5 pb-8 lg:p-4 lg:pb-5">
           <div className="mb-4 flex items-center justify-between gap-3 lg:mb-3">
             <h2 id={titleId} className="text-xl font-bold lg:text-base">{title}</h2>
             <button type="button" aria-label="Close" onClick={onClose} className="inline-flex size-11 items-center justify-center rounded-lg hover:bg-card-muted lg:size-8 lg:rounded-md">
@@ -131,6 +133,7 @@ export function Sheet({ open, onClose, title, children, wide = false }: { open: 
             </button>
           </div>
           {children}
+        </div>
         </div>
       )}
     </dialog>

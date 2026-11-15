@@ -5,6 +5,7 @@
  * of buttons at the bottom, in reach of a thumb. Scanning is for putting shopping away: food
  * you've used or eaten is taken out from the stock row or Log food (which has its own scanner).
  */
+import { darkSystemBars } from '../lib/theme';
 import { useQueryClient } from '@tanstack/react-query';
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -63,6 +64,8 @@ export function ScanPage() {
   const [params] = useSearchParams();
   // Eat mode moved to Log food: old links (and notifications) open its barcode scanner instead.
   const logFood = useLogFood();
+  // The camera is dark in any theme: the phone's own icons go light while it's up.
+  useEffect(() => darkSystemBars(), []);
   const eatLink = params.get('mode') === 'eat';
   const eatSlot = MEAL_SLOTS.includes(params.get('slot') as MealSlot) ? (params.get('slot') as MealSlot) : undefined;
   useEffect(() => {
@@ -196,7 +199,7 @@ export function ScanPage() {
       <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" aria-hidden />
 
       {/* The camera's part of the screen. It gives way to the buttons below: on a short screen the frame gets shorter, the buttons never leave. */}
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))]" onPointerDown={focusHere}>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-[max(1rem,var(--safe-top))]" onPointerDown={focusHere}>
         <div className="flex shrink-0 items-center gap-3">
           <button
             type="button"
@@ -236,7 +239,7 @@ export function ScanPage() {
         </p>
       </div>
 
-      <div className="relative z-10 flex shrink-0 flex-col gap-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="relative z-10 flex shrink-0 flex-col gap-2 px-4 pb-[max(0.75rem,var(--safe-bottom))]">
         {current && !current.reviewed && (
           <ResultCard key={current.key} entry={current} onUndo={() => void undo(current)} onDate={() => setSheet('date')} onName={() => setSheet('name')} onSave={(r) => saveReview(current, r)} />
         )}

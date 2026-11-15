@@ -236,10 +236,12 @@ test('use chicken thighs by weight across two packs', async ({ page }, info) => 
   await expect(sheet).toContainText('Finishes the open pack and takes 200g from the next. 800g left.');
   await sheet.getByRole('button', { name: /^Just use 500g/ }).click();
   await expect(row).toContainText('~800g');
-  await expect(row).toContainText(phone ? '1 pack' : '1');
+  // A phone's row says where and how much, not how many packs.
+  await expect(row).toContainText(phone ? 'Fridge · ~800g · opened' : '1');
   // One Undo puts both packs back, and the second pack is closed again.
   await page.getByRole('status').filter({ hasText: `Used 500g of ${chicken}` }).last().getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Undone.' })).toBeVisible();
   await expect(row).toContainText('~1.3kg');
-  await expect(row).toContainText('2');
+  // The pack count is a column on the desktop table only.
+  if (!phone) await expect(row).toContainText('2');
 });
