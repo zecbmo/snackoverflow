@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
-import type { AssistantSettingsDto, BackupDto, HouseholdSettings, OffDumpStatusDto, ShelfLifeCategoryDto } from '@snackoverflow/shared';
+import type { AppDownloadDto, AssistantSettingsDto, BackupDto, HouseholdSettings, OffDumpStatusDto, ShelfLifeCategoryDto } from '@snackoverflow/shared';
 import { Icon } from '../components/Icon';
 import { MenuButton, useMe } from '../components/Layout';
 import { useToast } from '../components/Toast';
@@ -8,6 +8,7 @@ import { PageTop, Segmented } from '../components/Toolbar';
 import { Button, Card, ErrorNote, Field, Select, Sheet, Spinner, TextInput, Toggle } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { keys, useShelfLife } from '../lib/queries';
+import { isNative } from '../lib/platform';
 import { PALETTES, type PaletteId } from '../lib/palettes';
 import { getPalette, getTheme, setPalette, setTheme, type Theme } from '../lib/theme';
 
@@ -27,6 +28,7 @@ export function SettingsPage() {
           {me.features.offDump && <OffCopyCard canRefresh={isAdmin} />}
           {isAdmin && me.features.testMode && <TestDataCard />}
           <AssistantsCard />
+          <AppDownloadCard />
           {isAdmin && (
             <Card className="p-4" id="data">
               <h2 className="font-bold">Your data</h2>
@@ -40,6 +42,30 @@ export function SettingsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/** The Android app, when the server has one to give (APK_PATH). Not shown inside the app itself. */
+function AppDownloadCard() {
+  const status = useQuery({ queryKey: ['household', 'app-download'], queryFn: () => api.get<AppDownloadDto>('/api/app-download'), enabled: !isNative() });
+  const s = status.data;
+  if (isNative() || !s?.available) return null;
+  const mb = s.bytes ? `${(s.bytes / 1_000_000).toFixed(1)} MB` : null;
+  const date = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  return (
+    <Card className="p-4" id="android">
+      <h2 className="font-bold">Android app</h2>
+      <p className="mb-3 mt-1 text-sm text-muted">
+        Faster barcode scanning, phone notifications and scanning with no signal. Open this page on your phone, download, then open the file to install. The first time it asks for this address:{' '}
+        <span className="font-semibold text-ink">{window.location.origin}</span>
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <a href="/apk" download="snackoverflow.apk" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-card px-3 text-sm font-semibold hover:bg-card-muted lg:min-h-8 lg:rounded-md">
+          <Icon name="download" className="size-4" /> Download the Android app
+        </a>
+        <span className="text-sm text-muted">{[mb, date && `built ${date}`].filter(Boolean).join(' · ')}</span>
+      </div>
+    </Card>
   );
 }
 

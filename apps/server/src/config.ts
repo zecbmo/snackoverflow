@@ -75,6 +75,8 @@ const envSchema = z.object({
   RECEIPT_IMAP_USER: optional,
   RECEIPT_IMAP_PASSWORD: optional,
   RECEIPT_ALLOWED_SENDERS: optional,
+  /** An Android APK file to offer as a download at /apk (and in Settings); nothing is offered when empty or missing. */
+  APK_PATH: optional,
   SEED_DATA_DIR: optional,
   WEB_DIST_DIR: optional,
   SCHEDULER_ENABLED: bool(true),

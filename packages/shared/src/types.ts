@@ -41,6 +41,14 @@ export interface FeaturesDto {
   testMode: boolean;
 }
 
+/** Settings → the Android app as a download from this server (APK_PATH), served at /apk. */
+export interface AppDownloadDto {
+  available: boolean;
+  bytes: number | null;
+  /** When the file was last replaced (ISO date-time). */
+  updatedAt: string | null;
+}
+
 /** Settings → the local copy of Open Food Facts. */
 export interface OffDumpStatusDto {
   enabled: boolean;

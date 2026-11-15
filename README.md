@@ -43,7 +43,7 @@ pnpm install
 pnpm android        # -> apps/android/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Copy the APK to your phone and open it to install (allow installing from your file manager when asked). On first launch, enter the address you use in the browser, for example `http://192.168.1.20:3000` or `https://snacks.example.com`, then sign in. Each phone gets its own sign-in token; you can sign a lost phone out from **Your profile → Phones**.
+Copy the APK to your phone and open it to install (allow installing from your file manager when asked). Or let the server hand it out: set `APK_PATH` to the file (mount a folder holding it into the container) and it downloads from `https://your-server/apk`, with a **Download the Android app** link in Settings. Replace the file to update it. On first launch, enter the address you use in the browser, for example `http://192.168.1.20:3000` or `https://snacks.example.com`, then sign in. Each phone gets its own sign-in token; you can sign a lost phone out from **Your profile → Phones**.
 
 Notifications reach the phone without Firebase or any Google push service: the app checks the server's inbox in the background about every 15 minutes (Android may wait longer in battery saver), and instantly while it's open. Allow notifications when asked, and if a reminder seems late, turn off battery optimisation for Snack Overflow in Android settings.
 
